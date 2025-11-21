@@ -1,0 +1,9 @@
+---
+alwaysApply: true
+---
+
+خط‌مشی وابستگی‌ها و داکر
+- وابستگی جدید؟ فقط اگر لازم و سبک؛ قبلش بررسی جایگزین استاندارد پایتون.
+- requirements.txt را مرتب نگه دار؛ نسخه پین (مثلاً fastapi~=0.115).
+- Healthcheck مسیر /health آماده باشد.
+- Compose فقط شامل: backend, db(Postgres), redis, mailhog, (اختیاری caddy). پورت DB/Redis به بیرون در prod Publish نشود.

@@ -1,0 +1,13 @@
+---
+alwaysApply: true
+---
+ API طراحی و قرارداد
+- مسیرها RESTful و نسخه‌دار (مثال: /api/v1/cards).
+- پاسخ‌ها:
+  - POST ایجاد: 201 + شیء ساخته‌شده
+  - DELETE موفق: 204
+  - GET لیست: 200 + { items: [...], total: n, page, page_size }
+- Pagination: page, page_size (پیش‌فرض معقول، max محدود).
+- فیلتر کارت‌ها دقیقاً طبق SCOPE: origin, destination, date_range, capacity/weight, category, packaging_status, community (اختیاری).
+- شرط پیام‌دهی: فقط اگر sender و owner حداقل یک community مشترک دارند → 403 در غیر این صورت.
+- Validation همه ورودی‌ها با Pydantic و مقادیر Enum برای category/packaging_status.

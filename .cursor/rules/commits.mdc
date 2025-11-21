@@ -1,0 +1,10 @@
+---
+alwaysApply: true
+---
+
+ پیام‌های کامیت (Conventional Commits)
+- feat(api): add POST /api/v1/cards with community visibility
+- fix(auth): correct OTP expiry check
+- chore(db): add alembic revision for membership status index
+- refactor(services): extract message permission check
+- test(cards): add filters e2e for category/packaging_status

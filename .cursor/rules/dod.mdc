@@ -1,0 +1,11 @@
+---
+alwaysApply: true
+---
+ Definition of Done (DoD) — قبل از اتمام هر تسک بررسی کن
+- [ ] هم‌راستا با SCOPE.md، بدون فیچر اضافه
+- [ ] کد لایه‌ای: router → service → repo → db
+- [ ] تایپ‌ها کامل، linters ok، تست مینیمال ok
+- [ ] اسامی/اسکیماها دقیقاً با مدل MVP
+- [ ] مستندات /docs خوانا (summary/description برای روت‌های جدید)
+- [ ] مثال curl یا JSON برای endpoint جدید در docstring یا comments کوتاه
+

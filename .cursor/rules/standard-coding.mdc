@@ -1,0 +1,10 @@
+---
+alwaysApply: true
+---
+ استاندارد کدنویسی (Python/FastAPI)
+- Python 3.12 — حتماً type hints بنویس. تابع‌های async برای روت‌ها و دسترسی DB.
+- Pydantic v2 برای Schemas. Schemaها را کوچک و مشخص نگه دار (Create/Update/Out جدا).
+- نام‌گذاری: snake_case برای متغیر/تابع، PascalCase برای کلاس، جدول‌ها مفرد (user, community, membership, card, message).
+- Exceptions: فقط در لایه‌ی service بالا بیاید و به HTTPException مناسب تبدیل شود (400/401/403/404/409/422/429/500).
+- Docstring کوتاه برای هر تابع public (یک خط خلاصه).
+- بدون منطق مرده/کد کامنتی طولانی/print — از logging استفاده کن.

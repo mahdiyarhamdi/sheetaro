@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sheetaro_postgres
+    environment:
+      POSTGRES_DB: sheetaro
+      POSTGRES_USER: sheetaro_user
+      POSTGRES_PASSWORD: sheetaro_pass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sheetaro_user -d sheetaro"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sheetaro_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: sheetaro_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - sheetaro_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sheetaro_backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://sheetaro_user:sheetaro_pass@postgres:5432/sheetaro
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: http://localhost:3000,http://localhost:8080
+      SECRET_KEY: change-this-in-production-to-a-secure-random-key-123456789
+      DEBUG: "false"
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend:/app
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 3001 --reload"
+    networks:
+      - sheetaro_network
+
+  bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    container_name: sheetaro_bot
+    depends_on:
+      - backend
+    environment:
+      TELEGRAM_BOT_TOKEN: 8435713363:AAELcFpinLOeCcQvsmM6GsvzM9T8JHgGy_0
+      API_BASE_URL: http://backend:3001
+    volumes:
+      - ./bot:/app
+    command: python bot.py
+    networks:
+      - sheetaro_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  sheetaro_network:
+    driver: bridge
+

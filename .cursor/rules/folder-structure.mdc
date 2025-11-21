@@ -1,0 +1,18 @@
+---
+alwaysApply: true
+---
+
+ معماری لایه‌ای (Folder Structure)
+- backend/app/ به این صورت:
+  - api/routers/      # روت‌های FastAPI (فقط ورودی/خروجی + فراخوانی سرویس)
+  - api/deps.py       # وابستگی‌ها (DB, auth, rate-limit)
+  - core/config.py    # تنظیمات (pydantic-settings)
+  - core/security.py  # توکن/هش/قوانین امنیتی
+  - core/rate_limit.py# محدودسازی با Redis/slowapi
+  - models/           # SQLAlchemy models
+  - schemas/          # Pydantic v2 (Request/Response)
+  - services/         # منطق دامنه (بدون import از فریم‌ورک)
+  - repositories/     # کوئری‌های DB (CRUD)
+  - utils/            # کمکی‌های کوچک (نه دامنه)
+  - main.py           # ایجاد FastAPI app + روترها + میانی‌افزارها
+- ممنوع: منطق دامنه داخل روت‌ها یا مدل‌های ORM.

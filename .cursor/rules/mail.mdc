@@ -1,0 +1,8 @@
+---
+alwaysApply: true
+---
+
+ایمیل و OTP
+- ایمیل dev با MailHog؛ در env: SMTP_HOST, SMTP_PORT, EMAIL_FROM.
+- OTP/لینک ورود: توکن کوتاه‌عمر، single-use.
+- قالب ایمیل ساده و مینیمال؛ بدون HTML سنگین.

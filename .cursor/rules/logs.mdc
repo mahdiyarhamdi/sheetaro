@@ -1,0 +1,7 @@
+---
+alwaysApply: true
+---
+ لاگ و ردیابی رخدادها (مطابق SCOPE)
+- حتماً برای این‌ها لاگ رویداد ثبت کن: signup, login, join_request(+result), card_create, message_send(blocked_or_ok), ban/unban.
+- فیلدهای مهم: user_id, ip, ua, resource_id, outcome, ts.
+- خطاهای غیرمنتظره: level=ERROR با stacktrace، بدون داده‌ی حساس.

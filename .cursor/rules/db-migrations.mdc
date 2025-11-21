@@ -1,0 +1,8 @@
+---
+alwaysApply: true
+---
+دیتابیس و مایگریشن
+- SQLAlchemy 2.x + psycopg (async). Session factory مرکزی بساز.
+- هر مدل: id (UUID یا cuid/str)، created_at, updated_at (اتوماتیک).
+- Alembic: هر تغییر مدل = یک revision با پیام معنی‌دار. عدم هم‌خوانی مدل و مایگریشن = خط قرمز.
+- Queryها ساده و ایمن؛ N+1 را با selectinload/joins مدیریت کن.

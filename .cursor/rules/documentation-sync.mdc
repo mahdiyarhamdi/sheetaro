@@ -1,0 +1,124 @@
+---
+alwaysApply: true
+---
+
+# همگام‌سازی مستندات
+
+## قانون: مستندات باید همیشه با کد هماهنگ باشد
+
+### چه موقع مستندات را به‌روز کن؟
+
+1. **تغییر معماری**: 
+   - اضافه/حذف لایه جدید → `ARCHITECTURE.md`
+   - تغییر ساختار فولدر → `ARCHITECTURE.md` + `README.md`
+   - تغییر flow درخواست‌ها → `ARCHITECTURE.md`
+
+2. **تصمیم معماری مهم**:
+   - انتخاب تکنولوژی جدید → ADR جدید در `docs/`
+   - تغییر الگوی طراحی → ADR جدید
+   - Format: `docs/ADR-YYYYMMDD-<slug>.md`
+
+3. **تغییر API**:
+   - endpoint جدید → `README.md` (بخش API Endpoints)
+   - تغییر response/request → `README.md`
+   - authentication جدید → `ARCHITECTURE.md` + `README.md`
+
+4. **تغییر setup/config**:
+   - متغیر محیطی جدید → `README.md` (جدول env vars)
+   - dependency جدید → `README.md` (بخش پیش‌نیازها)
+   - تغییر نحوه اجرا → `README.md`
+
+5. **تغییر قراردادها**:
+   - naming convention جدید → `ARCHITECTURE.md`
+   - الگوی کدنویسی جدید → `ARCHITECTURE.md`
+
+### مستندات کلیدی پروژه
+
+```
+docs/
+  ADR-*.md              → تصمیمات معماری (فقط اضافه، هرگز حذف نکن)
+
+backend/
+  README.md             → راهنمای اجرا، API endpoints، env vars
+  ARCHITECTURE.md       → معماری کامل، لایه‌ها، flow، قراردادها
+
+SCOPE.md                → اسکوپ MVP (فقط با تأیید صریح تغییر بده)
+```
+
+### چک‌لیست قبل از هر کامیت
+
+پیش از commit هر تغییر مهم، این موارد را بررسی کن:
+
+- [ ] آیا endpoint جدید اضافه شده؟ → `README.md` را آپدیت کن
+- [ ] آیا متغیر محیطی جدید داریم؟ → جدول در `README.md`
+- [ ] آیا ساختار فولدر تغییر کرده؟ → نمودار در `ARCHITECTURE.md`
+- [ ] آیا لایه یا الگوی جدیدی داریم؟ → توضیح در `ARCHITECTURE.md`
+- [ ] آیا تصمیم معماری مهمی گرفتیم؟ → ADR جدید بساز
+- [ ] آیا قرارداد کدنویسی تغییر کرده؟ → `ARCHITECTURE.md` بخش قراردادها
+
+### نحوه به‌روزرسانی
+
+#### برای endpoint جدید:
+```markdown
+# در README.md بخش "آینده (در حال توسعه)"
+POST   /api/v1/new-endpoint      # توضیح
+```
+
+#### برای تصمیم معماری جدید:
+```bash
+# ساخت ADR جدید
+touch docs/ADR-YYYYMMDD-decision-title.md
+# الگو: همان ساختار ADR موجود (5 بخش)
+```
+
+#### برای تغییر ساختار:
+```markdown
+# در ARCHITECTURE.md بخش "ساختار فولدرها"
+# نمودار ASCII را آپدیت کن
+```
+
+### هشدارها
+
+⚠️ **خط قرمز**: 
+- مستندات هرگز نباید outdated باشند
+- اگر کد تغییر کرد، مستند هم باید تغییر کند
+- مستندات بخشی از Definition of Done است
+
+⚠️ **قبل از merge هر PR**:
+- مستندات مرتبط چک شوند
+- اگر نیاز به آپدیت بود، در همان PR آپدیت شود
+
+### اگر مطمئن نیستی
+
+اگر نمی‌دانی کدام مستند را آپدیت کنی:
+1. به کاربر هشدار بده: "⚠️ این تغییر ممکن است نیاز به آپدیت مستندات داشته باشد"
+2. لیست مستندات احتمالی را پیشنهاد بده
+3. پرسش صریح بپرس: "آیا می‌خواهید [فایل X] را هم آپدیت کنم؟"
+
+### مثال‌های واقعی
+
+**مثال 1**: اضافه کردن `/api/v1/auth/login`
+```
+✅ باید آپدیت شود:
+- backend/README.md → بخش API Endpoints
+- backend/ARCHITECTURE.md → مثال استفاده (اگر لازم بود)
+```
+
+**مثال 2**: تغییر از REST به GraphQL
+```
+✅ باید آپدیت شود:
+- docs/ADR-YYYYMMDD-graphql-adoption.md (جدید)
+- backend/ARCHITECTURE.md → کل بخش API Layer
+- backend/README.md → نحوه استفاده، endpoints
+```
+
+**مثال 3**: اضافه کردن Redis برای cache
+```
+✅ باید آپدیت شود:
+- docs/ADR-YYYYMMDD-redis-caching.md (اگر تصمیم بزرگ بود)
+- backend/README.md → env vars (REDIS_URL)
+- backend/ARCHITECTURE.md → استک تکنولوژی
+```
+
+## اجرا
+در پایان هر task بزرگ، این چک‌لیست را اجرا کن. اگر چیزی outdated شد، فوراً آپدیت کن.
