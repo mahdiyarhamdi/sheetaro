@@ -1,8 +1,8 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from bot.keyboards.main_menu import get_main_menu_keyboard
-from bot.utils.api_client import APIClient
+from keyboards.main_menu import get_main_menu_keyboard
+from utils.api_client import APIClient
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

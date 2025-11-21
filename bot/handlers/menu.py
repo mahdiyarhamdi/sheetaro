@@ -1,7 +1,8 @@
-from telegram import Update
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 
-from bot.keyboards.main_menu import MenuButtons
+from keyboards.main_menu import MenuButtons
+from utils.api_client import APIClient
 
 
 async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -30,11 +31,37 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
         )
     
     elif text == MenuButtons.MY_PROFILE:
+        # Get user data from backend
+        api_client = APIClient()
+        user_data = await api_client.get_user(user.id)
+        
+        if not user_data:
+            await update.message.reply_text(
+                "❌ خطا در دریافت اطلاعات پروفایل.\n"
+                "لطفاً دوباره تلاش کنید."
+            )
+            return
+        
+        # Format profile message
+        profile_text = (
+            "👤 پروفایل من\n\n"
+            f"نام: {user_data.get('first_name', 'ندارد')}\n"
+            f"نام خانوادگی: {user_data.get('last_name', 'ندارد') or 'ندارد'}\n"
+            f"نام کاربری: @{user_data.get('username', 'ندارد') or 'ندارد'}\n"
+            f"شماره تماس: {user_data.get('phone_number', 'ثبت نشده') or 'ثبت نشده'}\n"
+            f"آدرس: {user_data.get('address', 'ثبت نشده') or 'ثبت نشده'}\n\n"
+            "برای ویرایش اطلاعات، روی دکمه زیر کلیک کنید:"
+        )
+        
+        # Create inline keyboard for editing
+        keyboard = [
+            [InlineKeyboardButton("✏️ ویرایش پروفایل", callback_data="show_profile_edit")],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
         await update.message.reply_text(
-            f"👤 پروفایل من\n\n"
-            f"نام: {user.first_name or 'ندارد'}\n"
-            f"نام کاربری: @{user.username or 'ندارد'}\n"
-            f"شناسه تلگرام: {user.id}"
+            profile_text,
+            reply_markup=reply_markup
         )
     
     elif text == MenuButtons.HELP:

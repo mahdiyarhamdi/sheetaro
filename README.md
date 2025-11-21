@@ -41,10 +41,15 @@ docker-compose up -d --build
 
 ### 3. دسترسی به سرویس‌ها
 
-- **Swagger UI**: http://localhost:3001/docs
-- **ReDoc**: http://localhost:3001/redoc
-- **Health Check**: http://localhost:3001/health
+- **Swagger UI**: http://localhost:3005/docs
+- **ReDoc**: http://localhost:3005/redoc
+- **Health Check**: http://localhost:3005/health
 - **ربات تلگرام**: جستجو کنید و /start بزنید
+
+> **توجه**: پورت‌های پیش‌فرض تغییر یافته‌اند تا با پروژه‌های دیگر تداخل نداشته باشند:
+> - Backend: 3005 (به جای 3001)
+> - PostgreSQL: 5435 (به جای 5432)
+> - Redis: 6381 (به جای 6379)
 
 ## ساختار پروژه
 

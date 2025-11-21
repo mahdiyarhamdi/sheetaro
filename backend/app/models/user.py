@@ -17,6 +17,7 @@ class User(Base):
     first_name = Column(String(255), nullable=False)
     last_name = Column(String(255), nullable=True)
     phone_number = Column(String(20), nullable=True)
+    address = Column(Text, nullable=True)
     bio = Column(Text, nullable=True)
     profile_photo_url = Column(String(500), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)

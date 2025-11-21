@@ -11,7 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "5435:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U sheetaro_user -d sheetaro"]
       interval: 10s
@@ -24,7 +24,7 @@ services:
     image: redis:7-alpine
     container_name: sheetaro_redis
     ports:
-      - "6379:6379"
+      - "6381:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -50,7 +50,7 @@ services:
       SECRET_KEY: change-this-in-production-to-a-secure-random-key-123456789
       DEBUG: "false"
     ports:
-      - "3001:3001"
+      - "3005:3001"
     volumes:
       - ./backend:/app
     command: >

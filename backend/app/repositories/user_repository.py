@@ -60,6 +60,7 @@ class UserRepository:
                 first_name=user_data.first_name,
                 last_name=user_data.last_name,
                 phone_number=user_data.phone_number,
+                address=user_data.address,
                 profile_photo_url=user_data.profile_photo_url,
             )
             return await self.update(existing_user.id, update_data)

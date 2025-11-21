@@ -1,10 +1,11 @@
 import os
 import logging
 from dotenv import load_dotenv
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 
-from bot.handlers.start import start_command
-from bot.handlers.menu import handle_menu_selection
+from handlers.start import start_command
+from handlers.menu import handle_menu_selection
+from handlers.profile import profile_conversation, show_profile_edit_options
 
 # Load environment variables
 load_dotenv()
@@ -29,6 +30,12 @@ def main() -> None:
     
     # Add handlers
     application.add_handler(CommandHandler("start", start_command))
+    
+    # Profile editing handlers
+    application.add_handler(CallbackQueryHandler(show_profile_edit_options, pattern="^show_profile_edit$"))
+    application.add_handler(profile_conversation)
+    
+    # Menu handler (should be last to avoid conflicts)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu_selection))
     
     # Start bot
