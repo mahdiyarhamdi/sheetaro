@@ -1,7 +1,7 @@
 import logging
 import json
 from typing import Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class JSONFormatter(logging.Formatter):
@@ -10,7 +10,7 @@ class JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         """Format log record as JSON."""
         log_data: dict[str, Any] = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "level": record.levelname,
             "message": record.getMessage(),
             "module": record.module,
@@ -46,7 +46,7 @@ def log_event(event_type: str, **kwargs: Any) -> None:
     """Log an event with structured data."""
     log_data = {
         "event_type": event_type,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         **kwargs
     }
     logger.info(json.dumps(log_data, ensure_ascii=False))

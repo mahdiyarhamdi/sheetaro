@@ -1,7 +1,8 @@
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from datetime import datetime
 from uuid import UUID
-import re
+
+from app.utils.validators import validate_iranian_phone
 
 
 class UserBase(BaseModel):
@@ -18,22 +19,7 @@ class UserBase(BaseModel):
     @classmethod
     def validate_phone_number(cls, v: str | None) -> str | None:
         """Validate Iranian phone number format."""
-        if v is None or v.strip() == "":
-            return None
-        
-        v = v.strip()
-        
-        # Iranian phone number patterns
-        # 09xxxxxxxxx (11 digits)
-        # +98xxxxxxxxxx (with country code)
-        pattern_09 = r'^09\d{9}$'
-        pattern_98 = r'^\+98\d{10}$'
-        
-        if re.match(pattern_09, v) or re.match(pattern_98, v):
-            return v
-        
-        raise ValueError('شماره تماس باید به فرمت 09xxxxxxxxx یا +98xxxxxxxxxx باشد')
-
+        return validate_iranian_phone(v)
 
 
 class UserCreate(UserBase):
@@ -55,21 +41,7 @@ class UserUpdate(BaseModel):
     @classmethod
     def validate_phone_number(cls, v: str | None) -> str | None:
         """Validate Iranian phone number format."""
-        if v is None or v.strip() == "":
-            return None
-        
-        v = v.strip()
-        
-        # Iranian phone number patterns
-        # 09xxxxxxxxx (11 digits)
-        # +98xxxxxxxxxx (with country code)
-        pattern_09 = r'^09\d{9}$'
-        pattern_98 = r'^\+98\d{10}$'
-        
-        if re.match(pattern_09, v) or re.match(pattern_98, v):
-            return v
-        
-        raise ValueError('شماره تماس باید به فرمت 09xxxxxxxxx یا +98xxxxxxxxxx باشد')
+        return validate_iranian_phone(v)
 
 
 class UserOut(UserBase):

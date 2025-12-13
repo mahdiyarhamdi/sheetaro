@@ -1,18 +1,7 @@
-from typing import AsyncGenerator
-from sqlalchemy.ext.asyncio import AsyncSession
+"""API dependencies."""
+from app.core.database import get_db
 
-from app.core.database import AsyncSessionLocal
-
-
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """Database session dependency."""
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
+# Re-export get_db from database module to maintain backwards compatibility
+# and provide a single source of truth for the dependency
+__all__ = ["get_db"]
 

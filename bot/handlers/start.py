@@ -1,8 +1,12 @@
+import logging
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from keyboards.main_menu import get_main_menu_keyboard
-from utils.api_client import APIClient
+from utils.api_client import api_client
+
+logger = logging.getLogger(__name__)
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -31,14 +35,13 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 file = await context.bot.get_file(photo.file_id)
                 user_data["profile_photo_url"] = file.file_path
         except Exception as e:
-            print(f"Could not get profile photo: {e}")
+            logger.warning(f"Could not get profile photo: {e}")
     
     # Save user to database via API
-    api_client = APIClient()
     result = await api_client.create_or_update_user(user_data)
     
     if result:
-        print(f"User saved: {result}")
+        logger.info(f"User saved: telegram_id={user.id}, username={user.username}")
     
     # Send welcome message with main menu
     welcome_message = f"""سلام {user.first_name} عزیز! 👋

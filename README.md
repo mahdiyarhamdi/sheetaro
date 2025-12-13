@@ -11,6 +11,12 @@
 - ✅ معماری لایه‌ای و scalable
 - ✅ Docker Compose برای اجرای آسان
 
+## مستندات
+
+- [SCOPE.md](SCOPE.md) - اسکوپ MVP و فیچرها
+- [backend/ARCHITECTURE.md](backend/ARCHITECTURE.md) - معماری سیستم
+- [docs/](docs/) - تصمیمات معماری (ADR)
+
 ## پیش‌نیازها
 
 - Docker و Docker Compose
@@ -25,7 +31,11 @@
 # کپی فایل محیطی
 cp .env.example .env
 
-# ویرایش .env و تنظیم TELEGRAM_BOT_TOKEN
+# ویرایش .env و تنظیم متغیرهای لازم
+# حداقل باید این موارد را تنظیم کنید:
+# - POSTGRES_PASSWORD
+# - SECRET_KEY (با دستور: openssl rand -hex 32)
+# - TELEGRAM_BOT_TOKEN (از @BotFather)
 nano .env
 ```
 

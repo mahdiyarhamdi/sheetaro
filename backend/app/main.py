@@ -1,3 +1,6 @@
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -8,12 +11,24 @@ from app.core.config import settings
 from app.api.routers import health, users
 from app.utils.logger import logger
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Application lifespan context manager."""
+    # Startup
+    logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
+    yield
+    # Shutdown
+    logger.info("Shutting down application")
+
+
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description="API for Sheetaro Telegram Print Bot - سفارش لیبل و کارت ویزیت",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # CORS Middleware
@@ -66,18 +81,6 @@ app.include_router(
     prefix="/api/v1",
     tags=["Users"]
 )
-
-
-@app.on_event("startup")
-async def startup_event() -> None:
-    """Application startup event."""
-    logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
-
-
-@app.on_event("shutdown")
-async def shutdown_event() -> None:
-    """Application shutdown event."""
-    logger.info("Shutting down application")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 import re
+import logging
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
     ContextTypes,
@@ -8,8 +9,10 @@ from telegram.ext import (
     filters,
 )
 
-from utils.api_client import APIClient
+from utils.api_client import api_client
 from keyboards.profile import get_profile_edit_keyboard, get_cancel_keyboard
+
+logger = logging.getLogger(__name__)
 
 # Conversation states
 TYPING_PHONE, TYPING_ADDRESS = range(2)
@@ -21,7 +24,6 @@ async def show_profile_edit_options(update: Update, context: ContextTypes.DEFAUL
     await query.answer()
     
     user = update.effective_user
-    api_client = APIClient()
     
     # Get user data from backend
     user_data = await api_client.get_user(user.id)
@@ -58,7 +60,6 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     await query.answer()
     
     user = update.effective_user
-    api_client = APIClient()
     
     # Get user data from backend
     user_data = await api_client.get_user(user.id)
@@ -127,7 +128,6 @@ async def receive_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return TYPING_PHONE
     
     # Update user in backend
-    api_client = APIClient()
     result = await api_client.update_user(
         user.id,
         {"phone_number": phone}
@@ -177,7 +177,6 @@ async def receive_address(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return TYPING_ADDRESS
     
     # Update user in backend
-    api_client = APIClient()
     result = await api_client.update_user(
         user.id,
         {"address": address}

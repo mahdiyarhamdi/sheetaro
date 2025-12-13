@@ -1,7 +1,15 @@
 import os
 import logging
+
 from dotenv import load_dotenv
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
+from telegram import Update
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    filters,
+)
 
 from handlers.start import start_command
 from handlers.menu import handle_menu_selection
@@ -44,6 +52,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    from telegram import Update
     main()
 

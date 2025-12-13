@@ -2,7 +2,7 @@ from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 
 from keyboards.main_menu import MenuButtons
-from utils.api_client import APIClient
+from utils.api_client import api_client
 
 
 async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -32,7 +32,6 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
     
     elif text == MenuButtons.MY_PROFILE:
         # Get user data from backend
-        api_client = APIClient()
         user_data = await api_client.get_user(user.id)
         
         if not user_data:
