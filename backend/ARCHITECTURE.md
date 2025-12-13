@@ -2,7 +2,15 @@
 
 ## Overview
 
-Sheetaro backend is a FastAPI application following clean architecture principles with a layered structure for separation of concerns.
+Sheetaro backend is a FastAPI application for a **multi-role print ordering system** (labels and invoices) following clean architecture principles with a layered structure.
+
+### Key Features
+- Multi-role system: Customer, Designer, Validator, Print Shop, Admin
+- Design plans: Public (free), Semi-private, Private
+- File validation and processing
+- Order workflow management
+- Payment integration
+- Invoice generation (post-purchase)
 
 ---
 
@@ -18,6 +26,8 @@ Sheetaro backend is a FastAPI application following clean architecture principle
 | Cache | Redis | 7 |
 | Auth | python-jose | ~3.3 |
 | HTTP Client | httpx | ~0.27 |
+| File Storage | S3-Compatible | - |
+| PDF Generation | (TBD) | - |
 
 ---
 
@@ -410,4 +420,5 @@ docker-compose up --build
 ---
 
 **Last Updated**: 2024-12-13
+
 
