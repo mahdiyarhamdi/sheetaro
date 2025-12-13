@@ -1,3 +1,5 @@
+"""Main bot entry point."""
+
 import os
 import logging
 
@@ -14,6 +16,9 @@ from telegram.ext import (
 from handlers.start import start_command
 from handlers.menu import handle_menu_selection
 from handlers.profile import profile_conversation, show_profile_edit_options
+from handlers.products import product_conversation
+from handlers.orders import orders_conversation
+from handlers.tracking import track_order, handle_tracking_input
 
 # Load environment variables
 load_dotenv()
@@ -39,9 +44,18 @@ def main() -> None:
     # Add handlers
     application.add_handler(CommandHandler("start", start_command))
     
+    # Product ordering conversation
+    application.add_handler(product_conversation)
+    
+    # Orders management conversation
+    application.add_handler(orders_conversation)
+    
     # Profile editing handlers
     application.add_handler(CallbackQueryHandler(show_profile_edit_options, pattern="^show_profile_edit$"))
     application.add_handler(profile_conversation)
+    
+    # Tracking handler
+    application.add_handler(MessageHandler(filters.Regex("^(🔍 رهگیری سفارش|رهگیری)$"), track_order))
     
     # Menu handler (should be last to avoid conflicts)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu_selection))
@@ -53,4 +67,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -1,8 +1,10 @@
+"""Menu handler for the bot."""
+
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 
-from keyboards.main_menu import MenuButtons
 from utils.api_client import api_client
+from keyboards.main_menu import get_main_menu_keyboard
 
 
 async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -10,27 +12,13 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
     text = update.message.text
     user = update.effective_user
     
-    if text == MenuButtons.ORDER_LABEL:
-        await update.message.reply_text(
-            "🏷️ سفارش لیبل\n\n"
-            "در حال حاضر این بخش در دست توسعه است.\n"
-            "به زودی می‌توانید سفارش لیبل خود را ثبت کنید! 🚀"
-        )
+    # Skip if in a conversation
+    if context.user_data.get('awaiting_tracking'):
+        from handlers.tracking import handle_tracking_input
+        await handle_tracking_input(update, context)
+        return
     
-    elif text == MenuButtons.ORDER_BUSINESS_CARD:
-        await update.message.reply_text(
-            "💼 سفارش کارت ویزیت\n\n"
-            "در حال حاضر این بخش در دست توسعه است.\n"
-            "به زودی می‌توانید سفارش کارت ویزیت خود را ثبت کنید! 🚀"
-        )
-    
-    elif text == MenuButtons.MY_ORDERS:
-        await update.message.reply_text(
-            "📦 سفارشات من\n\n"
-            "هنوز سفارشی ثبت نکرده‌اید."
-        )
-    
-    elif text == MenuButtons.MY_PROFILE:
+    if text == "👤 پروفایل":
         # Get user data from backend
         user_data = await api_client.get_user(user.id)
         
@@ -48,7 +36,9 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
             f"نام خانوادگی: {user_data.get('last_name', 'ندارد') or 'ندارد'}\n"
             f"نام کاربری: @{user_data.get('username', 'ندارد') or 'ندارد'}\n"
             f"شماره تماس: {user_data.get('phone_number', 'ثبت نشده') or 'ثبت نشده'}\n"
-            f"آدرس: {user_data.get('address', 'ثبت نشده') or 'ثبت نشده'}\n\n"
+            f"شهر: {user_data.get('city', 'ثبت نشده') or 'ثبت نشده'}\n"
+            f"آدرس: {user_data.get('address', 'ثبت نشده') or 'ثبت نشده'}\n"
+            f"نقش: {user_data.get('role', 'CUSTOMER')}\n\n"
             "برای ویرایش اطلاعات، روی دکمه زیر کلیک کنید:"
         )
         
@@ -63,19 +53,19 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
             reply_markup=reply_markup
         )
     
-    elif text == MenuButtons.HELP:
+    elif text == "ℹ️ راهنما":
         await update.message.reply_text(
             "❓ راهنما\n\n"
             "از منوی اصلی می‌توانید:\n\n"
-            "🏷️ سفارش لیبل: برای ثبت سفارش لیبل جدید\n"
-            "💼 سفارش کارت ویزیت: برای ثبت سفارش کارت ویزیت\n"
+            "🛒 ثبت سفارش: برای ثبت سفارش لیبل یا فاکتور\n"
             "📦 سفارشات من: مشاهده و پیگیری سفارشات\n"
-            "👤 پروفایل من: مشاهده اطلاعات پروفایل\n"
+            "👤 پروفایل: مشاهده و ویرایش اطلاعات\n"
+            "🔍 رهگیری سفارش: پیگیری سریع سفارش\n"
             "📞 پشتیبانی: ارتباط با پشتیبانی\n\n"
-            "برای شروع، دستور /start را وارد کنید."
+            "برای شروع مجدد، دستور /start را وارد کنید."
         )
     
-    elif text == MenuButtons.SUPPORT:
+    elif text == "📞 پشتیبانی":
         await update.message.reply_text(
             "📞 پشتیبانی\n\n"
             "برای ارتباط با پشتیبانی:\n"
@@ -83,4 +73,10 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
             "📱 تلگرام: @sheetaro_support\n\n"
             "پاسخگویی: شنبه تا چهارشنبه، ۹ صبح تا ۶ عصر"
         )
-
+    
+    else:
+        # Unknown command - show help
+        await update.message.reply_text(
+            "لطفاً از منوی زیر استفاده کنید:",
+            reply_markup=get_main_menu_keyboard()
+        )

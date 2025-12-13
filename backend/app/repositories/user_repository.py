@@ -1,3 +1,5 @@
+"""User repository for database operations."""
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from typing import Optional
@@ -60,6 +62,7 @@ class UserRepository:
                 first_name=user_data.first_name,
                 last_name=user_data.last_name,
                 phone_number=user_data.phone_number,
+                city=user_data.city,
                 address=user_data.address,
                 profile_photo_url=user_data.profile_photo_url,
             )
@@ -67,4 +70,3 @@ class UserRepository:
         else:
             # Create new user
             return await self.create(user_data)
-

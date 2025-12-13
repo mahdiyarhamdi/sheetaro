@@ -1,7 +1,10 @@
+"""User schemas."""
+
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from datetime import datetime
 from uuid import UUID
 
+from app.models.enums import UserRole
 from app.utils.validators import validate_iranian_phone
 
 
@@ -12,6 +15,7 @@ class UserBase(BaseModel):
     first_name: str = Field(..., max_length=255, description="First name")
     last_name: str | None = Field(None, max_length=255, description="Last name")
     phone_number: str | None = Field(None, max_length=20, description="Phone number")
+    city: str | None = Field(None, max_length=100, description="City")
     address: str | None = Field(None, description="User address")
     profile_photo_url: str | None = Field(None, max_length=500, description="Profile photo URL")
     
@@ -24,7 +28,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     """Schema for creating a user."""
-    pass
+    role: UserRole = Field(default=UserRole.CUSTOMER, description="User role")
 
 
 class UserUpdate(BaseModel):
@@ -33,9 +37,11 @@ class UserUpdate(BaseModel):
     first_name: str | None = Field(None, max_length=255, description="First name")
     last_name: str | None = Field(None, max_length=255, description="Last name")
     phone_number: str | None = Field(None, max_length=20, description="Phone number")
+    city: str | None = Field(None, max_length=100, description="City")
     address: str | None = Field(None, description="User address")
     bio: str | None = Field(None, description="User bio")
     profile_photo_url: str | None = Field(None, max_length=500, description="Profile photo URL")
+    role: UserRole | None = Field(None, description="User role")
     
     @field_validator('phone_number')
     @classmethod
@@ -47,11 +53,10 @@ class UserUpdate(BaseModel):
 class UserOut(UserBase):
     """Schema for user output."""
     id: UUID
-    address: str | None = None
+    role: UserRole
     bio: str | None = None
     is_active: bool
     created_at: datetime
     updated_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
-

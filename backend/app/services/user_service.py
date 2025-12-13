@@ -1,10 +1,11 @@
+"""User service for business logic."""
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 from typing import Optional
 
 from app.repositories.user_repository import UserRepository
 from app.schemas.user import UserCreate, UserUpdate, UserOut
-from app.models.user import User
 from app.utils.logger import log_event
 
 
@@ -24,6 +25,7 @@ class UserService:
             telegram_id=user.telegram_id,
             username=user.username,
             user_id=str(user.id),
+            role=user.role.value if user.role else None,
         )
         
         return UserOut.model_validate(user)
@@ -50,6 +52,10 @@ class UserService:
         
         updated_user = await self.repository.update(user.id, user_data)
         if updated_user:
+            log_event(
+                event_type="user.update",
+                telegram_id=updated_user.telegram_id,
+                user_id=str(updated_user.id),
+            )
             return UserOut.model_validate(updated_user)
         return None
-

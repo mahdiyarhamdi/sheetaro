@@ -101,33 +101,66 @@ backend/
 │   │   ├── __init__.py
 │   │   ├── deps.py             # Shared dependencies (DB session, auth)
 │   │   └── routers/            # API route handlers
-│   │       ├── __init__.py
-│   │       ├── health.py       # Health check endpoint
-│   │       └── users.py        # User CRUD endpoints
+│   │       ├── health.py       # Health check
+│   │       ├── users.py        # User CRUD
+│   │       ├── products.py     # Product catalog
+│   │       ├── orders.py       # Order management
+│   │       ├── payments.py     # Payment processing
+│   │       ├── validation.py   # Design validation
+│   │       ├── invoices.py     # Invoice generation
+│   │       ├── subscriptions.py # Subscription management
+│   │       └── files.py        # File upload
 │   ├── core/
-│   │   ├── __init__.py
 │   │   ├── config.py           # Settings (pydantic-settings)
 │   │   ├── database.py         # DB engine & session factory
 │   │   └── security.py         # JWT, password hashing
 │   ├── models/
-│   │   ├── __init__.py
-│   │   └── user.py             # SQLAlchemy User model
-│   ├── repositories/
-│   │   ├── __init__.py
-│   │   └── user_repository.py  # User database operations
-│   ├── schemas/
-│   │   ├── __init__.py
-│   │   └── user.py             # Pydantic schemas (Create/Update/Out)
-│   ├── services/
-│   │   ├── __init__.py
-│   │   └── user_service.py     # User business logic
+│   │   ├── enums.py            # All enums (UserRole, OrderStatus, etc.)
+│   │   ├── user.py             # User model
+│   │   ├── product.py          # Product model
+│   │   ├── order.py            # Order model
+│   │   ├── payment.py          # Payment model
+│   │   ├── validation.py       # ValidationReport model
+│   │   ├── invoice.py          # Invoice model
+│   │   └── subscription.py     # Subscription model
+│   ├── repositories/           # Database CRUD operations
+│   │   ├── user_repository.py
+│   │   ├── product_repository.py
+│   │   ├── order_repository.py
+│   │   ├── payment_repository.py
+│   │   ├── validation_repository.py
+│   │   ├── invoice_repository.py
+│   │   └── subscription_repository.py
+│   ├── schemas/                # Pydantic schemas (Create/Update/Out)
+│   │   ├── user.py
+│   │   ├── product.py
+│   │   ├── order.py
+│   │   ├── payment.py
+│   │   ├── validation.py
+│   │   ├── invoice.py
+│   │   ├── subscription.py
+│   │   └── file.py
+│   ├── services/               # Business logic
+│   │   ├── user_service.py
+│   │   ├── product_service.py
+│   │   ├── order_service.py
+│   │   ├── payment_service.py
+│   │   ├── validation_service.py
+│   │   ├── invoice_service.py
+│   │   ├── subscription_service.py
+│   │   └── file_service.py
 │   └── utils/
-│       ├── __init__.py
 │       ├── logger.py           # Structured JSON logging
 │       └── validators.py       # Shared validation functions
-├── alembic.ini                 # Alembic configuration
-├── Dockerfile                  # Container build
-└── requirements.txt            # Python dependencies
+├── tests/
+│   ├── conftest.py             # Test fixtures
+│   ├── unit/                   # Unit tests for services
+│   ├── integration/            # API endpoint tests
+│   └── e2e/                    # End-to-end flow tests
+├── alembic.ini
+├── pytest.ini
+├── Dockerfile
+└── requirements.txt
 ```
 
 ---
