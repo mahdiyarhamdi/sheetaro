@@ -9,7 +9,8 @@ Sheetaro backend is a FastAPI application for a **multi-role print ordering syst
 - Design plans: Public (free), Semi-private, Private
 - File validation and processing
 - Order workflow management
-- Payment integration
+- Card-to-card payment with receipt upload and admin approval
+- Admin management (promote/demote users via Telegram bot)
 - Invoice generation (post-purchase)
 
 ---
@@ -102,14 +103,15 @@ backend/
 │   │   ├── deps.py             # Shared dependencies (DB session, auth)
 │   │   └── routers/            # API route handlers
 │   │       ├── health.py       # Health check
-│   │       ├── users.py        # User CRUD
+│   │       ├── users.py        # User CRUD + Admin management
 │   │       ├── products.py     # Product catalog
 │   │       ├── orders.py       # Order management
-│   │       ├── payments.py     # Payment processing
+│   │       ├── payments.py     # Payment (card-to-card + approval)
 │   │       ├── validation.py   # Design validation
 │   │       ├── invoices.py     # Invoice generation
 │   │       ├── subscriptions.py # Subscription management
-│   │       └── files.py        # File upload
+│   │       ├── files.py        # File upload
+│   │       └── settings.py     # System settings (payment card)
 │   ├── core/
 │   │   ├── config.py           # Settings (pydantic-settings)
 │   │   ├── database.py         # DB engine & session factory
@@ -119,36 +121,40 @@ backend/
 │   │   ├── user.py             # User model
 │   │   ├── product.py          # Product model
 │   │   ├── order.py            # Order model
-│   │   ├── payment.py          # Payment model
+│   │   ├── payment.py          # Payment model (with card-to-card fields)
 │   │   ├── validation.py       # ValidationReport model
 │   │   ├── invoice.py          # Invoice model
-│   │   └── subscription.py     # Subscription model
+│   │   ├── subscription.py     # Subscription model
+│   │   └── settings.py         # SystemSettings model (key-value config)
 │   ├── repositories/           # Database CRUD operations
-│   │   ├── user_repository.py
+│   │   ├── user_repository.py      # + admin management
 │   │   ├── product_repository.py
 │   │   ├── order_repository.py
-│   │   ├── payment_repository.py
+│   │   ├── payment_repository.py   # + receipt upload, approve/reject
 │   │   ├── validation_repository.py
 │   │   ├── invoice_repository.py
-│   │   └── subscription_repository.py
+│   │   ├── subscription_repository.py
+│   │   └── settings_repository.py  # Key-value settings
 │   ├── schemas/                # Pydantic schemas (Create/Update/Out)
 │   │   ├── user.py
 │   │   ├── product.py
 │   │   ├── order.py
-│   │   ├── payment.py
+│   │   ├── payment.py          # + receipt upload, approval schemas
 │   │   ├── validation.py
 │   │   ├── invoice.py
 │   │   ├── subscription.py
-│   │   └── file.py
+│   │   ├── file.py
+│   │   └── settings.py         # Payment card info schemas
 │   ├── services/               # Business logic
-│   │   ├── user_service.py
+│   │   ├── user_service.py         # + promote/demote admin
 │   │   ├── product_service.py
 │   │   ├── order_service.py
-│   │   ├── payment_service.py
+│   │   ├── payment_service.py      # + card-to-card flow
 │   │   ├── validation_service.py
 │   │   ├── invoice_service.py
 │   │   ├── subscription_service.py
-│   │   └── file_service.py
+│   │   ├── file_service.py
+│   │   └── settings_service.py     # Payment card settings
 │   └── utils/
 │       ├── logger.py           # Structured JSON logging
 │       └── validators.py       # Shared validation functions
@@ -353,6 +359,58 @@ alembic downgrade -1
 
 ---
 
+## Card-to-Card Payment Flow
+
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│   Customer   │     │   Backend    │     │    Admin     │
+└──────┬───────┘     └──────┬───────┘     └──────┬───────┘
+       │                    │                    │
+       │ 1. Request Payment │                    │
+       ├───────────────────>│                    │
+       │                    │                    │
+       │ 2. Get Card Info   │                    │
+       │<───────────────────│                    │
+       │   (card number,    │                    │
+       │    holder name)    │                    │
+       │                    │                    │
+       │ 3. Upload Receipt  │                    │
+       ├───────────────────>│                    │
+       │                    │                    │
+       │ Status: AWAITING   │ 4. Notify Admin   │
+       │   _APPROVAL        ├───────────────────>│
+       │                    │                    │
+       │                    │ 5. Approve/Reject │
+       │                    │<───────────────────│
+       │                    │                    │
+       │ 6. Notify Result   │                    │
+       │<───────────────────│                    │
+       │                    │                    │
+```
+
+### Payment Status Flow
+
+```
+PENDING ──(upload receipt)──> AWAITING_APPROVAL ──(approve)──> SUCCESS
+                                    │
+                                    └──(reject)──> FAILED
+                                                     │
+                                                     └──(re-upload)──> AWAITING_APPROVAL
+```
+
+---
+
+## Admin Management
+
+Admins can manage other admins through the Telegram bot:
+- View list of all admins
+- Promote any registered user to admin
+- Demote any admin (except the last one)
+
+Admin telegram IDs are stored in database (not environment variables).
+
+---
+
 ## Logging
 
 Structured JSON logging for all events:
@@ -371,8 +429,13 @@ Required events to log:
 - `user.signup` - New user registration
 - `user.login` - User authenticated
 - `user.update` - Profile updated
+- `user.promoted_to_admin` - User became admin
+- `user.demoted_from_admin` - Admin reverted to customer
 - `order.create` - New order
 - `order.status_change` - Order status update
+- `payment.receipt_uploaded` - Receipt image uploaded
+- `payment.approved` - Payment approved by admin
+- `payment.rejected` - Payment rejected by admin
 
 ---
 
@@ -416,19 +479,42 @@ class UserCreate(BaseModel):
 
 ---
 
-## Testing (Future)
+## Testing
 
 Test structure:
 
 ```
 tests/
-├── conftest.py          # Fixtures
-├── test_api/
-│   └── test_users.py    # API endpoint tests
-├── test_services/
-│   └── test_user_service.py
-└── test_repositories/
-    └── test_user_repo.py
+├── conftest.py              # Test fixtures and configuration
+├── unit/                    # Unit tests for services
+│   ├── test_user_service.py
+│   ├── test_product_service.py
+│   ├── test_order_service.py
+│   ├── test_payment_service.py  # Includes card-to-card tests
+│   ├── test_subscription_service.py
+│   └── test_settings_service.py
+├── integration/             # API endpoint tests
+│   ├── test_users_api.py    # Includes admin management tests
+│   ├── test_products_api.py
+│   ├── test_orders_api.py
+│   ├── test_payments_api.py # Includes card-to-card flow tests
+│   └── test_subscriptions_api.py
+└── e2e/                     # End-to-end flow tests
+    ├── test_order_flow.py
+    └── test_payment_flow.py
+```
+
+Run tests:
+
+```bash
+# All tests
+pytest
+
+# With coverage
+pytest --cov=app --cov-report=html
+
+# Specific test file
+pytest tests/unit/test_payment_service.py -v
 ```
 
 ---
@@ -452,6 +538,6 @@ docker-compose up --build
 
 ---
 
-**Last Updated**: 2024-12-13
+**Last Updated**: 2025-12-14
 
 

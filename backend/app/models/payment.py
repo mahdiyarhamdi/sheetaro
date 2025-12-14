@@ -40,6 +40,12 @@ class Payment(Base):
     # Description
     description = Column(String(500), nullable=True)
     
+    # Card-to-card payment fields
+    receipt_image_url = Column(String(500), nullable=True)  # URL of uploaded receipt image
+    rejection_reason = Column(String(500), nullable=True)  # Reason for rejection by admin
+    approved_by = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=True)  # Admin who approved/rejected
+    approved_at = Column(DateTime(timezone=True), nullable=True)  # Time of approval/rejection
+    
     # Timestamps
     paid_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -47,7 +53,8 @@ class Payment(Base):
     
     # Relationships
     order = relationship("Order", backref="payments")
-    user = relationship("User", backref="payments")
+    user = relationship("User", foreign_keys=[user_id], backref="payments")
+    approver = relationship("User", foreign_keys=[approved_by], backref="approved_payments")
     
     def __repr__(self) -> str:
         return f"<Payment(id={self.id}, order_id={self.order_id}, type={self.type}, amount={self.amount}, status={self.status})>"

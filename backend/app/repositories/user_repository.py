@@ -1,11 +1,12 @@
 """User repository for database operations."""
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 from typing import Optional
 from uuid import UUID
 
 from app.models.user import User
+from app.models.enums import UserRole
 from app.schemas.user import UserCreate, UserUpdate
 
 
@@ -70,3 +71,43 @@ class UserRepository:
         else:
             # Create new user
             return await self.create(user_data)
+    
+    async def get_all_admins(self) -> list[User]:
+        """Get all users with ADMIN role."""
+        result = await self.db.execute(
+            select(User).where(
+                User.role == UserRole.ADMIN,
+                User.is_active == True,
+            )
+        )
+        return list(result.scalars().all())
+    
+    async def get_admin_telegram_ids(self) -> list[int]:
+        """Get telegram IDs of all active admins."""
+        result = await self.db.execute(
+            select(User.telegram_id).where(
+                User.role == UserRole.ADMIN,
+                User.is_active == True,
+            )
+        )
+        return list(result.scalars().all())
+    
+    async def update_role(self, user_id: UUID, new_role: UserRole) -> Optional[User]:
+        """Update user role."""
+        await self.db.execute(
+            update(User)
+            .where(User.id == user_id)
+            .values(role=new_role)
+        )
+        await self.db.flush()
+        return await self.get_by_id(user_id)
+    
+    async def count_admins(self) -> int:
+        """Count total admins."""
+        result = await self.db.execute(
+            select(func.count(User.id)).where(
+                User.role == UserRole.ADMIN,
+                User.is_active == True,
+            )
+        )
+        return result.scalar() or 0

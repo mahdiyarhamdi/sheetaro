@@ -40,6 +40,10 @@ docker-compose up --build
 - `POST /users` - Create/update user
 - `GET /users/{telegram_id}` - Get user by telegram ID
 - `PATCH /users/{telegram_id}` - Update user
+- `GET /users/admins/list` - Get all admin users (Admin)
+- `GET /users/admins/telegram-ids` - Get admin telegram IDs (for notifications)
+- `POST /users/admins/promote` - Promote user to admin (Admin)
+- `POST /users/admins/demote` - Demote admin to customer (Admin)
 
 ### Products (`/api/v1/products`)
 - `GET /products` - List products (filter by `type`, pagination)
@@ -66,6 +70,10 @@ docker-compose up --build
 - `GET /payments/{id}` - Get payment details
 - `GET /payments/order/{order_id}` - Get order payments
 - `GET /payments/order/{order_id}/summary` - Get payment summary
+- `POST /payments/{id}/upload-receipt` - Upload receipt for card-to-card payment
+- `GET /payments/pending-approval` - Get payments awaiting approval (Admin)
+- `POST /payments/{id}/approve` - Approve payment (Admin)
+- `POST /payments/{id}/reject` - Reject payment with reason (Admin)
 
 ### Validation (`/api/v1/validation`)
 - `POST /validation/request` - Request design validation
@@ -93,6 +101,11 @@ docker-compose up --build
 - `POST /files/upload` - Upload design file
 - `GET /files/designs/{user_id}/{filename}` - Download file
 - `DELETE /files/designs/{user_id}/{filename}` - Delete file
+
+### Settings (`/api/v1/settings`)
+- `GET /settings/payment-card` - Get payment card info
+- `PUT /settings/payment-card` - Set payment card info (Admin)
+- `PATCH /settings/payment-card` - Update payment card info (Admin)
 
 ## Testing
 
@@ -156,6 +169,13 @@ PENDING → AWAITING_VALIDATION → NEEDS_ACTION → DESIGNING → READY_FOR_PRI
                                                           CANCELLED
 ```
 
+### Payment Status Flow (Card-to-Card)
+```
+PENDING → AWAITING_APPROVAL → SUCCESS
+                ↓
+             FAILED (can re-upload receipt)
+```
+
 ### Design Plans
 - `PUBLIC` - Free ready-made designs
 - `SEMI_PRIVATE` - Custom design (600,000 تومان, max 3 revisions)
@@ -173,5 +193,5 @@ PENDING → AWAITING_VALIDATION → NEEDS_ACTION → DESIGNING → READY_FOR_PRI
 
 ---
 
-**Last Updated**: 2024-12-13
+**Last Updated**: 2025-12-14
 

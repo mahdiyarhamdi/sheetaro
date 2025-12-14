@@ -216,6 +216,194 @@ class APIClient:
             logger.error(f"Error getting payment summary: {e}")
             return None
     
+    async def get_payment_card(self) -> Optional[Dict[str, Any]]:
+        """Get payment card info for card-to-card payments."""
+        client = await self._get_client()
+        try:
+            response = await client.get("/api/v1/settings/payment-card")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            logger.error(f"Error getting payment card: {e}")
+            return None
+        except httpx.HTTPError as e:
+            logger.error(f"Error getting payment card: {e}")
+            return None
+    
+    async def upload_receipt(
+        self,
+        payment_id: str,
+        user_id: str,
+        receipt_image_url: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Upload receipt for card-to-card payment."""
+        client = await self._get_client()
+        try:
+            response = await client.post(
+                f"/api/v1/payments/{payment_id}/upload-receipt",
+                json={"receipt_image_url": receipt_image_url},
+                params={"user_id": user_id}
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error uploading receipt: {e}")
+            return None
+    
+    async def get_pending_approval_payments(
+        self,
+        admin_id: str,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> Optional[Dict[str, Any]]:
+        """Get payments pending approval (admin only)."""
+        client = await self._get_client()
+        try:
+            response = await client.get(
+                "/api/v1/payments/pending-approval",
+                params={"admin_id": admin_id, "page": page, "page_size": page_size}
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error getting pending payments: {e}")
+            return None
+    
+    async def approve_payment(
+        self,
+        payment_id: str,
+        admin_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Approve a payment (admin only)."""
+        client = await self._get_client()
+        try:
+            response = await client.post(
+                f"/api/v1/payments/{payment_id}/approve",
+                json={"admin_id": admin_id}
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error approving payment: {e}")
+            return None
+    
+    async def reject_payment(
+        self,
+        payment_id: str,
+        admin_id: str,
+        reason: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Reject a payment (admin only)."""
+        client = await self._get_client()
+        try:
+            response = await client.post(
+                f"/api/v1/payments/{payment_id}/reject",
+                json={"admin_id": admin_id, "reason": reason}
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error rejecting payment: {e}")
+            return None
+    
+    async def update_payment_card(
+        self,
+        admin_id: str,
+        card_number: str,
+        card_holder: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Update payment card info (admin only)."""
+        client = await self._get_client()
+        try:
+            response = await client.put(
+                "/api/v1/settings/payment-card",
+                json={"card_number": card_number, "card_holder": card_holder},
+                params={"admin_id": admin_id}
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error updating payment card: {e}")
+            return None
+    
+    async def get_payment(self, payment_id: str) -> Optional[Dict[str, Any]]:
+        """Get payment by ID."""
+        client = await self._get_client()
+        try:
+            response = await client.get(f"/api/v1/payments/{payment_id}")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error getting payment: {e}")
+            return None
+    
+    # ==================== Admin Management APIs ====================
+    
+    async def get_all_admins(self, admin_id: str) -> Optional[Dict[str, Any]]:
+        """Get all admin users."""
+        client = await self._get_client()
+        try:
+            response = await client.get(
+                "/api/v1/users/admins/list",
+                params={"admin_id": admin_id}
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error getting admins: {e}")
+            return None
+    
+    async def get_admin_telegram_ids(self) -> Optional[List[int]]:
+        """Get telegram IDs of all active admins."""
+        client = await self._get_client()
+        try:
+            response = await client.get("/api/v1/users/admins/telegram-ids")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error getting admin telegram IDs: {e}")
+            return None
+    
+    async def promote_to_admin(
+        self,
+        target_telegram_id: int,
+        admin_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Promote a user to admin."""
+        client = await self._get_client()
+        try:
+            response = await client.post(
+                "/api/v1/users/admins/promote",
+                json={"target_telegram_id": target_telegram_id},
+                params={"admin_id": admin_id}
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error promoting user: {e}")
+            return None
+    
+    async def demote_from_admin(
+        self,
+        target_telegram_id: int,
+        admin_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Demote an admin to customer."""
+        client = await self._get_client()
+        try:
+            response = await client.post(
+                "/api/v1/users/admins/demote",
+                json={"target_telegram_id": target_telegram_id},
+                params={"admin_id": admin_id}
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error demoting admin: {e}")
+            return None
+    
     # ==================== Subscription APIs ====================
     
     async def get_subscription_status(self, user_id: str) -> Optional[Dict[str, Any]]:

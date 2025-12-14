@@ -65,9 +65,10 @@ class PaymentType(str, Enum):
 
 class PaymentStatus(str, Enum):
     """Payment status values."""
-    PENDING = "PENDING"
-    SUCCESS = "SUCCESS"
-    FAILED = "FAILED"
+    PENDING = "PENDING"  # Created, waiting for receipt upload
+    AWAITING_APPROVAL = "AWAITING_APPROVAL"  # Receipt uploaded, waiting for admin approval
+    SUCCESS = "SUCCESS"  # Approved by admin
+    FAILED = "FAILED"  # Rejected by admin
 
 
 class SubscriptionPlan(str, Enum):

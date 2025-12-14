@@ -18,6 +18,7 @@ from app.models.payment import Payment
 from app.models.validation import ValidationReport
 from app.models.invoice import Invoice
 from app.models.subscription import Subscription
+from app.models.settings import SystemSettings, SettingKeys
 
 __all__ = [
     "User",
@@ -27,6 +28,8 @@ __all__ = [
     "ValidationReport",
     "Invoice",
     "Subscription",
+    "SystemSettings",
+    "SettingKeys",
     "UserRole",
     "ProductType",
     "MaterialType",

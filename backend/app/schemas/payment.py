@@ -60,11 +60,38 @@ class PaymentOut(BaseModel):
     ref_id: Optional[str] = None
     card_pan: Optional[str] = None
     description: Optional[str] = None
+    receipt_image_url: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    approved_by: Optional[UUID] = None
+    approved_at: Optional[datetime] = None
     paid_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
+
+
+class ReceiptUpload(BaseModel):
+    """Schema for uploading payment receipt."""
+    receipt_image_url: str = Field(..., max_length=500, description="URL of uploaded receipt image")
+
+
+class PaymentApprove(BaseModel):
+    """Schema for approving a payment (admin)."""
+    admin_id: UUID = Field(..., description="Admin user ID who approves")
+
+
+class PaymentReject(BaseModel):
+    """Schema for rejecting a payment (admin)."""
+    admin_id: UUID = Field(..., description="Admin user ID who rejects")
+    reason: str = Field(..., max_length=500, description="Reason for rejection")
+
+
+class PendingPaymentOut(PaymentOut):
+    """Schema for pending payment with order info."""
+    order_short_id: Optional[str] = None
+    customer_name: Optional[str] = None
+    customer_telegram_id: Optional[int] = None
 
 
 class PaymentListResponse(BaseModel):

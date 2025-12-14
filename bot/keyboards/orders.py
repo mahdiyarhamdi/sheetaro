@@ -78,3 +78,11 @@ def get_cancel_confirm_keyboard(order_id: str) -> InlineKeyboardMarkup:
     ]
     return InlineKeyboardMarkup(keyboard)
 
+
+def get_payment_card_keyboard() -> InlineKeyboardMarkup:
+    """Get keyboard for payment card display (cancel option)."""
+    keyboard = [
+        [InlineKeyboardButton("❌ انصراف از پرداخت", callback_data="cancel_payment")],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+

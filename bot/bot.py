@@ -19,6 +19,8 @@ from handlers.profile import profile_conversation, show_profile_edit_options
 from handlers.products import product_conversation
 from handlers.orders import orders_conversation
 from handlers.tracking import track_order, handle_tracking_input
+from handlers.admin_payments import admin_payments_conversation
+from handlers.admin_settings import admin_settings_conversation
 
 # Load environment variables
 load_dotenv()
@@ -49,6 +51,10 @@ def main() -> None:
     
     # Orders management conversation
     application.add_handler(orders_conversation)
+    
+    # Admin handlers
+    application.add_handler(admin_payments_conversation)
+    application.add_handler(admin_settings_conversation)
     
     # Profile editing handlers
     application.add_handler(CallbackQueryHandler(show_profile_edit_options, pattern="^show_profile_edit$"))

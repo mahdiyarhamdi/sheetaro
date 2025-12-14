@@ -7,12 +7,13 @@ from decimal import Decimal
 
 from app.repositories.payment_repository import PaymentRepository
 from app.repositories.order_repository import OrderRepository
+from app.repositories.user_repository import UserRepository
 from app.schemas.payment import (
     PaymentInitiate, PaymentInitiateResponse, PaymentCallback, PaymentVerify,
-    PaymentOut, PaymentListResponse, PaymentSummary
+    PaymentOut, PaymentListResponse, PaymentSummary, PendingPaymentOut
 )
 from app.schemas.order import OrderStatusUpdate
-from app.models.enums import PaymentStatus, PaymentType, OrderStatus
+from app.models.enums import PaymentStatus, PaymentType, OrderStatus, UserRole
 from app.utils.logger import log_event
 
 
@@ -204,5 +205,158 @@ class PaymentService:
             total_paid=summary['total_paid'],
             total_pending=summary['total_pending'],
             payments=[PaymentOut.model_validate(p) for p in payments],
+        )
+    
+    async def upload_receipt(
+        self,
+        payment_id: UUID,
+        user_id: UUID,
+        receipt_image_url: str,
+    ) -> PaymentOut:
+        """Upload receipt image for card-to-card payment."""
+        payment = await self.repository.get_by_id(payment_id)
+        if not payment:
+            raise ValueError("Payment not found")
+        
+        # Verify user owns the payment
+        if payment.user_id != user_id:
+            raise ValueError("Access denied")
+        
+        # Check payment status - can only upload for PENDING or FAILED payments
+        if payment.status not in [PaymentStatus.PENDING, PaymentStatus.FAILED]:
+            raise ValueError("Cannot upload receipt for this payment status")
+        
+        # Upload receipt
+        updated_payment = await self.repository.upload_receipt(
+            payment_id=payment_id,
+            receipt_image_url=receipt_image_url,
+        )
+        
+        log_event(
+            event_type="payment.receipt_uploaded",
+            payment_id=str(payment_id),
+            order_id=str(payment.order_id),
+            user_id=str(user_id),
+        )
+        
+        return PaymentOut.model_validate(updated_payment)
+    
+    async def approve_payment(
+        self,
+        payment_id: UUID,
+        admin_id: UUID,
+    ) -> PaymentOut:
+        """Approve a payment (admin action)."""
+        # Verify admin role
+        user_repo = UserRepository(self.db)
+        admin = await user_repo.get_by_id(admin_id)
+        if not admin or admin.role != UserRole.ADMIN:
+            raise ValueError("Admin access required")
+        
+        payment = await self.repository.get_by_id(payment_id)
+        if not payment:
+            raise ValueError("Payment not found")
+        
+        # Check payment status
+        if payment.status != PaymentStatus.AWAITING_APPROVAL:
+            raise ValueError("Payment is not awaiting approval")
+        
+        # Approve payment
+        updated_payment = await self.repository.approve_payment(
+            payment_id=payment_id,
+            admin_id=admin_id,
+        )
+        
+        log_event(
+            event_type="payment.approved",
+            payment_id=str(payment_id),
+            order_id=str(payment.order_id),
+            admin_id=str(admin_id),
+            amount=str(payment.amount),
+        )
+        
+        # Update order status if needed
+        await self._check_and_update_order_status(payment.order_id)
+        
+        return PaymentOut.model_validate(updated_payment)
+    
+    async def reject_payment(
+        self,
+        payment_id: UUID,
+        admin_id: UUID,
+        reason: str,
+    ) -> PaymentOut:
+        """Reject a payment (admin action)."""
+        # Verify admin role
+        user_repo = UserRepository(self.db)
+        admin = await user_repo.get_by_id(admin_id)
+        if not admin or admin.role != UserRole.ADMIN:
+            raise ValueError("Admin access required")
+        
+        payment = await self.repository.get_by_id(payment_id)
+        if not payment:
+            raise ValueError("Payment not found")
+        
+        # Check payment status
+        if payment.status != PaymentStatus.AWAITING_APPROVAL:
+            raise ValueError("Payment is not awaiting approval")
+        
+        # Reject payment
+        updated_payment = await self.repository.reject_payment(
+            payment_id=payment_id,
+            admin_id=admin_id,
+            reason=reason,
+        )
+        
+        log_event(
+            event_type="payment.rejected",
+            payment_id=str(payment_id),
+            order_id=str(payment.order_id),
+            admin_id=str(admin_id),
+            reason=reason,
+        )
+        
+        return PaymentOut.model_validate(updated_payment)
+    
+    async def get_pending_approval_payments(
+        self,
+        admin_id: UUID,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> PaymentListResponse:
+        """Get payments awaiting admin approval."""
+        # Verify admin role
+        user_repo = UserRepository(self.db)
+        admin = await user_repo.get_by_id(admin_id)
+        if not admin or admin.role != UserRole.ADMIN:
+            raise ValueError("Admin access required")
+        
+        page_size = min(page_size, 100)
+        page = max(page, 1)
+        
+        payments, total = await self.repository.get_pending_approval(
+            page=page,
+            page_size=page_size,
+        )
+        
+        # Enrich with order and user info
+        result_items = []
+        for payment in payments:
+            order = await self.order_repo.get_by_id(payment.order_id)
+            user = await user_repo.get_by_id(payment.user_id)
+            
+            item = PendingPaymentOut(
+                **PaymentOut.model_validate(payment).model_dump(),
+                order_short_id=str(payment.order_id)[:8] if payment.order_id else None,
+                customer_name=f"{user.first_name} {user.last_name or ''}".strip() if user else None,
+                customer_telegram_id=user.telegram_id if user else None,
+            )
+            result_items.append(item)
+        
+        return PaymentListResponse(
+            items=result_items,
+            total=total,
+            page=page,
+            page_size=page_size,
         )
 

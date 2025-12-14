@@ -90,3 +90,123 @@ class TestUsersAPI:
         
         assert response.status_code == 422
 
+
+class TestAdminManagementAPI:
+    """Integration tests for admin management endpoints."""
+    
+    @pytest.fixture
+    async def setup_admin(self, client: AsyncClient):
+        """Create an admin user."""
+        admin_data = {
+            "telegram_id": 111111111,
+            "username": "admin",
+            "first_name": "Admin",
+            "last_name": "User",
+            "role": "ADMIN",
+        }
+        response = await client.post("/api/v1/users", json=admin_data)
+        return response.json()
+    
+    @pytest.fixture
+    async def setup_regular_user(self, client: AsyncClient):
+        """Create a regular user."""
+        user_data = {
+            "telegram_id": 222222222,
+            "username": "regular",
+            "first_name": "Regular",
+            "last_name": "User",
+            "role": "CUSTOMER",
+        }
+        response = await client.post("/api/v1/users", json=user_data)
+        return response.json()
+    
+    @pytest.mark.asyncio
+    async def test_get_admins_list(self, client: AsyncClient, setup_admin):
+        """Test GET /api/v1/users/admins/list."""
+        admin = await setup_admin
+        
+        response = await client.get(
+            "/api/v1/users/admins/list",
+            params={"admin_id": admin["id"]}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert "items" in data
+        assert data["total"] >= 1
+    
+    @pytest.mark.asyncio
+    async def test_get_admin_telegram_ids(self, client: AsyncClient, setup_admin):
+        """Test GET /api/v1/users/admins/telegram-ids."""
+        admin = await setup_admin
+        
+        response = await client.get("/api/v1/users/admins/telegram-ids")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert admin["telegram_id"] in data
+    
+    @pytest.mark.asyncio
+    async def test_promote_to_admin(self, client: AsyncClient, setup_admin, setup_regular_user):
+        """Test POST /api/v1/users/admins/promote."""
+        admin = await setup_admin
+        regular = await setup_regular_user
+        
+        promote_data = {"target_telegram_id": regular["telegram_id"]}
+        response = await client.post(
+            "/api/v1/users/admins/promote",
+            json=promote_data,
+            params={"admin_id": admin["id"]}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["role"] == "ADMIN"
+    
+    @pytest.mark.asyncio
+    async def test_promote_non_admin_fails(self, client: AsyncClient, setup_regular_user):
+        """Test that non-admin cannot promote users."""
+        regular = await setup_regular_user
+        
+        # Create another user to promote
+        other_user_data = {
+            "telegram_id": 333333333,
+            "first_name": "Other",
+            "role": "CUSTOMER",
+        }
+        await client.post("/api/v1/users", json=other_user_data)
+        
+        promote_data = {"target_telegram_id": 333333333}
+        response = await client.post(
+            "/api/v1/users/admins/promote",
+            json=promote_data,
+            params={"admin_id": regular["id"]}
+        )
+        
+        assert response.status_code == 403
+    
+    @pytest.mark.asyncio
+    async def test_demote_from_admin(self, client: AsyncClient, setup_admin):
+        """Test POST /api/v1/users/admins/demote."""
+        admin = await setup_admin
+        
+        # Create another admin to demote
+        other_admin_data = {
+            "telegram_id": 444444444,
+            "first_name": "OtherAdmin",
+            "role": "ADMIN",
+        }
+        other_response = await client.post("/api/v1/users", json=other_admin_data)
+        other_admin = other_response.json()
+        
+        demote_data = {"target_telegram_id": other_admin["telegram_id"]}
+        response = await client.post(
+            "/api/v1/users/admins/demote",
+            json=demote_data,
+            params={"admin_id": admin["id"]}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["role"] == "CUSTOMER"
+
