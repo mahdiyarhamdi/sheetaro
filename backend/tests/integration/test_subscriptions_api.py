@@ -16,7 +16,7 @@ class TestSubscriptionsAPI:
     @pytest.mark.asyncio
     async def test_create_subscription(self, client: AsyncClient, setup_user):
         """Test POST /api/v1/subscriptions - create subscription."""
-        user = await setup_user
+        user = setup_user
         
         response = await client.post(
             "/api/v1/subscriptions",
@@ -27,13 +27,13 @@ class TestSubscriptionsAPI:
         assert response.status_code == 201
         data = response.json()
         assert data["plan"] == "ADVANCED_SEARCH"
-        assert data["price"] == 250000
+        assert int(float(data["price"])) == 250000
         assert data["is_active"] is True
     
     @pytest.mark.asyncio
     async def test_get_subscription_status(self, client: AsyncClient, setup_user):
         """Test GET /api/v1/subscriptions/me."""
-        user = await setup_user
+        user = setup_user
         
         # Without subscription
         response1 = await client.get(
@@ -64,7 +64,7 @@ class TestSubscriptionsAPI:
     @pytest.mark.asyncio
     async def test_list_subscriptions(self, client: AsyncClient, setup_user):
         """Test GET /api/v1/subscriptions."""
-        user = await setup_user
+        user = setup_user
         
         # Create subscription
         await client.post(
@@ -85,7 +85,7 @@ class TestSubscriptionsAPI:
     @pytest.mark.asyncio
     async def test_cancel_subscription(self, client: AsyncClient, setup_user):
         """Test POST /api/v1/subscriptions/{subscription_id}/cancel."""
-        user = await setup_user
+        user = setup_user
         
         # Create subscription
         create_response = await client.post(
@@ -116,6 +116,6 @@ class TestSubscriptionsAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["plan"] == "ADVANCED_SEARCH"
-        assert data["price"] == 250000
+        assert int(float(data["price"])) == 250000
         assert data["duration_days"] == 30
 

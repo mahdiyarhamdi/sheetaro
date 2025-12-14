@@ -33,7 +33,7 @@ class TestPaymentsAPI:
     @pytest.mark.asyncio
     async def test_initiate_payment(self, client: AsyncClient, setup_order):
         """Test POST /api/v1/payments/initiate."""
-        user, product, order = await setup_order
+        user, product, order = setup_order
         
         payment_data = {
             "order_id": order["id"],
@@ -52,12 +52,12 @@ class TestPaymentsAPI:
         assert "payment_id" in data
         assert "authority" in data
         assert "redirect_url" in data
-        assert data["amount"] == order["print_price"]
+        assert int(float(data["amount"])) == int(float(order["print_price"]))
     
     @pytest.mark.asyncio
     async def test_payment_callback_success(self, client: AsyncClient, setup_order):
         """Test POST /api/v1/payments/callback - success."""
-        user, product, order = await setup_order
+        user, product, order = setup_order
         
         # Initiate payment
         payment_data = {
@@ -89,7 +89,7 @@ class TestPaymentsAPI:
     @pytest.mark.asyncio
     async def test_get_order_payments(self, client: AsyncClient, setup_order):
         """Test GET /api/v1/payments/order/{order_id}."""
-        user, product, order = await setup_order
+        user, product, order = setup_order
         
         # Initiate payment
         payment_data = {
@@ -112,7 +112,7 @@ class TestPaymentsAPI:
     @pytest.mark.asyncio
     async def test_get_payment_summary(self, client: AsyncClient, setup_order):
         """Test GET /api/v1/payments/order/{order_id}/summary."""
-        user, product, order = await setup_order
+        user, product, order = setup_order
         
         response = await client.get(f"/api/v1/payments/order/{order['id']}/summary")
         
@@ -177,7 +177,7 @@ class TestCardToCardPaymentsAPI:
     @pytest.mark.asyncio
     async def test_upload_receipt(self, client: AsyncClient, setup_order_with_payment):
         """Test POST /api/v1/payments/{id}/upload-receipt."""
-        user, product, order, payment = await setup_order_with_payment
+        user, product, order, payment = setup_order_with_payment
         
         receipt_data = {
             "receipt_image_url": "https://example.com/receipt.jpg",
@@ -197,8 +197,8 @@ class TestCardToCardPaymentsAPI:
     @pytest.mark.asyncio
     async def test_get_pending_approval(self, client: AsyncClient, setup_order_with_payment, setup_admin):
         """Test GET /api/v1/payments/pending-approval."""
-        user, product, order, payment = await setup_order_with_payment
-        admin = await setup_admin
+        user, product, order, payment = setup_order_with_payment
+        admin = setup_admin
         
         # Upload receipt
         receipt_data = {"receipt_image_url": "https://example.com/receipt.jpg"}
@@ -221,8 +221,8 @@ class TestCardToCardPaymentsAPI:
     @pytest.mark.asyncio
     async def test_approve_payment(self, client: AsyncClient, setup_order_with_payment, setup_admin):
         """Test POST /api/v1/payments/{id}/approve."""
-        user, product, order, payment = await setup_order_with_payment
-        admin = await setup_admin
+        user, product, order, payment = setup_order_with_payment
+        admin = setup_admin
         
         # Upload receipt
         receipt_data = {"receipt_image_url": "https://example.com/receipt.jpg"}
@@ -246,8 +246,8 @@ class TestCardToCardPaymentsAPI:
     @pytest.mark.asyncio
     async def test_reject_payment(self, client: AsyncClient, setup_order_with_payment, setup_admin):
         """Test POST /api/v1/payments/{id}/reject."""
-        user, product, order, payment = await setup_order_with_payment
-        admin = await setup_admin
+        user, product, order, payment = setup_order_with_payment
+        admin = setup_admin
         
         # Upload receipt
         receipt_data = {"receipt_image_url": "https://example.com/receipt.jpg"}

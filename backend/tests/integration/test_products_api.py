@@ -79,7 +79,7 @@ class TestProductsAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["name"] == "Updated Product"
-        assert data["base_price"] == 20000
+        assert int(float(data["base_price"])) == 20000
     
     @pytest.mark.asyncio
     async def test_delete_product(self, client: AsyncClient, sample_product_data):

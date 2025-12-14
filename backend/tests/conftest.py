@@ -8,7 +8,9 @@ from uuid import uuid4
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy import text
 from httpx import AsyncClient, ASGITransport
+import re
 
 from app.core.database import Base
 from app.core.config import settings
@@ -17,7 +19,43 @@ from app.api.deps import get_db
 from app.models.enums import UserRole, ProductType, MaterialType, DesignPlan
 
 # Test database URL (use a separate test database)
-TEST_DATABASE_URL = settings.DATABASE_URL.replace("/sheetaro", "/sheetaro_test")
+# Only replace the database name at the end of the URL, not the username
+TEST_DATABASE_URL = re.sub(r'/sheetaro$', '/sheetaro_test', settings.DATABASE_URL)
+
+# SQL to create enum types needed for tests
+CREATE_ENUMS_SQL = """
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'userrole') THEN
+        CREATE TYPE userrole AS ENUM ('CUSTOMER', 'DESIGNER', 'VALIDATOR', 'PRINT_SHOP', 'ADMIN');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'producttype') THEN
+        CREATE TYPE producttype AS ENUM ('LABEL', 'INVOICE');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'materialtype') THEN
+        CREATE TYPE materialtype AS ENUM ('PAPER', 'PVC', 'METALLIC');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'designplan') THEN
+        CREATE TYPE designplan AS ENUM ('PUBLIC', 'SEMI_PRIVATE', 'PRIVATE', 'OWN_DESIGN');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'orderstatus') THEN
+        CREATE TYPE orderstatus AS ENUM ('PENDING', 'AWAITING_VALIDATION', 'NEEDS_ACTION', 'DESIGNING', 'READY_FOR_PRINT', 'PRINTING', 'SHIPPED', 'DELIVERED', 'CANCELLED');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'validationstatus') THEN
+        CREATE TYPE validationstatus AS ENUM ('PENDING', 'PASSED', 'FAILED', 'FIXED');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'paymenttype') THEN
+        CREATE TYPE paymenttype AS ENUM ('VALIDATION', 'DESIGN', 'FIX', 'PRINT', 'SUBSCRIPTION');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'paymentstatus') THEN
+        CREATE TYPE paymentstatus AS ENUM ('PENDING', 'AWAITING_APPROVAL', 'SUCCESS', 'FAILED');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'subscriptionplan') THEN
+        CREATE TYPE subscriptionplan AS ENUM ('ADVANCED_SEARCH');
+    END IF;
+END
+$$;
+"""
 
 
 @pytest.fixture(scope="session")
@@ -38,6 +76,8 @@ async def test_engine():
     )
     
     async with engine.begin() as conn:
+        # Create enum types first
+        await conn.execute(text(CREATE_ENUMS_SQL))
         await conn.run_sync(Base.metadata.create_all)
     
     yield engine

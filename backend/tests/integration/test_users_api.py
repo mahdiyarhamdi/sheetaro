@@ -123,7 +123,7 @@ class TestAdminManagementAPI:
     @pytest.mark.asyncio
     async def test_get_admins_list(self, client: AsyncClient, setup_admin):
         """Test GET /api/v1/users/admins/list."""
-        admin = await setup_admin
+        admin = setup_admin
         
         response = await client.get(
             "/api/v1/users/admins/list",
@@ -138,7 +138,7 @@ class TestAdminManagementAPI:
     @pytest.mark.asyncio
     async def test_get_admin_telegram_ids(self, client: AsyncClient, setup_admin):
         """Test GET /api/v1/users/admins/telegram-ids."""
-        admin = await setup_admin
+        admin = setup_admin
         
         response = await client.get("/api/v1/users/admins/telegram-ids")
         
@@ -149,8 +149,8 @@ class TestAdminManagementAPI:
     @pytest.mark.asyncio
     async def test_promote_to_admin(self, client: AsyncClient, setup_admin, setup_regular_user):
         """Test POST /api/v1/users/admins/promote."""
-        admin = await setup_admin
-        regular = await setup_regular_user
+        admin = setup_admin
+        regular = setup_regular_user
         
         promote_data = {"target_telegram_id": regular["telegram_id"]}
         response = await client.post(
@@ -166,7 +166,7 @@ class TestAdminManagementAPI:
     @pytest.mark.asyncio
     async def test_promote_non_admin_fails(self, client: AsyncClient, setup_regular_user):
         """Test that non-admin cannot promote users."""
-        regular = await setup_regular_user
+        regular = setup_regular_user
         
         # Create another user to promote
         other_user_data = {
@@ -188,7 +188,7 @@ class TestAdminManagementAPI:
     @pytest.mark.asyncio
     async def test_demote_from_admin(self, client: AsyncClient, setup_admin):
         """Test POST /api/v1/users/admins/demote."""
-        admin = await setup_admin
+        admin = setup_admin
         
         # Create another admin to demote
         other_admin_data = {

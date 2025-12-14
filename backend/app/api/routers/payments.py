@@ -60,6 +60,29 @@ async def payment_callback(
 
 
 @router.get(
+    "/payments/pending-approval",
+    response_model=PaymentListResponse,
+    summary="Get pending approval payments (admin)",
+    description="Get all payments awaiting admin approval",
+)
+async def get_pending_approval(
+    admin_id: UUID = Query(..., description="Admin user ID"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    db: AsyncSession = Depends(get_db),
+) -> PaymentListResponse:
+    """Get payments pending approval (admin only)."""
+    service = PaymentService(db)
+    try:
+        return await service.get_pending_approval_payments(admin_id, page, page_size)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e)
+        )
+
+
+@router.get(
     "/payments/{payment_id}",
     response_model=PaymentOut,
     summary="Get payment details",
@@ -138,29 +161,6 @@ async def upload_receipt(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-
-
-@router.get(
-    "/payments/pending-approval",
-    response_model=PaymentListResponse,
-    summary="Get pending approval payments (admin)",
-    description="Get all payments awaiting admin approval",
-)
-async def get_pending_approval(
-    admin_id: UUID = Query(..., description="Admin user ID"),
-    page: int = Query(1, ge=1, description="Page number"),
-    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
-    db: AsyncSession = Depends(get_db),
-) -> PaymentListResponse:
-    """Get payments pending approval (admin only)."""
-    service = PaymentService(db)
-    try:
-        return await service.get_pending_approval_payments(admin_id, page, page_size)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e)
         )
 

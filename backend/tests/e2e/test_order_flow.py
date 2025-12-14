@@ -58,7 +58,7 @@ class TestOrderFlow:
         order_id = order["id"]
         assert order["status"] == "PENDING"
         assert order["design_plan"] == "PUBLIC"
-        assert order["design_price"] == 0  # Free for public
+        assert int(float(order["design_price"])) == 0  # Free for public
         
         # Step 4: Initiate payment
         payment_init_response = await client.post(
@@ -175,7 +175,7 @@ class TestOrderFlow:
         order = order_response.json()
         
         # Verify validation price
-        assert order["validation_price"] == 50000
+        assert int(float(order["validation_price"])) == 50000
         assert order["status"] == "AWAITING_VALIDATION"
         
         # Create validator user

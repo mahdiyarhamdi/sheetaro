@@ -35,7 +35,7 @@ class TestPaymentFlow:
     @pytest.mark.asyncio
     async def test_payment_success_flow(self, client: AsyncClient, setup_order):
         """Test successful payment flow."""
-        user, product, order = await setup_order
+        user, product, order = setup_order
         
         # Initiate payment
         init_response = await client.post(
@@ -67,13 +67,13 @@ class TestPaymentFlow:
         summary = (await client.get(
             f"/api/v1/payments/order/{order['id']}/summary"
         )).json()
-        assert summary["total_paid"] == order["print_price"]
-        assert summary["total_pending"] == 0
+        assert int(float(summary["total_paid"])) == int(float(order["print_price"]))
+        assert int(float(summary["total_pending"])) == 0
     
     @pytest.mark.asyncio
     async def test_payment_failed_flow(self, client: AsyncClient, setup_order):
         """Test failed payment flow."""
-        user, product, order = await setup_order
+        user, product, order = setup_order
         
         # Initiate payment
         init_response = await client.post(
@@ -128,7 +128,7 @@ class TestPaymentFlow:
         )
         assert sub_response.status_code == 201
         subscription = sub_response.json()
-        assert subscription["price"] == 250000
+        assert int(float(subscription["price"])) == 250000
         
         # Verify subscription is active
         status2 = (await client.get(
@@ -163,8 +163,8 @@ class TestPaymentFlow:
         )).json()
         
         # Verify prices
-        assert order["validation_price"] == 50000
-        assert order["print_price"] == products[0]["base_price"] * 100
+        assert int(float(order["validation_price"])) == 50000
+        assert int(float(order["print_price"])) == int(float(products[0]["base_price"])) * 100
         
         # Pay for validation first
         val_init = (await client.post(
@@ -204,5 +204,5 @@ class TestPaymentFlow:
         )).json()
         
         assert len(summary["payments"]) == 2
-        assert summary["total_paid"] == order["validation_price"] + order["print_price"]
+        assert int(float(summary["total_paid"])) == int(float(order["validation_price"])) + int(float(order["print_price"]))
 

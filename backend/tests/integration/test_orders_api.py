@@ -24,7 +24,7 @@ class TestOrdersAPI:
     @pytest.mark.asyncio
     async def test_create_order(self, client: AsyncClient, setup_user_and_product, sample_order_data):
         """Test POST /api/v1/orders - create new order."""
-        user, product = await setup_user_and_product
+        user, product = setup_user_and_product
         sample_order_data["product_id"] = product["id"]
         
         response = await client.post(
@@ -42,7 +42,7 @@ class TestOrdersAPI:
     @pytest.mark.asyncio
     async def test_get_orders(self, client: AsyncClient, setup_user_and_product, sample_order_data):
         """Test GET /api/v1/orders - list user orders."""
-        user, product = await setup_user_and_product
+        user, product = setup_user_and_product
         sample_order_data["product_id"] = product["id"]
         
         # Create order
@@ -62,7 +62,7 @@ class TestOrdersAPI:
     @pytest.mark.asyncio
     async def test_get_order_by_id(self, client: AsyncClient, setup_user_and_product, sample_order_data):
         """Test GET /api/v1/orders/{order_id}."""
-        user, product = await setup_user_and_product
+        user, product = setup_user_and_product
         sample_order_data["product_id"] = product["id"]
         
         # Create order
@@ -82,7 +82,7 @@ class TestOrdersAPI:
     @pytest.mark.asyncio
     async def test_cancel_order(self, client: AsyncClient, setup_user_and_product, sample_order_data):
         """Test POST /api/v1/orders/{order_id}/cancel."""
-        user, product = await setup_user_and_product
+        user, product = setup_user_and_product
         sample_order_data["product_id"] = product["id"]
         
         # Create order
@@ -105,7 +105,7 @@ class TestOrdersAPI:
     @pytest.mark.asyncio
     async def test_update_order_status(self, client: AsyncClient, setup_user_and_product, sample_order_data):
         """Test PATCH /api/v1/orders/{order_id}/status."""
-        user, product = await setup_user_and_product
+        user, product = setup_user_and_product
         sample_order_data["product_id"] = product["id"]
         
         # Create order
@@ -129,7 +129,7 @@ class TestOrdersAPI:
     @pytest.mark.asyncio
     async def test_printshop_queue(self, client: AsyncClient, setup_user_and_product, sample_order_data):
         """Test GET /api/v1/printshop/orders."""
-        user, product = await setup_user_and_product
+        user, product = setup_user_and_product
         sample_order_data["product_id"] = product["id"]
         
         # Create order and set to READY_FOR_PRINT
