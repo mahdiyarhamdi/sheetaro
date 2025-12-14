@@ -8,7 +8,8 @@ from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
-from app.api.routers import health, users, products, orders, payments, validation, invoices, subscriptions, files, settings
+from app.api.routers import health, users, products, orders, payments, validation, invoices, subscriptions, files
+from app.api.routers import settings as settings_router
 from app.utils.logger import logger
 
 
@@ -125,7 +126,7 @@ app.include_router(
 )
 
 app.include_router(
-    settings.router,
+    settings_router.router,
     prefix="/api/v1",
     tags=["Settings"]
 )
