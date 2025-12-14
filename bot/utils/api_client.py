@@ -311,15 +311,22 @@ class APIClient:
     async def update_payment_card(
         self,
         admin_id: str,
-        card_number: str,
-        card_holder: str,
+        card_number: str | None = None,
+        card_holder: str | None = None,
     ) -> Optional[Dict[str, Any]]:
-        """Update payment card info (admin only)."""
+        """Update payment card info (admin only). Partial update supported."""
         client = await self._get_client()
         try:
-            response = await client.put(
+            # Build payload with only non-None values
+            payload = {}
+            if card_number is not None:
+                payload["card_number"] = card_number
+            if card_holder is not None:
+                payload["card_holder"] = card_holder
+            
+            response = await client.patch(
                 "/api/v1/settings/payment-card",
-                json={"card_number": card_number, "card_holder": card_holder},
+                json=payload,
                 params={"admin_id": admin_id}
             )
             response.raise_for_status()
