@@ -297,9 +297,11 @@ async def handle_receipt_upload(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return AWAITING_RECEIPT
     
-    # Get file info and construct URL
+    # Get file info and construct full URL
     file = await photo.get_file()
-    receipt_image_url = file.file_path  # Telegram file URL
+    # Construct full Telegram file URL (file.file_path is relative)
+    bot_token = context.bot.token
+    receipt_image_url = f"https://api.telegram.org/file/bot{bot_token}/{file.file_path}"
     
     # Upload receipt
     result = await api_client.upload_receipt(

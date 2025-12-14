@@ -33,7 +33,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             if photos.total_count > 0:
                 photo = photos.photos[0][0]
                 file = await context.bot.get_file(photo.file_id)
-                user_data["profile_photo_url"] = file.file_path
+                # Construct full Telegram file URL
+                bot_token = context.bot.token
+                user_data["profile_photo_url"] = f"https://api.telegram.org/file/bot{bot_token}/{file.file_path}"
         except Exception as e:
             logger.warning(f"Could not get profile photo: {e}")
     
