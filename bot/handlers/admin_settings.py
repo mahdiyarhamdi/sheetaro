@@ -13,11 +13,11 @@ from telegram.ext import (
 )
 
 from utils.api_client import api_client
+from utils.helpers import get_user_menu_keyboard
 from keyboards.admin import (
     get_settings_keyboard,
     get_cancel_settings_keyboard,
 )
-from keyboards.main_menu import get_main_menu_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     if not await is_admin(update.effective_user.id):
         await update.message.reply_text(
             "⛔ شما دسترسی مدیر ندارید.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
         return ConversationHandler.END
     
@@ -78,7 +78,7 @@ async def handle_settings_callback(update: Update, context: ContextTypes.DEFAULT
         await query.message.edit_text("بازگشت به منو...")
         await query.message.reply_text(
             "به منوی اصلی بازگشتید.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
         return ConversationHandler.END
     
@@ -122,7 +122,7 @@ async def handle_card_number_input(update: Update, context: ContextTypes.DEFAULT
     if not user:
         await update.message.reply_text(
             "خطا در دریافت اطلاعات کاربر.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
         return ConversationHandler.END
     
@@ -171,7 +171,7 @@ async def handle_card_holder_input(update: Update, context: ContextTypes.DEFAULT
     if not user:
         await update.message.reply_text(
             "خطا در دریافت اطلاعات کاربر.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
         return ConversationHandler.END
     

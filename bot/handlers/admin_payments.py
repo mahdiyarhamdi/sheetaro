@@ -25,7 +25,7 @@ from keyboards.admin import (
     get_confirm_remove_admin_keyboard,
     get_cancel_add_admin_keyboard,
 )
-from keyboards.main_menu import get_main_menu_keyboard
+from utils.helpers import get_user_menu_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not await is_admin(update.effective_user.id):
         await update.message.reply_text(
             "⛔ شما دسترسی مدیر ندارید.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
         return ConversationHandler.END
     
@@ -65,7 +65,7 @@ async def handle_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if text == "🔙 بازگشت به منو":
         await update.message.reply_text(
             "به منوی اصلی بازگشتید.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
         return ConversationHandler.END
     
@@ -92,7 +92,7 @@ async def show_pending_payments(update: Update, context: ContextTypes.DEFAULT_TY
     if not user:
         await update.message.reply_text(
             "خطا در دریافت اطلاعات کاربر.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
         return ConversationHandler.END
     
@@ -151,23 +151,27 @@ async def handle_pending_list_callback(update: Update, context: ContextTypes.DEF
         detail_text = (
             f"💳 بررسی پرداخت\n\n"
             f"شماره: #{payment['id'][:8]}\n"
-            f"مبلغ: {int(payment.get('amount', 0)):,} تومان\n"
+            f"مبلغ: {int(float(payment.get('amount', 0))):,} تومان\n"
             f"نوع: {get_payment_type_text(payment.get('type', ''))}\n"
             f"تاریخ: {payment.get('created_at', '')[:10]}\n"
         )
         
         # Show receipt image if available
-        if payment.get('receipt_image_url'):
-            detail_text += f"\n📷 رسید: {payment['receipt_image_url']}\n"
-            # Try to send the receipt image
+        receipt_url = payment.get('receipt_image_url')
+        if receipt_url:
+            # Send receipt as photo with full details and buttons in caption
             try:
                 await query.message.reply_photo(
-                    photo=payment['receipt_image_url'],
-                    caption="عکس رسید پرداخت"
+                    photo=receipt_url,
+                    caption=detail_text,
+                    reply_markup=get_payment_review_keyboard(payment_id)
                 )
+                # Delete the original message to avoid confusion
+                await query.message.delete()
+                return PAYMENT_REVIEW
             except Exception as e:
                 logger.error(f"Error sending receipt image: {e}")
-                detail_text += "(خطا در نمایش تصویر)\n"
+                detail_text += f"\n📷 رسید موجود است (خطا در نمایش تصویر)\n"
         
         await query.message.edit_text(
             detail_text,
@@ -223,7 +227,7 @@ async def handle_payment_review_callback(update: Update, context: ContextTypes.D
                     bot=context.bot,
                     customer_telegram_id=customer_telegram_id,
                     payment_id=payment_id,
-                    amount=int(result.get('amount', 0)),
+                    amount=int(float(result.get('amount', 0))),
                 )
             
             # Refresh pending list
@@ -292,7 +296,7 @@ async def handle_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYP
                 bot=context.bot,
                 customer_telegram_id=customer_telegram_id,
                 payment_id=payment_id,
-                amount=int(result.get('amount', 0)),
+                amount=int(float(result.get('amount', 0))),
                 reason=reason,
             )
         
@@ -320,7 +324,7 @@ async def handle_reject_cancel(update: Update, context: ContextTypes.DEFAULT_TYP
             detail_text = (
                 f"💳 بررسی پرداخت\n\n"
                 f"شماره: #{payment['id'][:8]}\n"
-                f"مبلغ: {int(payment.get('amount', 0)):,} تومان\n"
+                f"مبلغ: {int(float(payment.get('amount', 0))):,} تومان\n"
             )
             await query.message.edit_text(
                 detail_text,
@@ -381,7 +385,7 @@ async def show_admin_management(update: Update, context: ContextTypes.DEFAULT_TY
     if not user:
         await update.message.reply_text(
             "خطا در دریافت اطلاعات کاربر.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
         return ConversationHandler.END
     

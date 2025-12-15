@@ -11,6 +11,8 @@ from telegram.ext import (
 )
 
 from utils.api_client import api_client
+from utils.notifications import notify_admin_new_receipt
+from utils.helpers import get_user_menu_keyboard
 from keyboards.products import (
     get_product_type_keyboard,
     get_products_inline_keyboard,
@@ -19,12 +21,12 @@ from keyboards.products import (
     get_quantity_keyboard,
     get_confirm_order_keyboard,
 )
-from keyboards.main_menu import get_main_menu_keyboard
+from keyboards.orders import get_payment_card_keyboard
 
 logger = logging.getLogger(__name__)
 
 # Conversation states
-SELECTING_TYPE, SELECTING_PRODUCT, SELECTING_PLAN, SELECTING_VALIDATION, SELECTING_QUANTITY, CONFIRMING = range(6)
+SELECTING_TYPE, SELECTING_PRODUCT, SELECTING_PLAN, SELECTING_VALIDATION, SELECTING_QUANTITY, CONFIRMING, AWAITING_RECEIPT = range(7)
 
 
 async def show_product_types(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -43,7 +45,7 @@ async def handle_product_type(update: Update, context: ContextTypes.DEFAULT_TYPE
     if text == "🔙 بازگشت به منو":
         await update.message.reply_text(
             "به منوی اصلی بازگشتید.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
         return ConversationHandler.END
     
@@ -64,7 +66,7 @@ async def handle_product_type(update: Update, context: ContextTypes.DEFAULT_TYPE
     if not result or not result.get('items'):
         await update.message.reply_text(
             "متأسفانه در حال حاضر محصولی موجود نیست.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
         return ConversationHandler.END
     
@@ -261,7 +263,7 @@ async def handle_order_confirmation(update: Update, context: ContextTypes.DEFAUL
         await query.message.edit_text("سفارش لغو شد.")
         await query.message.reply_text(
             "به منوی اصلی بازگشتید.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
         return ConversationHandler.END
     
@@ -284,25 +286,177 @@ async def handle_order_confirmation(update: Update, context: ContextTypes.DEFAUL
         
         result = await api_client.create_order(user['id'], order_data)
         
-        if result:
-            await query.message.edit_text(
-                f"✅ سفارش شما با موفقیت ثبت شد!\n\n"
-                f"شماره سفارش: #{result['id'][:8]}\n"
-                f"مبلغ کل: {int(result['total_price']):,} تومان\n\n"
-                "برای پرداخت و پیگیری سفارش از منوی سفارشات استفاده کنید."
-            )
-        else:
+        if not result:
             await query.message.edit_text(
                 "❌ خطا در ثبت سفارش. لطفاً دوباره تلاش کنید."
             )
+            await query.message.reply_text(
+                "به منوی اصلی بازگشتید.",
+                reply_markup=get_user_menu_keyboard(context)
+            )
+            return ConversationHandler.END
+        
+        # Store order info
+        context.user_data['current_order_id'] = result['id']
+        total_price = int(float(result['total_price']))
+        
+        # Show success message
+        await query.message.edit_text(
+            f"✅ سفارش شما با موفقیت ثبت شد!\n\n"
+            f"شماره سفارش: #{result['id'][:8]}\n"
+            f"مبلغ کل: {total_price:,} تومان\n\n"
+            "⏳ در حال آماده‌سازی پرداخت..."
+        )
+        
+        # Get payment card info
+        card_info = await api_client.get_payment_card()
+        if not card_info:
+            await query.message.reply_text(
+                "❌ اطلاعات کارت بانکی تنظیم نشده است.\n"
+                "لطفاً با پشتیبانی تماس بگیرید.",
+                reply_markup=get_user_menu_keyboard(context)
+            )
+            return ConversationHandler.END
+        
+        # Initiate payment
+        payment_result = await api_client.initiate_payment(
+            user_id=user['id'],
+            order_id=result['id'],
+            payment_type="PRINT",
+            callback_url="https://example.com/callback",
+        )
+        
+        if not payment_result:
+            await query.message.reply_text(
+                "❌ خطا در ایجاد درخواست پرداخت.\n"
+                "می‌توانید از منوی سفارشات، پرداخت را انجام دهید.",
+                reply_markup=get_user_menu_keyboard(context)
+            )
+            return ConversationHandler.END
+        
+        # Store payment info
+        context.user_data['pending_payment_id'] = payment_result.get('payment_id')
+        context.user_data['pending_payment_amount'] = payment_result.get('amount')
+        
+        # Get card number (without formatting for easy copy)
+        card_number = card_info.get('card_number', '')
         
         await query.message.reply_text(
-            "به منوی اصلی بازگشتید.",
-            reply_markup=get_main_menu_keyboard()
+            f"💳 پرداخت کارت به کارت\n\n"
+            f"مبلغ: {int(float(payment_result.get('amount', 0))):,} تومان\n\n"
+            f"شماره کارت (برای کپی کلیک کنید):\n`{card_number}`\n\n"
+            f"به نام: {card_info.get('card_holder', '-')}\n\n"
+            f"⚠️ پس از واریز، عکس رسید را ارسال کنید.",
+            parse_mode='Markdown',
+            reply_markup=get_payment_card_keyboard()
+        )
+        return AWAITING_RECEIPT
+    
+    return CONFIRMING
+
+
+async def handle_receipt_upload(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle receipt image upload from user."""
+    payment_id = context.user_data.get('pending_payment_id')
+    
+    if not payment_id:
+        await update.message.reply_text(
+            "❌ خطا: اطلاعات پرداخت یافت نشد. لطفاً دوباره تلاش کنید.",
+            reply_markup=get_user_menu_keyboard(context)
         )
         return ConversationHandler.END
     
-    return CONFIRMING
+    # Get user
+    user = await api_client.get_user(update.effective_user.id)
+    if not user:
+        await update.message.reply_text(
+            "❌ خطا در دریافت اطلاعات کاربر.",
+            reply_markup=get_user_menu_keyboard(context)
+        )
+        return ConversationHandler.END
+    
+    # Get photo
+    photo = update.message.photo[-1] if update.message.photo else None
+    
+    if not photo:
+        await update.message.reply_text(
+            "⚠️ لطفاً عکس رسید را ارسال کنید."
+        )
+        return AWAITING_RECEIPT
+    
+    # Get file info and construct full URL
+    file = await photo.get_file()
+    # file.file_path might already be a full URL or just a path
+    if file.file_path.startswith("https://"):
+        receipt_image_url = file.file_path
+    else:
+        bot_token = context.bot.token
+        receipt_image_url = f"https://api.telegram.org/file/bot{bot_token}/{file.file_path}"
+    
+    # Upload receipt
+    result = await api_client.upload_receipt(
+        payment_id=payment_id,
+        user_id=user['id'],
+        receipt_image_url=receipt_image_url,
+    )
+    
+    if result:
+        # Get payment amount for notification
+        payment_amount = context.user_data.get('pending_payment_amount', 0)
+        
+        # Clear pending payment data
+        context.user_data.pop('pending_payment_id', None)
+        context.user_data.pop('pending_payment_amount', None)
+        context.user_data.pop('current_order_id', None)
+        
+        await update.message.reply_text(
+            "✅ رسید شما با موفقیت ثبت شد.\n\n"
+            "⏳ در انتظار تأیید مدیر هستید.\n"
+            "پس از بررسی رسید، نتیجه به شما اطلاع داده می‌شود.",
+            reply_markup=get_user_menu_keyboard(context)
+        )
+        
+        # Notify admin about new receipt
+        customer_name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
+        await notify_admin_new_receipt(
+            bot=context.bot,
+            payment_id=payment_id,
+            amount=int(float(payment_amount)),
+            customer_name=customer_name,
+            customer_telegram_id=update.effective_user.id,
+        )
+        
+        logger.info(f"New receipt uploaded for payment {payment_id} by user {user['id']}")
+        
+        return ConversationHandler.END
+    else:
+        await update.message.reply_text(
+            "❌ خطا در ثبت رسید. لطفاً دوباره تلاش کنید."
+        )
+        return AWAITING_RECEIPT
+
+
+async def handle_receipt_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle cancel during receipt upload."""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "cancel_payment":
+        context.user_data.pop('pending_payment_id', None)
+        context.user_data.pop('pending_payment_amount', None)
+        context.user_data.pop('current_order_id', None)
+        
+        await query.message.edit_text(
+            "⚠️ پرداخت لغو شد.\n\n"
+            "می‌توانید از منوی سفارشات، پرداخت را انجام دهید."
+        )
+        await query.message.reply_text(
+            "به منوی اصلی بازگشتید.",
+            reply_markup=get_user_menu_keyboard(context)
+        )
+        return ConversationHandler.END
+    
+    return AWAITING_RECEIPT
 
 
 # Create conversation handler
@@ -328,6 +482,10 @@ product_conversation = ConversationHandler(
         ],
         CONFIRMING: [
             CallbackQueryHandler(handle_order_confirmation),
+        ],
+        AWAITING_RECEIPT: [
+            MessageHandler(filters.PHOTO, handle_receipt_upload),
+            CallbackQueryHandler(handle_receipt_cancel),
         ],
     },
     fallbacks=[

@@ -5,8 +5,8 @@ from telegram import Update
 from telegram.ext import ContextTypes, MessageHandler, filters
 
 from utils.api_client import api_client
+from utils.helpers import get_user_menu_keyboard
 from keyboards.orders import get_status_text
-from keyboards.main_menu import get_main_menu_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ async def handle_tracking_input(update: Update, context: ContextTypes.DEFAULT_TY
     if not user:
         await update.message.reply_text(
             "خطا در دریافت اطلاعات کاربر.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
         return
     
@@ -47,7 +47,7 @@ async def handle_tracking_input(update: Update, context: ContextTypes.DEFAULT_TY
     if not result or not result.get('items'):
         await update.message.reply_text(
             "سفارشی یافت نشد.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
         return
     
@@ -62,7 +62,7 @@ async def handle_tracking_input(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text(
             "سفارش با این مشخصات یافت نشد.\n"
             "لطفاً شماره سفارش صحیح را وارد کنید.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
         return
     
@@ -78,6 +78,6 @@ async def handle_tracking_input(update: Update, context: ContextTypes.DEFAULT_TY
         f"وضعیت: {status_text}\n"
         f"تاریخ ثبت: {found_order.get('created_at', '')[:10]}"
         f"{tracking_info}",
-        reply_markup=get_main_menu_keyboard()
+        reply_markup=get_user_menu_keyboard(context)
     )
 

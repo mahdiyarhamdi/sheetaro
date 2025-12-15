@@ -20,7 +20,7 @@ def get_pending_payments_keyboard(payments: list) -> InlineKeyboardMarkup:
     
     for payment in payments:
         payment_id = str(payment.get('id', ''))[:8]
-        amount = int(payment.get('amount', 0))
+        amount = int(float(payment.get('amount', 0)))
         customer_name = payment.get('customer_name', 'ناشناس')
         
         button_text = f"#{payment_id} - {amount:,} تومان - {customer_name}"

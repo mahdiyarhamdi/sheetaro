@@ -12,6 +12,7 @@ from telegram.ext import (
 
 from utils.api_client import api_client
 from utils.notifications import notify_admin_new_receipt
+from utils.helpers import get_user_menu_keyboard
 from keyboards.orders import (
     get_orders_menu_keyboard,
     get_orders_list_keyboard,
@@ -20,7 +21,6 @@ from keyboards.orders import (
     get_cancel_confirm_keyboard,
     get_payment_card_keyboard,
 )
-from keyboards.main_menu import get_main_menu_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ async def handle_orders_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if text == "🔙 بازگشت به منو":
         await update.message.reply_text(
             "به منوی اصلی بازگشتید.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
         return ConversationHandler.END
     
@@ -53,7 +53,7 @@ async def handle_orders_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not user:
         await update.message.reply_text(
             "خطا در دریافت اطلاعات کاربر.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
         return ConversationHandler.END
     
@@ -135,7 +135,7 @@ async def handle_orders_list_callback(update: Update, context: ContextTypes.DEFA
             f"وضعیت: {status_text}\n"
             f"پلن طراحی: {design_plan_names.get(order.get('design_plan', ''), '-')}\n"
             f"تعداد: {order.get('quantity', 0):,}\n"
-            f"مبلغ کل: {int(order.get('total_price', 0)):,} تومان\n"
+            f"مبلغ کل: {int(float(order.get('total_price', 0))):,} تومان\n"
             f"تاریخ ثبت: {order.get('created_at', '')[:10]}\n"
         )
         
@@ -195,7 +195,7 @@ async def handle_order_detail_callback(update: Update, context: ContextTypes.DEF
         
         await query.message.reply_text(
             "به منوی اصلی بازگشتید.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
         return ConversationHandler.END
     
@@ -230,14 +230,13 @@ async def handle_order_detail_callback(update: Update, context: ContextTypes.DEF
             context.user_data['pending_payment_id'] = result.get('payment_id')
             context.user_data['pending_payment_amount'] = result.get('amount')
             
-            # Format card number for display
+            # Get card number (without formatting for easy copy)
             card_number = card_info.get('card_number', '')
-            formatted_card = f"{card_number[:4]}-{card_number[4:8]}-{card_number[8:12]}-{card_number[12:]}"
             
             await query.message.edit_text(
                 f"💳 پرداخت کارت به کارت\n\n"
-                f"مبلغ: {int(result.get('amount', 0)):,} تومان\n\n"
-                f"شماره کارت:\n`{formatted_card}`\n\n"
+                f"مبلغ: {int(float(result.get('amount', 0))):,} تومان\n\n"
+                f"شماره کارت (برای کپی کلیک کنید):\n`{card_number}`\n\n"
                 f"به نام: {card_info.get('card_holder', '-')}\n\n"
                 f"⚠️ پس از واریز، عکس رسید را ارسال کنید.",
                 parse_mode='Markdown',
@@ -275,7 +274,7 @@ async def handle_receipt_upload(update: Update, context: ContextTypes.DEFAULT_TY
     if not payment_id:
         await update.message.reply_text(
             "❌ خطا: اطلاعات پرداخت یافت نشد. لطفاً دوباره تلاش کنید.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
         return ConversationHandler.END
     
@@ -284,7 +283,7 @@ async def handle_receipt_upload(update: Update, context: ContextTypes.DEFAULT_TY
     if not user:
         await update.message.reply_text(
             "❌ خطا در دریافت اطلاعات کاربر.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
         return ConversationHandler.END
     
@@ -299,9 +298,12 @@ async def handle_receipt_upload(update: Update, context: ContextTypes.DEFAULT_TY
     
     # Get file info and construct full URL
     file = await photo.get_file()
-    # Construct full Telegram file URL (file.file_path is relative)
-    bot_token = context.bot.token
-    receipt_image_url = f"https://api.telegram.org/file/bot{bot_token}/{file.file_path}"
+    # file.file_path might already be a full URL or just a path
+    if file.file_path.startswith("https://"):
+        receipt_image_url = file.file_path
+    else:
+        bot_token = context.bot.token
+        receipt_image_url = f"https://api.telegram.org/file/bot{bot_token}/{file.file_path}"
     
     # Upload receipt
     result = await api_client.upload_receipt(
@@ -322,7 +324,7 @@ async def handle_receipt_upload(update: Update, context: ContextTypes.DEFAULT_TY
             "✅ رسید شما با موفقیت ثبت شد.\n\n"
             "⏳ در انتظار تأیید مدیر هستید.\n"
             "پس از بررسی رسید، نتیجه به شما اطلاع داده می‌شود.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
         
         # Notify admin about new receipt
@@ -357,7 +359,7 @@ async def handle_receipt_cancel(update: Update, context: ContextTypes.DEFAULT_TY
         await query.message.edit_text("پرداخت لغو شد.")
         await query.message.reply_text(
             "به منوی اصلی بازگشتید.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
         return ConversationHandler.END
     

@@ -4,7 +4,7 @@ from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 
 from utils.api_client import api_client
-from keyboards.main_menu import get_main_menu_keyboard
+from utils.helpers import get_user_menu_keyboard
 
 
 async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -78,5 +78,5 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
         # Unknown command - show help
         await update.message.reply_text(
             "لطفاً از منوی زیر استفاده کنید:",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_user_menu_keyboard(context)
         )
