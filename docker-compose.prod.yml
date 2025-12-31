@@ -1,0 +1,79 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sheetaro_backend
+    ports:
+      - "3005:3001"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://sheetaro:sheetaro_pass_2024@db:5432/sheetaro
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=sheetaro_secret_key_2024_production
+      - CORS_ORIGINS=*
+      - DEBUG=false
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - sheetaro_network
+    restart: unless-stopped
+
+  bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    container_name: sheetaro_bot
+    environment:
+      - TELEGRAM_BOT_TOKEN=8435713363:AAELcFpinLOeCcQvsmM6GsvzM9T8JHgGy_0
+      - BACKEND_URL=http://backend:3001
+    depends_on:
+      - backend
+    networks:
+      - sheetaro_network
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    container_name: sheetaro_db
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=sheetaro
+      - POSTGRES_PASSWORD=sheetaro_pass_2024
+      - POSTGRES_DB=sheetaro
+    volumes:
+      - sheetaro_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sheetaro -d sheetaro"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sheetaro_network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: sheetaro_redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - sheetaro_redis_data:/data
+    networks:
+      - sheetaro_network
+    restart: unless-stopped
+
+networks:
+  sheetaro_network:
+    name: sheetaro_network
+    driver: bridge
+
+volumes:
+  sheetaro_postgres_data:
+    name: sheetaro_postgres_data
+  sheetaro_redis_data:
+    name: sheetaro_redis_data
+
