@@ -38,8 +38,13 @@ docker-compose up bot
 - 🔧 Admin Panel (only for admins)
 - 💰 Review pending payments
 - ✅ Approve/reject receipts
-- 👥 Manage admins (promote/demote)
+- 📂 Manage product catalog (categories, attributes, plans)
+- 📝 Manage questionnaires for semi-private plans
+- 🖼️ Manage templates for public plans
 - ⚙️ Configure payment card
+
+### Become Admin
+- Send `/makeadmin` command to instantly become an admin
 
 ## Project Structure
 
@@ -47,14 +52,16 @@ docker-compose up bot
 bot/
 ├── bot.py                  # Main entry point
 ├── handlers/               # Message & callback handlers
-│   ├── start.py           # /start command
+│   ├── start.py           # /start and /makeadmin commands
 │   ├── menu.py            # Main menu handler
-│   ├── products.py        # Product selection & ordering
+│   ├── products.py        # Product selection & ordering (legacy)
+│   ├── dynamic_order.py   # Dynamic product ordering (new)
 │   ├── orders.py          # Order management
 │   ├── profile.py         # Profile editing
 │   ├── tracking.py        # Order tracking
 │   ├── admin_payments.py  # Admin payment review
-│   └── admin_settings.py  # Admin settings (payment card)
+│   ├── admin_settings.py  # Admin settings (payment card)
+│   └── admin_catalog.py   # Admin catalog management (categories, plans, templates)
 ├── keyboards/              # Telegram keyboards
 │   ├── main_menu.py       # Main menu (dynamic for admin/customer)
 │   ├── products.py        # Product selection keyboards
@@ -97,7 +104,12 @@ bot/
 ```
 🔧 پنل مدیریت
 ├── 💰 پرداخت‌های در انتظار
-├── 👥 مدیریت ادمین‌ها
+├── 📂 مدیریت کاتالوگ
+│   ├── دسته‌بندی‌ها
+│   ├── ویژگی‌ها و گزینه‌ها
+│   ├── پلن‌های طراحی
+│   ├── پرسشنامه‌ها (نیمه‌خصوصی)
+│   └── قالب‌ها (عمومی)
 └── ⚙️ تنظیمات سیستم
 ```
 
@@ -129,15 +141,24 @@ Communicates with backend API using `httpx`:
 
 | Handler | States | Purpose |
 |---------|--------|---------|
-| `product_conversation` | 7 states | Product selection & ordering |
+| `product_conversation` | 7 states | Product selection & ordering (legacy) |
+| `dynamic_order_conversation` | 8 states | Dynamic product ordering (new) |
 | `orders_conversation` | 5 states | Order management & payment |
 | `profile_conversation` | 2 states | Profile editing |
 | `admin_payments_conversation` | 6 states | Payment review |
 | `admin_settings_conversation` | 3 states | System settings |
+| `catalog_conversation` | 10+ states | Catalog management (categories, attributes, plans, questions, templates) |
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `/start` | Register and show main menu |
+| `/makeadmin` | Become an admin (self-promotion) |
 
 ---
 
-**Last Updated**: 2025-12-14
+**Last Updated**: 2025-12-31
 
 
 

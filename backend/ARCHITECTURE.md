@@ -6,11 +6,14 @@ Sheetaro backend is a FastAPI application for a **multi-role print ordering syst
 
 ### Key Features
 - Multi-role system: Customer, Designer, Validator, Print Shop, Admin
-- Design plans: Public (free), Semi-private, Private
+- **Dynamic product catalog**: Admin can define categories, attributes, design plans
+- Design plans: Public (free templates), Semi-private (questionnaire), Private
+- Template system with auto logo placement for public plans
+- Questionnaire system for semi-private plan design requirements
 - File validation and processing
 - Order workflow management
 - Card-to-card payment with receipt upload and admin approval
-- Admin management (promote/demote users via Telegram bot)
+- Admin management (promote via `/makeadmin` command)
 - Invoice generation (post-purchase)
 
 ---
@@ -104,7 +107,12 @@ backend/
 │   │   └── routers/            # API route handlers
 │   │       ├── health.py       # Health check
 │   │       ├── users.py        # User CRUD + Admin management
-│   │       ├── products.py     # Product catalog
+│   │       ├── products.py     # Product catalog (legacy)
+│   │       ├── categories.py   # Dynamic catalog management
+│   │       ├── attributes.py   # Category attributes
+│   │       ├── design_plans.py # Design plans per category
+│   │       ├── questions.py    # Questionnaire for semi-private
+│   │       ├── templates.py    # Templates for public plans
 │   │       ├── orders.py       # Order management
 │   │       ├── payments.py     # Payment (card-to-card + approval)
 │   │       ├── validation.py   # Design validation
@@ -119,7 +127,14 @@ backend/
 │   ├── models/
 │   │   ├── enums.py            # All enums (UserRole, OrderStatus, etc.)
 │   │   ├── user.py             # User model
-│   │   ├── product.py          # Product model
+│   │   ├── product.py          # Product model (legacy)
+│   │   ├── category.py         # Category model (dynamic catalog)
+│   │   ├── attribute.py        # CategoryAttribute and AttributeOption
+│   │   ├── design_plan.py      # CategoryDesignPlan model
+│   │   ├── design_question.py  # DesignQuestion and QuestionOption
+│   │   ├── design_template.py  # DesignTemplate with placeholder info
+│   │   ├── order_step.py       # OrderStepTemplate model
+│   │   ├── question_answer.py  # QuestionAnswer model
 │   │   ├── order.py            # Order model
 │   │   ├── payment.py          # Payment model (with card-to-card fields)
 │   │   ├── validation.py       # ValidationReport model
@@ -402,12 +417,56 @@ PENDING ──(upload receipt)──> AWAITING_APPROVAL ──(approve)──> S
 
 ## Admin Management
 
-Admins can manage other admins through the Telegram bot:
+Any user can become admin by sending `/makeadmin` command in Telegram bot.
+
+Once admin, they can:
 - View list of all admins
-- Promote any registered user to admin
-- Demote any admin (except the last one)
+- Demote other admins (except the last one)
+- Manage dynamic product catalog (categories, attributes, plans)
+- Manage design templates and questionnaires
+- Approve/reject payments
 
 Admin telegram IDs are stored in database (not environment variables).
+
+---
+
+## Dynamic Product Catalog
+
+The system supports dynamic product catalog management:
+
+### Entity Relationships
+
+```
+Category (e.g., "Label")
+    │
+    ├── CategoryAttribute (e.g., "Size", "Material")
+    │   └── AttributeOption (e.g., "5x5cm", "10x10cm")
+    │
+    ├── CategoryDesignPlan (e.g., "Public", "Semi-Private")
+    │   ├── [if has_questionnaire] DesignQuestion
+    │   │   └── QuestionOption
+    │   └── [if has_templates] DesignTemplate
+    │       └── Placeholder info (x, y, w, h)
+    │
+    └── OrderStepTemplate (e.g., "validation", "payment")
+```
+
+### Design Plans
+
+| Plan Type | has_questionnaire | has_templates | Description |
+|-----------|-------------------|---------------|-------------|
+| PUBLIC | ❌ | ✅ | Free, user selects from ready templates and uploads logo |
+| SEMI_PRIVATE | ✅ | ❌ | Custom design, user fills questionnaire |
+| PRIVATE | ❌ | ❌ | Full custom, direct communication |
+| OWN_DESIGN | ❌ | ❌ | User uploads own ready design |
+
+### Template Logo Placement
+
+For public plan templates:
+1. Admin uploads template with placeholder position (x, y, width, height)
+2. Placeholder is visualized as red square in preview
+3. When user selects template and uploads logo, system auto-places logo at placeholder position
+4. Uses Pillow (PIL) for image processing
 
 ---
 
@@ -538,6 +597,6 @@ docker-compose up --build
 
 ---
 
-**Last Updated**: 2025-12-14
+**Last Updated**: 2025-12-31
 
 

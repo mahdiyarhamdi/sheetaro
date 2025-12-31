@@ -40,6 +40,7 @@ docker-compose up --build
 - `POST /users` - Create/update user
 - `GET /users/{telegram_id}` - Get user by telegram ID
 - `PATCH /users/{telegram_id}` - Update user
+- `POST /users/{user_id}/promote` - Self-promote to admin (via `/makeadmin` command)
 - `GET /users/admins/list` - Get all admin users (Admin)
 - `GET /users/admins/telegram-ids` - Get admin telegram IDs (for notifications)
 - `POST /users/admins/promote` - Promote user to admin (Admin)
@@ -106,6 +107,51 @@ docker-compose up --build
 - `GET /settings/payment-card` - Get payment card info
 - `PUT /settings/payment-card` - Set payment card info (Admin)
 - `PATCH /settings/payment-card` - Update payment card info (Admin)
+
+### Categories (`/api/v1/categories`) - Dynamic Product Catalog
+- `GET /categories` - List all categories
+- `GET /categories/{id}` - Get category by ID
+- `GET /categories/{id}/details` - Get category with attributes, plans, steps
+- `POST /categories` - Create category (Admin)
+- `PATCH /categories/{id}` - Update category (Admin)
+- `DELETE /categories/{id}` - Delete category (Admin)
+
+#### Attributes (`/api/v1/categories/{id}/attributes`)
+- `GET /categories/{id}/attributes` - List category attributes
+- `POST /categories/{id}/attributes` - Create attribute (Admin)
+- `PATCH /attributes/{id}` - Update attribute (Admin)
+- `DELETE /attributes/{id}` - Delete attribute (Admin)
+- `POST /attributes/{id}/options` - Add option to attribute (Admin)
+- `PATCH /options/{id}` - Update option (Admin)
+- `DELETE /options/{id}` - Delete option (Admin)
+
+#### Design Plans (`/api/v1/categories/{id}/plans`)
+- `GET /categories/{id}/plans` - List design plans
+- `POST /categories/{id}/plans` - Create plan (Admin)
+- `GET /plans/{id}` - Get plan by ID
+- `GET /plans/{id}/details` - Get plan with questions and templates
+- `PATCH /plans/{id}` - Update plan (Admin)
+- `DELETE /plans/{id}` - Delete plan (Admin)
+
+#### Questions (`/api/v1/plans/{id}/questions`) - For Semi-Private Plans
+- `GET /plans/{id}/questions` - List questionnaire questions
+- `POST /plans/{id}/questions` - Create question with options (Admin)
+- `PATCH /questions/{id}` - Update question (Admin)
+- `DELETE /questions/{id}` - Delete question (Admin)
+- `POST /questions/{id}/options` - Add option to question (Admin)
+
+#### Templates (`/api/v1/plans/{id}/templates`) - For Public Plans
+- `GET /plans/{id}/templates` - List design templates
+- `POST /plans/{id}/templates` - Create template with placeholder info (Admin)
+- `PATCH /templates/{id}` - Update template (Admin)
+- `DELETE /templates/{id}` - Delete template (Admin)
+- `POST /templates/{id}/apply-logo` - Apply user logo to template placeholder
+
+#### Step Templates (`/api/v1/categories/{id}/steps`)
+- `GET /categories/{id}/steps` - List order step templates
+- `POST /categories/{id}/steps` - Create step template (Admin)
+- `PATCH /step-templates/{id}` - Update step template (Admin)
+- `DELETE /step-templates/{id}` - Delete step template (Admin)
 
 ## Testing
 
@@ -193,5 +239,5 @@ PENDING → AWAITING_APPROVAL → SUCCESS
 
 ---
 
-**Last Updated**: 2025-12-14
+**Last Updated**: 2025-12-31
 

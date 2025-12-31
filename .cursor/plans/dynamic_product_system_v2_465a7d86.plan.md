@@ -71,7 +71,7 @@ todos:
       - image-service
   - id: test-deploy
     content: تست و دیپلوی روی سرور
-    status: in_progress
+    status: completed
     dependencies:
       - admin-templates
       - dynamic-order

@@ -13,7 +13,7 @@ from telegram.ext import (
     filters,
 )
 
-from handlers.start import start_command, handle_admin_secret, ADMIN_SECRET_CODE
+from handlers.start import start_command, make_admin_command
 from handlers.menu import handle_menu_selection
 from handlers.profile import profile_conversation, show_profile_edit_options
 from handlers.products import product_conversation
@@ -47,6 +47,7 @@ def main() -> None:
     
     # Add handlers
     application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("makeadmin", make_admin_command))
     
     # Product ordering conversation (legacy)
     application.add_handler(product_conversation)
@@ -68,9 +69,6 @@ def main() -> None:
     
     # Tracking handler
     application.add_handler(MessageHandler(filters.Regex("^(🔍 رهگیری سفارش|رهگیری)$"), track_order))
-    
-    # Secret admin code handler
-    application.add_handler(MessageHandler(filters.Regex(f"^{ADMIN_SECRET_CODE}$"), handle_admin_secret))
     
     # Menu handler (should be last to avoid conflicts)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu_selection))

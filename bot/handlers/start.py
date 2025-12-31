@@ -8,9 +8,6 @@ from utils.api_client import api_client
 
 logger = logging.getLogger(__name__)
 
-# Secret code for becoming admin
-ADMIN_SECRET_CODE = "make_me_admin_secret"
-
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start command."""
@@ -78,12 +75,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     )
 
 
-async def handle_admin_secret(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle secret admin code message."""
+async def make_admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /makeadmin command - promotes user to admin."""
     user = update.effective_user
-    text = update.message.text
     
-    if not user or text != ADMIN_SECRET_CODE:
+    if not user:
         return
     
     # Get user from API
@@ -95,7 +91,11 @@ async def handle_admin_secret(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     # Check if already admin
     if user_info.get('role') == 'ADMIN':
-        await update.message.reply_text("✅ شما قبلاً ادمین هستید.")
+        await update.message.reply_text(
+            "✅ شما قبلاً ادمین هستید.\n\n"
+            "برای دسترسی به پنل مدیریت، /start بزنید.",
+            reply_markup=get_main_menu_keyboard(is_admin=True)
+        )
         return
     
     # Promote to admin
@@ -106,7 +106,7 @@ async def handle_admin_secret(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data['is_admin'] = True
         context.user_data['user_role'] = 'ADMIN'
         
-        logger.info(f"User promoted to admin via secret code: telegram_id={user.id}")
+        logger.info(f"User promoted to admin via /makeadmin: telegram_id={user.id}")
         
         await update.message.reply_text(
             "🎉 تبریک! شما اکنون ادمین هستید.\n\n"
