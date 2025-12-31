@@ -128,6 +128,33 @@ async def get_admin_telegram_ids(
 
 
 @router.post(
+    "/users/{user_id}/promote",
+    response_model=UserOut,
+    summary="Self-promote to admin (secret code)",
+    description="Promote a user to admin using secret code mechanism",
+)
+async def self_promote_to_admin(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> UserOut:
+    """Self-promote user to admin (via secret code)."""
+    service = UserService(db)
+    try:
+        result = await service.self_promote_to_admin(user_id)
+        if not result:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to promote user"
+            )
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post(
     "/users/admins/promote",
     response_model=UserOut,
     summary="Promote user to admin (admin)",

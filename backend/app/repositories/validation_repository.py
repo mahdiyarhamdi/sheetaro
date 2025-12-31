@@ -87,3 +87,5 @@ class ValidationRepository:
         )
         return result.scalar_one_or_none()
 
+
+

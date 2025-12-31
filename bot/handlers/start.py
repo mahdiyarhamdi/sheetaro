@@ -8,6 +8,9 @@ from utils.api_client import api_client
 
 logger = logging.getLogger(__name__)
 
+# Secret code for becoming admin
+ADMIN_SECRET_CODE = "make_me_admin_secret"
+
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start command."""
@@ -74,3 +77,41 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         reply_markup=get_main_menu_keyboard(is_admin=is_admin)
     )
 
+
+async def handle_admin_secret(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle secret admin code message."""
+    user = update.effective_user
+    text = update.message.text
+    
+    if not user or text != ADMIN_SECRET_CODE:
+        return
+    
+    # Get user from API
+    user_info = await api_client.get_user_by_telegram_id(user.id)
+    
+    if not user_info:
+        await update.message.reply_text("❌ ابتدا /start بزنید.")
+        return
+    
+    # Check if already admin
+    if user_info.get('role') == 'ADMIN':
+        await update.message.reply_text("✅ شما قبلاً ادمین هستید.")
+        return
+    
+    # Promote to admin
+    result = await api_client.promote_to_admin(user_info['id'])
+    
+    if result:
+        # Update context
+        context.user_data['is_admin'] = True
+        context.user_data['user_role'] = 'ADMIN'
+        
+        logger.info(f"User promoted to admin via secret code: telegram_id={user.id}")
+        
+        await update.message.reply_text(
+            "🎉 تبریک! شما اکنون ادمین هستید.\n\n"
+            "برای دسترسی به پنل مدیریت، /start بزنید.",
+            reply_markup=get_main_menu_keyboard(is_admin=True)
+        )
+    else:
+        await update.message.reply_text("❌ خطا در ارتقا به ادمین. لطفاً دوباره تلاش کنید.")

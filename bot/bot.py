@@ -13,7 +13,7 @@ from telegram.ext import (
     filters,
 )
 
-from handlers.start import start_command
+from handlers.start import start_command, handle_admin_secret, ADMIN_SECRET_CODE
 from handlers.menu import handle_menu_selection
 from handlers.profile import profile_conversation, show_profile_edit_options
 from handlers.products import product_conversation
@@ -21,6 +21,8 @@ from handlers.orders import orders_conversation
 from handlers.tracking import track_order, handle_tracking_input
 from handlers.admin_payments import admin_payments_conversation
 from handlers.admin_settings import admin_settings_conversation
+from handlers.admin_catalog import catalog_conversation
+from handlers.dynamic_order import dynamic_order_conversation
 
 # Load environment variables
 load_dotenv()
@@ -46,8 +48,11 @@ def main() -> None:
     # Add handlers
     application.add_handler(CommandHandler("start", start_command))
     
-    # Product ordering conversation
+    # Product ordering conversation (legacy)
     application.add_handler(product_conversation)
+    
+    # Dynamic product ordering conversation (new)
+    application.add_handler(dynamic_order_conversation)
     
     # Orders management conversation
     application.add_handler(orders_conversation)
@@ -55,6 +60,7 @@ def main() -> None:
     # Admin handlers
     application.add_handler(admin_payments_conversation)
     application.add_handler(admin_settings_conversation)
+    application.add_handler(catalog_conversation)
     
     # Profile editing handlers
     application.add_handler(CallbackQueryHandler(show_profile_edit_options, pattern="^show_profile_edit$"))
@@ -62,6 +68,9 @@ def main() -> None:
     
     # Tracking handler
     application.add_handler(MessageHandler(filters.Regex("^(🔍 رهگیری سفارش|رهگیری)$"), track_order))
+    
+    # Secret admin code handler
+    application.add_handler(MessageHandler(filters.Regex(f"^{ADMIN_SECRET_CODE}$"), handle_admin_secret))
     
     # Menu handler (should be last to avoid conflicts)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu_selection))

@@ -10,6 +10,16 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import settings
 from app.api.routers import health, users, products, orders, payments, validation, invoices, subscriptions, files
 from app.api.routers import settings as settings_router
+from app.api.routers.categories import (
+    router as categories_router,
+    attributes_router,
+    options_router,
+    plans_router,
+    questions_router,
+    question_options_router,
+    templates_router,
+    step_templates_router,
+)
 from app.utils.logger import logger
 
 
@@ -140,6 +150,16 @@ app.include_router(
     prefix="/api/v1",
     tags=["Settings"]
 )
+
+# Dynamic categories routers
+app.include_router(categories_router, tags=["Categories"])
+app.include_router(attributes_router, tags=["Attributes"])
+app.include_router(options_router, tags=["Options"])
+app.include_router(plans_router, tags=["Plans"])
+app.include_router(questions_router, tags=["Questions"])
+app.include_router(question_options_router, tags=["Question Options"])
+app.include_router(templates_router, tags=["Templates"])
+app.include_router(step_templates_router, tags=["Step Templates"])
 
 
 if __name__ == "__main__":

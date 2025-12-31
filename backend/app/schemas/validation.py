@@ -58,3 +58,5 @@ class FixRequestCreate(BaseModel):
     validation_report_id: UUID = Field(..., description="Validation report ID")
     accept_cost: bool = Field(..., description="Accept the fix cost")
 
+
+

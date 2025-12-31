@@ -62,3 +62,5 @@ class Invoice(Base):
     def __repr__(self) -> str:
         return f"<Invoice(id={self.id}, invoice_number={self.invoice_number})>"
 
+
+

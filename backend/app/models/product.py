@@ -31,3 +31,5 @@ class Product(Base):
     def __repr__(self) -> str:
         return f"<Product(id={self.id}, name={self.name}, type={self.type})>"
 
+
+

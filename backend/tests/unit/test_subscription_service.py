@@ -119,3 +119,5 @@ class TestSubscriptionService:
         assert result["price"] == Decimal("250000")
         assert result["duration_days"] == 30
 
+
+

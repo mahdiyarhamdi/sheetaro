@@ -85,3 +85,5 @@ class InvoiceSearchParams(BaseModel):
     amount_min: Optional[Decimal] = Field(None, description="Minimum amount")
     amount_max: Optional[Decimal] = Field(None, description="Maximum amount")
 
+
+

@@ -74,6 +74,14 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
             "پاسخگویی: شنبه تا چهارشنبه، ۹ صبح تا ۶ عصر"
         )
     
+    elif text == "📂 مدیریت کاتالوگ":
+        # Check if user is admin
+        if context.user_data.get('is_admin'):
+            from handlers.admin_catalog import show_catalog_menu
+            await show_catalog_menu(update, context)
+        else:
+            await update.message.reply_text("❌ شما به این بخش دسترسی ندارید.")
+    
     else:
         # Unknown command - show help
         await update.message.reply_text(

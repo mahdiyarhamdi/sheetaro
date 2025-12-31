@@ -140,3 +140,5 @@ class TestOrderService:
         with pytest.raises(ValueError, match="Cannot cancel order"):
             await service.cancel_order(created.id, test_user.id)
 
+
+

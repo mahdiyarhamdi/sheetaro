@@ -58,3 +58,5 @@ class ProductListResponse(BaseModel):
     page: int
     page_size: int
 
+
+

@@ -102,3 +102,5 @@ class PrintShopOrderOut(OrderOut):
     customer_phone: Optional[str] = None
     customer_city: Optional[str] = None
 
+
+

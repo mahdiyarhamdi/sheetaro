@@ -185,3 +185,5 @@ class InvoiceService:
         
         return pdf_url
 
+
+

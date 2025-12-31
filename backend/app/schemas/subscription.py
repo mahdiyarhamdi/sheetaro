@@ -44,3 +44,5 @@ class SubscriptionStatus(BaseModel):
     current_subscription: Optional[SubscriptionOut] = None
     days_remaining: Optional[int] = None
 
+
+

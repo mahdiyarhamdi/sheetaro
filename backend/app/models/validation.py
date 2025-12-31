@@ -46,3 +46,5 @@ class ValidationReport(Base):
     def __repr__(self) -> str:
         return f"<ValidationReport(id={self.id}, order_id={self.order_id}, passed={self.passed})>"
 
+
+

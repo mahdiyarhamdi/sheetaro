@@ -102,6 +102,28 @@ class UserService:
             return UserOut.model_validate(updated_user)
         return None
     
+    async def self_promote_to_admin(self, user_id: UUID) -> Optional[UserOut]:
+        """Self-promote a user to admin role (via secret code mechanism)."""
+        # Get user
+        user = await self.repository.get_by_id(user_id)
+        if not user:
+            raise ValueError("User not found")
+        
+        if user.role == UserRole.ADMIN:
+            raise ValueError("User is already an admin")
+        
+        # Promote to admin
+        updated_user = await self.repository.update_role(user.id, UserRole.ADMIN)
+        
+        if updated_user:
+            log_event(
+                event_type="user.self_promoted_to_admin",
+                telegram_id=user.telegram_id,
+                user_id=str(user.id),
+            )
+            return UserOut.model_validate(updated_user)
+        return None
+    
     async def demote_from_admin(
         self, 
         target_telegram_id: int, 

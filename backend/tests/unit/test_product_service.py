@@ -129,3 +129,5 @@ class TestProductService:
         result2 = await service.get_products(page=2, page_size=10)
         assert len(result2.items) == 5
 
+
+

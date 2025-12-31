@@ -29,3 +29,5 @@ async def get_user_menu_keyboard_async(
             context.user_data['user_id'] = user.get('id')
     return get_main_menu_keyboard(is_admin=context.user_data.get('is_admin', False))
 
+
+
