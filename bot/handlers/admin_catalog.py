@@ -222,26 +222,31 @@ def get_plan_type_keyboard():
 
 async def show_catalog_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Show catalog management menu."""
+    user = update.effective_user
     query = update.callback_query
+    
+    # Check admin permission via API
+    user_data = await api_client.get_user(user.id)
+    if not user_data or user_data.get('role') != 'ADMIN':
+        if query:
+            await query.answer("شما به این بخش دسترسی ندارید", show_alert=True)
+        else:
+            await update.message.reply_text("❌ شما به این بخش دسترسی ندارید.")
+        return ConversationHandler.END
+    
+    menu_text = (
+        "🛠️ مدیریت کاتالوگ محصولات\n\n"
+        "از این بخش می‌توانید:\n"
+        "• دسته‌بندی‌های محصول را مدیریت کنید\n"
+        "• ویژگی‌ها و گزینه‌ها را تعریف کنید\n"
+        "• پلن‌های طراحی، پرسشنامه و قالب‌ها را مدیریت کنید"
+    )
+    
     if query:
         await query.answer()
-        await query.message.edit_text(
-            "🛠️ مدیریت کاتالوگ محصولات\n\n"
-            "از این بخش می‌توانید:\n"
-            "• دسته‌بندی‌های محصول را مدیریت کنید\n"
-            "• ویژگی‌ها و گزینه‌ها را تعریف کنید\n"
-            "• پلن‌های طراحی، پرسشنامه و قالب‌ها را مدیریت کنید",
-            reply_markup=get_catalog_menu_keyboard()
-        )
+        await query.message.edit_text(menu_text, reply_markup=get_catalog_menu_keyboard())
     else:
-        await update.message.reply_text(
-            "🛠️ مدیریت کاتالوگ محصولات\n\n"
-            "از این بخش می‌توانید:\n"
-            "• دسته‌بندی‌های محصول را مدیریت کنید\n"
-            "• ویژگی‌ها و گزینه‌ها را تعریف کنید\n"
-            "• پلن‌های طراحی، پرسشنامه و قالب‌ها را مدیریت کنید",
-            reply_markup=get_catalog_menu_keyboard()
-        )
+        await update.message.reply_text(menu_text, reply_markup=get_catalog_menu_keyboard())
     return CATALOG_MENU
 
 
@@ -1064,7 +1069,8 @@ async def cancel_create(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 catalog_conversation = ConversationHandler(
     entry_points=[
-        MessageHandler(filters.Regex("^📂 مدیریت کاتالوگ$"), show_catalog_menu),
+        # Text message entry handled by menu.py which checks admin role via API
+        MessageHandler(filters.Regex("مدیریت کاتالوگ"), show_catalog_menu),
         CallbackQueryHandler(show_catalog_menu, pattern="^catalog_menu$"),
         CallbackQueryHandler(show_catalog_menu, pattern="^admin_catalog$"),
     ],
