@@ -1064,6 +1064,7 @@ async def cancel_create(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 catalog_conversation = ConversationHandler(
     entry_points=[
+        MessageHandler(filters.Regex("^📂 مدیریت کاتالوگ$"), show_catalog_menu),
         CallbackQueryHandler(show_catalog_menu, pattern="^catalog_menu$"),
         CallbackQueryHandler(show_catalog_menu, pattern="^admin_catalog$"),
     ],
