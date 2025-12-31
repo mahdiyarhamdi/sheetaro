@@ -53,6 +53,19 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'subscriptionplan') THEN
         CREATE TYPE subscriptionplan AS ENUM ('ADVANCED_SEARCH');
     END IF;
+    -- Dynamic category system enums
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'attributeinputtype') THEN
+        CREATE TYPE attributeinputtype AS ENUM ('TEXT', 'SELECT', 'NUMBER', 'BOOLEAN');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'designplantype') THEN
+        CREATE TYPE designplantype AS ENUM ('PUBLIC', 'SEMI_PRIVATE', 'PRIVATE', 'OWN_DESIGN');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'questioninputtype') THEN
+        CREATE TYPE questioninputtype AS ENUM ('TEXT', 'SINGLE_CHOICE', 'MULTI_CHOICE', 'IMAGE_UPLOAD', 'COLOR_PICKER');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'steptype') THEN
+        CREATE TYPE steptype AS ENUM ('VALIDATION', 'PAYMENT', 'DESIGN', 'PRINT', 'SHIPPING');
+    END IF;
 END
 $$;
 """

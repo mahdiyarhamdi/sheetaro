@@ -261,8 +261,8 @@ class TestQuestionsAPI:
     async def test_create_question(self, client: AsyncClient, plan_id: str):
         """Test creating a question for a plan."""
         data = {
-            "text_fa": "رنگ اصلی طرح چه باشد؟",
-            "input_type": "SELECT",
+            "question_fa": "رنگ اصلی طرح چه باشد؟",
+            "input_type": "SINGLE_CHOICE",
             "is_required": True,
             "sort_order": 1,
             "options": [
@@ -274,7 +274,7 @@ class TestQuestionsAPI:
         response = await client.post(f"/api/v1/plans/{plan_id}/questions", json=data)
         assert response.status_code == 201
         result = response.json()
-        assert result["text_fa"] == "رنگ اصلی طرح چه باشد؟"
+        assert result["question_fa"] == "رنگ اصلی طرح چه باشد؟"
 
 
 class TestTemplatesAPI:
@@ -315,8 +315,8 @@ class TestTemplatesAPI:
             "file_url": "https://example.com/template.png",
             "placeholder_x": 100,
             "placeholder_y": 100,
-            "placeholder_w": 200,
-            "placeholder_h": 200,
+            "placeholder_width": 200,
+            "placeholder_height": 200,
             "sort_order": 1,
         }
         response = await client.post(f"/api/v1/plans/{plan_id}/templates", json=data)
