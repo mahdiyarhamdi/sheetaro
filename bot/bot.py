@@ -1,4 +1,4 @@
-"""Main bot entry point."""
+"""Main bot entry point - Using unified flow manager."""
 
 import os
 import logging
@@ -14,15 +14,30 @@ from telegram.ext import (
 )
 
 from handlers.start import start_command, make_admin_command
-from handlers.menu import handle_menu_selection
-from handlers.profile import profile_conversation, show_profile_edit_options
-from handlers.products import product_conversation
-from handlers.orders import orders_conversation
-from handlers.tracking import track_order, handle_tracking_input
-from handlers.admin_payments import admin_payments_conversation
-from handlers.admin_settings import admin_settings_conversation
-from handlers.admin_catalog import catalog_conversation
-from handlers.dynamic_order import dynamic_order_conversation
+from handlers.text_router import route_text_input
+
+# Import catalog flow handlers
+from handlers.flows.catalog_flow import (
+    show_catalog_menu,
+    show_category_list,
+    show_category_actions,
+    start_category_create,
+    delete_category,
+    show_attribute_list,
+    show_attribute_actions,
+    start_attribute_create,
+    handle_attribute_type,
+    show_option_list,
+    start_option_create,
+    show_plan_list,
+    show_plan_actions,
+    start_plan_create,
+    handle_plan_type,
+    show_question_list,
+    show_template_list,
+    handle_cancel,
+    handle_back_to_admin,
+)
 
 # Load environment variables
 load_dotenv()
@@ -45,36 +60,49 @@ def main() -> None:
     # Create application
     application = Application.builder().token(token).build()
     
-    # Add handlers
+    # ============== Command Handlers ==============
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("makeadmin", make_admin_command))
     
-    # Product ordering conversation (legacy)
-    application.add_handler(product_conversation)
+    # ============== Catalog Callback Handlers ==============
+    # Menu navigation
+    application.add_handler(CallbackQueryHandler(show_catalog_menu, pattern="^catalog_menu$"))
+    application.add_handler(CallbackQueryHandler(show_category_list, pattern="^catalog_categories$"))
+    application.add_handler(CallbackQueryHandler(handle_back_to_admin, pattern="^back_to_admin$"))
+    application.add_handler(CallbackQueryHandler(handle_cancel, pattern="^cancel$"))
     
-    # Dynamic product ordering conversation (new)
-    application.add_handler(dynamic_order_conversation)
+    # Category handlers
+    application.add_handler(CallbackQueryHandler(start_category_create, pattern="^cat_create$"))
+    application.add_handler(CallbackQueryHandler(delete_category, pattern="^cat_delete_"))
+    application.add_handler(CallbackQueryHandler(show_attribute_list, pattern="^cat_attrs_"))
+    application.add_handler(CallbackQueryHandler(show_plan_list, pattern="^cat_plans_"))
+    application.add_handler(CallbackQueryHandler(show_category_actions, pattern="^cat_[a-f0-9-]+$"))
     
-    # Orders management conversation
-    application.add_handler(orders_conversation)
+    # Attribute handlers
+    application.add_handler(CallbackQueryHandler(start_attribute_create, pattern="^attr_create_"))
+    application.add_handler(CallbackQueryHandler(show_option_list, pattern="^attr_opts_"))
+    application.add_handler(CallbackQueryHandler(show_attribute_actions, pattern="^attr_[a-f0-9-]+$"))
+    application.add_handler(CallbackQueryHandler(handle_attribute_type, pattern="^input_"))
     
-    # Admin handlers
-    application.add_handler(admin_payments_conversation)
-    application.add_handler(admin_settings_conversation)
-    application.add_handler(catalog_conversation)
+    # Option handlers
+    application.add_handler(CallbackQueryHandler(start_option_create, pattern="^opt_create_"))
     
-    # Profile editing handlers
-    application.add_handler(CallbackQueryHandler(show_profile_edit_options, pattern="^show_profile_edit$"))
-    application.add_handler(profile_conversation)
+    # Plan handlers
+    application.add_handler(CallbackQueryHandler(start_plan_create, pattern="^plan_create_"))
+    application.add_handler(CallbackQueryHandler(show_question_list, pattern="^plan_questions_"))
+    application.add_handler(CallbackQueryHandler(show_template_list, pattern="^plan_templates_"))
+    application.add_handler(CallbackQueryHandler(handle_plan_type, pattern="^ptype_"))
+    application.add_handler(CallbackQueryHandler(show_plan_actions, pattern="^plan_[a-f0-9-]+$"))
     
-    # Tracking handler
-    application.add_handler(MessageHandler(filters.Regex("^(🔍 رهگیری سفارش|رهگیری)$"), track_order))
+    # ============== Central Text Router ==============
+    # This handles all text messages and routes them to the appropriate flow
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, route_text_input))
     
-    # Menu handler (should be last to avoid conflicts)
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu_selection))
+    # ============== Photo Handler for Receipts ==============
+    # TODO: Add photo handler for receipt uploads
     
     # Start bot
-    logger.info("Starting bot...")
+    logger.info("Starting bot with unified flow manager...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 

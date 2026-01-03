@@ -597,6 +597,77 @@ docker-compose up --build
 
 ---
 
-**Last Updated**: 2025-12-31
+## Bot Architecture
+
+The Telegram bot uses a **unified flow management** architecture:
+
+### Flow Manager Pattern
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Telegram Bot Architecture                         │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  User Input (Text/Callback)                                         │
+│         │                                                            │
+│         ▼                                                            │
+│  ┌─────────────────────────────────┐                                │
+│  │      text_router.py             │                                │
+│  │  Routes based on flow_step      │                                │
+│  └──────────┬──────────────────────┘                                │
+│             │                                                        │
+│  ┌──────────┴──────────────────────────────────────────┐            │
+│  │                  flow_manager.py                      │            │
+│  │  ┌─────────────────────────────────────────────┐     │            │
+│  │  │ context.user_data = {                        │     │            │
+│  │  │   'current_flow': 'catalog',                 │     │            │
+│  │  │   'flow_step': 'category_create_name',       │     │            │
+│  │  │   'flow_data': {...}                         │     │            │
+│  │  │ }                                            │     │            │
+│  │  └─────────────────────────────────────────────┘     │            │
+│  └───────────────────────────────────────────────────────┘            │
+│             │                                                        │
+│      ┌──────┴──────┬──────────┬──────────┬──────────┐               │
+│      ▼             ▼          ▼          ▼          ▼               │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐        │
+│  │ catalog │ │  admin  │ │ orders  │ │products │ │ profile │        │
+│  │  flow   │ │  flow   │ │  flow   │ │  flow   │ │  flow   │        │
+│  └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘        │
+│       │           │           │           │           │              │
+│       └───────────┴───────────┴─────┬─────┴───────────┘              │
+│                                     │                                │
+│                                     ▼                                │
+│                          ┌───────────────────┐                       │
+│                          │   API Client      │                       │
+│                          │   (httpx)         │                       │
+│                          └─────────┬─────────┘                       │
+│                                    │                                 │
+└────────────────────────────────────┼─────────────────────────────────┘
+                                     │ HTTP
+                                     ▼
+                            FastAPI Backend
+```
+
+### Key Components
+
+| Component | Purpose |
+|-----------|---------|
+| `flow_manager.py` | Centralized state management (current_flow, flow_step, flow_data) |
+| `text_router.py` | Routes text input to appropriate flow handler |
+| `flows/*.py` | Flow-specific text handlers |
+| `admin_catalog.py` | Catalog management with callbacks |
+| `api_client.py` | HTTP client for backend API |
+
+### Advantages Over ConversationHandler
+
+1. **No Handler Conflicts**: Single entry point for all text
+2. **Explicit State**: Clear flow/step/data structure
+3. **Easy Debugging**: Log current_flow and flow_step
+4. **Flexible Navigation**: Can switch flows without ending handlers
+5. **Callback Independence**: Callbacks work regardless of flow state
+
+---
+
+**Last Updated**: 2026-01-03
 
 

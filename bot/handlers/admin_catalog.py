@@ -15,6 +15,52 @@ from keyboards.main_menu import get_main_menu_keyboard
 
 logger = logging.getLogger(__name__)
 
+
+async def handle_catalog_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle text input for catalog operations (standalone handler)."""
+    state = context.user_data.get('catalog_input_state')
+    
+    if not state:
+        return  # Not in catalog input mode
+    
+    # Category states
+    if state == 'category_name':
+        await category_create_name(update, context)
+    elif state == 'category_slug':
+        await category_create_slug(update, context)
+    elif state == 'category_icon':
+        await category_create_icon(update, context)
+    elif state == 'category_price':
+        await category_create_price(update, context)
+    # Attribute states
+    elif state == 'attribute_name':
+        await attribute_create_name(update, context)
+    elif state == 'attribute_slug':
+        await attribute_create_slug(update, context)
+    # Option states
+    elif state == 'option_label':
+        await option_create_label(update, context)
+    elif state == 'option_value':
+        await option_create_value(update, context)
+    elif state == 'option_price':
+        await option_create_price(update, context)
+    # Plan states
+    elif state == 'plan_name':
+        await plan_create_name(update, context)
+    elif state == 'plan_slug':
+        await plan_create_slug(update, context)
+    elif state == 'plan_price':
+        await plan_create_price(update, context)
+    # Question states
+    elif state == 'question_text':
+        await question_create_text(update, context)
+    # Template states
+    elif state == 'template_name':
+        await template_create_name(update, context)
+    else:
+        # Clear invalid state
+        context.user_data.pop('catalog_input_state', None)
+
 # Conversation states
 (
     CATALOG_MENU,
@@ -23,6 +69,7 @@ logger = logging.getLogger(__name__)
     CATEGORY_CREATE_NAME,
     CATEGORY_CREATE_SLUG,
     CATEGORY_CREATE_ICON,
+    CATEGORY_CREATE_PRICE,
     ATTRIBUTE_LIST,
     ATTRIBUTE_ACTIONS,
     ATTRIBUTE_CREATE_NAME,
@@ -49,7 +96,7 @@ logger = logging.getLogger(__name__)
     TEMPLATE_CREATE_NAME,
     TEMPLATE_UPLOAD_PREVIEW,
     TEMPLATE_SET_PLACEHOLDER,
-) = range(32)
+) = range(33)
 
 
 def get_catalog_menu_keyboard():
@@ -311,13 +358,14 @@ async def start_category_create(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
     
     context.user_data['creating_category'] = {}
+    context.user_data['catalog_input_state'] = 'category_name'
     
     await query.message.edit_text(
-        "➕ ایجاد دسته‌بندی جدید\n\n"
-        "لطفاً نام فارسی دسته‌بندی را وارد کنید:\n"
+        "ایجاد دسته بندی جدید\n\n"
+        "لطفا نام فارسی دسته بندی را وارد کنید:\n"
         "(مثال: لیبل، فاکتور، کارت ویزیت)",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
+            [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
         ])
     )
     return CATEGORY_CREATE_NAME
@@ -327,13 +375,14 @@ async def category_create_name(update: Update, context: ContextTypes.DEFAULT_TYP
     """Handle category name input."""
     name = update.message.text.strip()
     context.user_data['creating_category']['name_fa'] = name
+    context.user_data['catalog_input_state'] = 'category_slug'
     
     await update.message.reply_text(
-        f"✅ نام: {name}\n\n"
+        f"نام: {name}\n\n"
         "حالا شناسه انگلیسی (slug) را وارد کنید:\n"
         "(فقط حروف کوچک انگلیسی و خط تیره، مثال: label)",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
+            [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
         ])
     )
     return CATEGORY_CREATE_SLUG
@@ -345,47 +394,74 @@ async def category_create_slug(update: Update, context: ContextTypes.DEFAULT_TYP
     # Simple validation
     if not slug.replace('-', '').replace('_', '').isalnum():
         await update.message.reply_text(
-            "❌ شناسه نامعتبر است. فقط از حروف انگلیسی، اعداد و خط تیره استفاده کنید.",
+            "شناسه نامعتبر است. فقط از حروف انگلیسی، اعداد و خط تیره استفاده کنید.",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
+                [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
             ])
         )
         return CATEGORY_CREATE_SLUG
     
     context.user_data['creating_category']['slug'] = slug
+    context.user_data['catalog_input_state'] = 'category_icon'
     
     await update.message.reply_text(
-        f"✅ شناسه: {slug}\n\n"
-        "حالا یک ایموجی برای آیکون دسته وارد کنید:\n"
-        "(مثال: 🏷️ برای لیبل، 📄 برای فاکتور)",
+        f"شناسه: {slug}\n\n"
+        "حالا یک نماد برای آیکون دسته وارد کنید:\n"
+        "(یک حرف یا کلمه کوتاه)",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
+            [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
         ])
     )
     return CATEGORY_CREATE_ICON
 
 
 async def category_create_icon(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Handle category icon input and create category."""
+    """Handle category icon input."""
     icon = update.message.text.strip()[:10]  # Limit icon length
+    context.user_data['creating_category']['icon'] = icon
+    context.user_data['catalog_input_state'] = 'category_price'
+    
+    await update.message.reply_text(
+        f"نماد: {icon}\n\n"
+        "حالا قیمت پایه را به تومان وارد کنید:\n"
+        "(برای رایگان، 0 وارد کنید)",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
+        ])
+    )
+    return CATEGORY_CREATE_PRICE
+
+
+async def category_create_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle category base price input and create category."""
+    try:
+        price = int(update.message.text.strip().replace(',', ''))
+    except ValueError:
+        await update.message.reply_text("لطفا یک عدد معتبر وارد کنید.")
+        return CATEGORY_CREATE_PRICE
+    
     data = context.user_data.get('creating_category', {})
-    data['icon'] = icon
+    data['base_price'] = price
     
     admin_id = context.user_data.get('user_id', '')
+    
+    # Clear input state
+    context.user_data.pop('catalog_input_state', None)
     
     result = await api_client.create_category(admin_id, data)
     
     if result:
         await update.message.reply_text(
-            f"✅ دسته‌بندی «{data['name_fa']}» با موفقیت ایجاد شد!\n\n"
-            "اکنون می‌توانید ویژگی‌ها و پلن‌های طراحی را برای این دسته تعریف کنید.",
+            f"دسته بندی {data['name_fa']} با موفقیت ایجاد شد!\n"
+            f"قیمت پایه: {price:,} تومان\n\n"
+            "اکنون می توانید ویژگی ها و پلن های طراحی را برای این دسته تعریف کنید.",
             reply_markup=get_category_actions_keyboard(result['id'])
         )
         context.user_data['current_category_id'] = result['id']
         return CATEGORY_ACTIONS
     else:
         await update.message.reply_text(
-            "❌ خطا در ایجاد دسته‌بندی. لطفاً دوباره تلاش کنید.",
+            "خطا در ایجاد دسته بندی. لطفا دوباره تلاش کنید.",
             reply_markup=get_category_list_keyboard([])
         )
         return CATEGORY_LIST
@@ -464,13 +540,14 @@ async def start_attribute_create(update: Update, context: ContextTypes.DEFAULT_T
     category_id = query.data.replace("attr_create_", "")
     context.user_data['current_category_id'] = category_id
     context.user_data['creating_attribute'] = {'category_id': category_id}
+    context.user_data['catalog_input_state'] = 'attribute_name'
     
     await query.message.edit_text(
-        "➕ ایجاد ویژگی جدید\n\n"
-        "لطفاً نام فارسی ویژگی را وارد کنید:\n"
+        "ایجاد ویژگی جدید\n\n"
+        "لطفا نام فارسی ویژگی را وارد کنید:\n"
         "(مثال: سایز، جنس، تعداد)",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
+            [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
         ])
     )
     return ATTRIBUTE_CREATE_NAME
@@ -480,13 +557,14 @@ async def attribute_create_name(update: Update, context: ContextTypes.DEFAULT_TY
     """Handle attribute name input."""
     name = update.message.text.strip()
     context.user_data['creating_attribute']['name_fa'] = name
+    context.user_data['catalog_input_state'] = 'attribute_slug'
     
     await update.message.reply_text(
-        f"✅ نام: {name}\n\n"
+        f"نام: {name}\n\n"
         "حالا شناسه انگلیسی (slug) را وارد کنید:\n"
         "(فقط حروف کوچک انگلیسی، مثال: size)",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
+            [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
         ])
     )
     return ATTRIBUTE_CREATE_SLUG
@@ -496,9 +574,11 @@ async def attribute_create_slug(update: Update, context: ContextTypes.DEFAULT_TY
     """Handle attribute slug input."""
     slug = update.message.text.strip().lower()
     context.user_data['creating_attribute']['slug'] = slug
+    # Clear text input state - next step is callback
+    context.user_data.pop('catalog_input_state', None)
     
     await update.message.reply_text(
-        f"✅ شناسه: {slug}\n\n"
+        f"شناسه: {slug}\n\n"
         "نوع ورودی را انتخاب کنید:",
         reply_markup=get_input_type_keyboard()
     )
@@ -568,13 +648,14 @@ async def start_option_create(update: Update, context: ContextTypes.DEFAULT_TYPE
     attribute_id = query.data.replace("opt_create_", "")
     context.user_data['current_attribute_id'] = attribute_id
     context.user_data['creating_option'] = {'attribute_id': attribute_id}
+    context.user_data['catalog_input_state'] = 'option_label'
     
     await query.message.edit_text(
-        "➕ ایجاد گزینه جدید\n\n"
-        "لطفاً نام فارسی گزینه را وارد کنید:\n"
-        "(مثال: 5x5 سانتی‌متر، کاغذی)",
+        "ایجاد گزینه جدید\n\n"
+        "لطفا نام فارسی گزینه را وارد کنید:\n"
+        "(مثال: 5x5 سانتی متر، کاغذی)",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
+            [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
         ])
     )
     return OPTION_CREATE_LABEL
@@ -584,13 +665,14 @@ async def option_create_label(update: Update, context: ContextTypes.DEFAULT_TYPE
     """Handle option label input."""
     label = update.message.text.strip()
     context.user_data['creating_option']['label_fa'] = label
+    context.user_data['catalog_input_state'] = 'option_value'
     
     await update.message.reply_text(
-        f"✅ نام: {label}\n\n"
+        f"نام: {label}\n\n"
         "حالا مقدار انگلیسی (value) را وارد کنید:\n"
-        "(این مقدار در سیستم ذخیره می‌شود، مثال: 5x5)",
+        "(این مقدار در سیستم ذخیره می شود، مثال: 5x5)",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
+            [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
         ])
     )
     return OPTION_CREATE_VALUE
@@ -600,13 +682,14 @@ async def option_create_value(update: Update, context: ContextTypes.DEFAULT_TYPE
     """Handle option value input."""
     value = update.message.text.strip()
     context.user_data['creating_option']['value'] = value
+    context.user_data['catalog_input_state'] = 'option_price'
     
     await update.message.reply_text(
-        f"✅ مقدار: {value}\n\n"
+        f"مقدار: {value}\n\n"
         "مبلغ اضافه قیمت را به تومان وارد کنید:\n"
         "(برای رایگان، 0 وارد کنید)",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
+            [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
         ])
     )
     return OPTION_CREATE_PRICE
@@ -617,8 +700,11 @@ async def option_create_price(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         price = int(update.message.text.strip().replace(',', ''))
     except ValueError:
-        await update.message.reply_text("❌ لطفاً یک عدد معتبر وارد کنید.")
+        await update.message.reply_text("لطفا یک عدد معتبر وارد کنید.")
         return OPTION_CREATE_PRICE
+    
+    # Clear input state
+    context.user_data.pop('catalog_input_state', None)
     
     data = context.user_data.get('creating_option', {})
     data['price_modifier'] = price
@@ -714,13 +800,14 @@ async def start_plan_create(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     category_id = query.data.replace("plan_create_", "")
     context.user_data['current_category_id'] = category_id
     context.user_data['creating_plan'] = {'category_id': category_id}
+    context.user_data['catalog_input_state'] = 'plan_name'
     
     await query.message.edit_text(
-        "➕ ایجاد پلن طراحی جدید\n\n"
-        "لطفاً نام فارسی پلن را وارد کنید:\n"
-        "(مثال: عمومی، نیمه‌خصوصی، خصوصی)",
+        "ایجاد پلن طراحی جدید\n\n"
+        "لطفا نام فارسی پلن را وارد کنید:\n"
+        "(مثال: عمومی، نیمه خصوصی، خصوصی)",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
+            [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
         ])
     )
     return PLAN_CREATE_NAME
@@ -730,13 +817,14 @@ async def plan_create_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     """Handle plan name input."""
     name = update.message.text.strip()
     context.user_data['creating_plan']['name_fa'] = name
+    context.user_data['catalog_input_state'] = 'plan_slug'
     
     await update.message.reply_text(
-        f"✅ نام: {name}\n\n"
+        f"نام: {name}\n\n"
         "حالا شناسه انگلیسی (slug) را وارد کنید:\n"
         "(مثال: public, semi_private, private)",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
+            [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
         ])
     )
     return PLAN_CREATE_SLUG
@@ -746,13 +834,14 @@ async def plan_create_slug(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     """Handle plan slug input."""
     slug = update.message.text.strip().lower()
     context.user_data['creating_plan']['slug'] = slug
+    context.user_data['catalog_input_state'] = 'plan_price'
     
     await update.message.reply_text(
-        f"✅ شناسه: {slug}\n\n"
+        f"شناسه: {slug}\n\n"
         "قیمت طراحی را به تومان وارد کنید:\n"
         "(برای رایگان، 0 وارد کنید)",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
+            [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
         ])
     )
     return PLAN_CREATE_PRICE
@@ -763,13 +852,15 @@ async def plan_create_price(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     try:
         price = int(update.message.text.strip().replace(',', ''))
     except ValueError:
-        await update.message.reply_text("❌ لطفاً یک عدد معتبر وارد کنید.")
+        await update.message.reply_text("لطفا یک عدد معتبر وارد کنید.")
         return PLAN_CREATE_PRICE
     
     context.user_data['creating_plan']['price'] = price
+    # Clear input state - next step is callback
+    context.user_data.pop('catalog_input_state', None)
     
     await update.message.reply_text(
-        f"✅ قیمت: {price:,} تومان\n\n"
+        f"قیمت: {price:,} تومان\n\n"
         "نوع پلن را انتخاب کنید:",
         reply_markup=get_plan_type_keyboard()
     )
@@ -852,16 +943,17 @@ async def start_question_create(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     
-    plan_id = query.data.replace("question_create_", "")
+    plan_id = query.data.replace("q_create_", "")
     context.user_data['current_plan_id'] = plan_id
     context.user_data['creating_question'] = {'plan_id': plan_id}
+    context.user_data['catalog_input_state'] = 'question_text'
     
     await query.message.edit_text(
-        "➕ ایجاد سوال جدید\n\n"
+        "ایجاد سوال جدید\n\n"
         "متن سوال را به فارسی وارد کنید:\n"
-        "(مثال: کسب‌وکار شما چیست؟)",
+        "(مثال: کسب و کار شما چیست؟)",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
+            [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
         ])
     )
     return QUESTION_CREATE_TEXT
@@ -871,9 +963,11 @@ async def question_create_text(update: Update, context: ContextTypes.DEFAULT_TYP
     """Handle question text input."""
     text = update.message.text.strip()
     context.user_data['creating_question']['question_fa'] = text
+    # Clear input state - next step is callback
+    context.user_data.pop('catalog_input_state', None)
     
     await update.message.reply_text(
-        f"✅ سوال: {text}\n\n"
+        f"سوال: {text}\n\n"
         "نوع پاسخ را انتخاب کنید:",
         reply_markup=get_question_type_keyboard()
     )
@@ -935,16 +1029,17 @@ async def start_template_create(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     
-    plan_id = query.data.replace("template_create_", "")
+    plan_id = query.data.replace("tpl_create_", "")
     context.user_data['current_plan_id'] = plan_id
     context.user_data['creating_template'] = {'plan_id': plan_id}
+    context.user_data['catalog_input_state'] = 'template_name'
     
     await query.message.edit_text(
-        "➕ ایجاد قالب جدید\n\n"
-        "لطفاً نام فارسی قالب را وارد کنید:\n"
+        "ایجاد قالب جدید\n\n"
+        "لطفا نام فارسی قالب را وارد کنید:\n"
         "(مثال: قالب مدرن، قالب کلاسیک)",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
+            [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
         ])
     )
     return TEMPLATE_CREATE_NAME
@@ -954,13 +1049,15 @@ async def template_create_name(update: Update, context: ContextTypes.DEFAULT_TYP
     """Handle template name input."""
     name = update.message.text.strip()
     context.user_data['creating_template']['name_fa'] = name
+    # Clear text input state - next step is photo upload
+    context.user_data.pop('catalog_input_state', None)
     
     await update.message.reply_text(
-        f"✅ نام: {name}\n\n"
+        f"نام: {name}\n\n"
         "حالا تصویر قالب را با مربع قرمز (placeholder) ارسال کنید:\n\n"
-        "⚠️ مربع قرمز نشان‌دهنده جایی است که لوگوی کاربر قرار می‌گیرد.",
+        "مربع قرمز نشان دهنده جایی است که لوگوی کاربر قرار می گیرد.",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
+            [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
         ])
     )
     return TEMPLATE_UPLOAD_PREVIEW
@@ -1060,8 +1157,9 @@ async def cancel_create(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     context.user_data.pop('creating_plan', None)
     context.user_data.pop('creating_question', None)
     context.user_data.pop('creating_template', None)
+    context.user_data.pop('catalog_input_state', None)
     
-    await query.message.edit_text("❌ عملیات لغو شد.")
+    await query.message.edit_text("عملیات لغو شد.")
     return await show_catalog_menu(update, context)
 
 
@@ -1069,8 +1167,8 @@ async def cancel_create(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 catalog_conversation = ConversationHandler(
     entry_points=[
-        # Text message entry handled by menu.py which checks admin role via API
-        MessageHandler(filters.Regex("مدیریت کاتالوگ"), show_catalog_menu),
+        # Text entry - exact match for button text
+        MessageHandler(filters.Regex("^مدیریت کاتالوگ$"), show_catalog_menu),
         CallbackQueryHandler(show_catalog_menu, pattern="^catalog_menu$"),
         CallbackQueryHandler(show_catalog_menu, pattern="^admin_catalog$"),
     ],
@@ -1100,6 +1198,10 @@ catalog_conversation = ConversationHandler(
         ],
         CATEGORY_CREATE_ICON: [
             MessageHandler(filters.TEXT & ~filters.COMMAND, category_create_icon),
+            CallbackQueryHandler(cancel_create, pattern="^cancel_create$"),
+        ],
+        CATEGORY_CREATE_PRICE: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, category_create_price),
             CallbackQueryHandler(cancel_create, pattern="^cancel_create$"),
         ],
         ATTRIBUTE_LIST: [

@@ -81,8 +81,10 @@ Sheetaro/
 │   └── Dockerfile
 ├── bot/                 # Telegram Bot
 │   ├── handlers/        # Command & message handlers
+│   │   ├── flows/       # Flow-specific text handlers
+│   │   └── text_router.py # Central text input router
 │   ├── keyboards/       # Keyboard layouts
-│   ├── utils/           # API client & utilities
+│   ├── utils/           # API client, flow_manager & utilities
 │   ├── bot.py           # Bot entry point
 │   └── Dockerfile
 └── docker-compose.yml
@@ -184,6 +186,7 @@ python bot.py
 ### Bot
 - python-telegram-bot 21.x
 - httpx (Async HTTP client)
+- Unified Flow Manager (بدون ConversationHandler)
 
 ### Infrastructure
 - Docker & Docker Compose
@@ -215,7 +218,55 @@ python bot.py
 }
 ```
 
+## معماری ربات
+
+ربات تلگرام از معماری **Unified Flow Management** استفاده می‌کند:
+
+```
+ورودی کاربر
+     │
+     ▼
+┌─────────────────┐
+│   text_router   │ ← مسیریابی بر اساس flow و step
+└────────┬────────┘
+         │
+    ┌────┴────┬────────┬────────┬────────┐
+    ▼         ▼        ▼        ▼        ▼
+ catalog   admin    orders  products  profile
+   flow     flow     flow     flow      flow
+```
+
+### مزایا نسبت به ConversationHandler
+- بدون تداخل Handler ها
+- State شفاف و قابل دیباگ
+- ناوبری آسان بین flowها
+- Callback های مستقل از state
+
+برای جزییات بیشتر: [bot/README.md](bot/README.md)
+
+## تست‌ها
+
+```bash
+# اجرای تست‌های backend
+docker-compose exec backend pytest
+
+# تست‌های واحد
+docker-compose exec backend pytest tests/unit
+
+# تست‌های یکپارچه
+docker-compose exec backend pytest tests/integration
+
+# با coverage
+docker-compose exec backend pytest --cov=app
+```
+
+چک‌لیست تست دستی: [docs/BOT_TEST_CHECKLIST.md](docs/BOT_TEST_CHECKLIST.md)
+
 ## مجوز
 
 این پروژه تحت مجوز MIT منتشر شده است.
+
+---
+
+**Last Updated**: 2026-01-03
 

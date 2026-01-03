@@ -18,6 +18,7 @@ class CategoryBase(BaseModel):
     name_fa: str = Field(..., max_length=100)
     description_fa: Optional[str] = Field(None, max_length=500)
     icon: Optional[str] = Field(None, max_length=10)
+    base_price: int = 0  # Base price in Tomans
     sort_order: int = 0
     is_active: bool = True
 
@@ -33,6 +34,7 @@ class CategoryUpdate(BaseModel):
     name_fa: Optional[str] = Field(None, max_length=100)
     description_fa: Optional[str] = Field(None, max_length=500)
     icon: Optional[str] = Field(None, max_length=10)
+    base_price: Optional[int] = None  # Base price in Tomans
     sort_order: Optional[int] = None
     is_active: Optional[bool] = None
 

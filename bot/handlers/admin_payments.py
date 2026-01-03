@@ -1,7 +1,7 @@
 """Admin payment management handlers for the bot."""
 
 import logging
-from telegram import Update
+from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     ContextTypes,
     ConversationHandler,
@@ -82,6 +82,13 @@ async def handle_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     if "مدیریت مدیران" in text:
         return await show_admin_management(update, context)
+    
+    if "کاتالوگ" in text:
+        # Set catalog mode and show catalog menu directly
+        context.user_data['in_catalog_mode'] = True
+        from handlers.admin_catalog import show_catalog_menu
+        await show_catalog_menu(update, context)
+        return ConversationHandler.END
     
     return ADMIN_MENU
 

@@ -1,6 +1,6 @@
 """Category model for dynamic product categories."""
 
-from sqlalchemy import Column, String, Boolean, DateTime, Integer
+from sqlalchemy import Column, String, Boolean, DateTime, Integer, Numeric
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -19,6 +19,7 @@ class Category(Base):
     name_fa = Column(String(100), nullable=False)  # Persian name
     description_fa = Column(String(500), nullable=True)  # Persian description
     icon = Column(String(10), nullable=True)  # Emoji icon
+    base_price = Column(Numeric(12, 0), default=0, nullable=False)  # Base price in Tomans
     sort_order = Column(Integer, default=0, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
