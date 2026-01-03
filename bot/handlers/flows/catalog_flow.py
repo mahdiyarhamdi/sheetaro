@@ -4,7 +4,7 @@ This module handles all catalog-related operations using the unified flow manage
 """
 
 import logging
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from utils.api_client import api_client
@@ -45,7 +45,9 @@ async def handle_catalog_text(update: Update, context: ContextTypes.DEFAULT_TYPE
         'plan_create_slug': handle_plan_slug,
         'plan_create_price': handle_plan_price,
         'question_create_text': handle_question_text,
+        'question_option_create': handle_question_option_text,
         'template_create_name': handle_template_name,
+        'template_set_placeholder': handle_template_placeholder,
     }
     
     handler = handlers.get(step)
@@ -682,18 +684,167 @@ async def show_question_list(update: Update, context: ContextTypes.DEFAULT_TYPE)
     update_flow_data(context, 'current_plan_id', plan_id)
     set_step(context, 'question_list')
     
-    # TODO: Implement question list keyboard
+    # Get questions from API
+    questions = await api_client.get_questions(plan_id, active_only=False)
+    
+    keyboard = []
+    if questions:
+        for q in questions:
+            text = q.get('question_fa', q.get('text_fa', 'بدون متن'))[:30]
+            input_type = q.get('input_type', '')
+            is_active = q.get('is_active', True)
+            status = "✅" if is_active else "❌"
+            keyboard.append([InlineKeyboardButton(
+                f"{status} {text}...",
+                callback_data=f"question_{q['id']}"
+            )])
+    
+    keyboard.append([InlineKeyboardButton("➕ سوال جدید", callback_data=f"q_create_{plan_id}")])
+    keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data=f"plan_{plan_id}")])
+    
     await query.message.edit_text(
-        "سوالات پرسشنامه:\n\n"
-        "(در حال توسعه...)",
-        reply_markup=get_cancel_keyboard("بازگشت")
+        f"📝 سوالات پرسشنامه\n\n"
+        f"تعداد سوالات: {len(questions) if questions else 0}",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
 async def handle_question_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle question text input."""
-    # TODO: Implement
-    pass
+    text = update.message.text.strip()
+    step = get_step(context)
+    
+    if step == 'question_create_text':
+        update_flow_data(context, 'question_text', text)
+        set_step(context, 'question_create_type')
+        
+        keyboard = [
+            [InlineKeyboardButton("📝 متن کوتاه", callback_data="qtype_TEXT")],
+            [InlineKeyboardButton("📄 متن بلند", callback_data="qtype_TEXTAREA")],
+            [InlineKeyboardButton("🔢 عدد", callback_data="qtype_NUMBER")],
+            [InlineKeyboardButton("🔘 انتخاب تکی", callback_data="qtype_SINGLE_CHOICE")],
+            [InlineKeyboardButton("☑️ انتخاب چندتایی", callback_data="qtype_MULTI_CHOICE")],
+            [InlineKeyboardButton("🎨 انتخاب رنگ", callback_data="qtype_COLOR_PICKER")],
+            [InlineKeyboardButton("📅 تاریخ", callback_data="qtype_DATE_PICKER")],
+            [InlineKeyboardButton("⭐ امتیاز", callback_data="qtype_SCALE")],
+            [InlineKeyboardButton("📷 آپلود تصویر", callback_data="qtype_IMAGE_UPLOAD")],
+            [InlineKeyboardButton("📎 آپلود فایل", callback_data="qtype_FILE_UPLOAD")],
+            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel")],
+        ]
+        
+        await update.message.reply_text(
+            "نوع ورودی سوال را انتخاب کنید:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+
+async def start_question_create(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Start creating a new question."""
+    query = update.callback_query
+    await query.answer()
+    
+    plan_id = query.data.replace("q_create_", "")
+    update_flow_data(context, 'current_plan_id', plan_id)
+    set_step(context, 'question_create_text')
+    
+    await query.message.edit_text(
+        "➕ ایجاد سوال جدید\n\n"
+        "متن سوال را به فارسی وارد کنید:",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel")]
+        ])
+    )
+
+
+async def handle_question_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle question type selection."""
+    query = update.callback_query
+    await query.answer()
+    
+    input_type = query.data.replace("qtype_", "")
+    update_flow_data(context, 'question_type', input_type)
+    
+    plan_id = get_flow_data_item(context, 'current_plan_id', '')
+    question_text = get_flow_data_item(context, 'question_text', '')
+    admin_id = context.user_data.get('user_id', '')
+    
+    # Create question
+    data = {
+        'text_fa': question_text,
+        'input_type': input_type,
+        'is_required': True,
+        'sort_order': 0
+    }
+    
+    result = await api_client.create_question(plan_id, admin_id, data)
+    
+    if result:
+        question_id = result.get('id', '')
+        
+        # If choice type, prompt to add options
+        if input_type in ['SINGLE_CHOICE', 'MULTI_CHOICE']:
+            update_flow_data(context, 'current_question_id', question_id)
+            set_step(context, 'question_option_create')
+            
+            await query.message.edit_text(
+                f"✅ سوال ایجاد شد!\n\n"
+                f"حالا گزینه‌های سوال را اضافه کنید.\n"
+                f"هر گزینه را در یک خط وارد کنید:\n"
+                f"(مثال: قرمز)",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ اتمام", callback_data=f"qopt_done_{question_id}")],
+                    [InlineKeyboardButton("🔙 انصراف", callback_data="cancel")]
+                ])
+            )
+        else:
+            await query.message.edit_text(f"✅ سوال «{question_text[:30]}» با موفقیت ایجاد شد!")
+            # Return to question list
+            query.data = f"plan_questions_{plan_id}"
+            await show_question_list(update, context)
+    else:
+        await query.message.edit_text("❌ خطا در ایجاد سوال.")
+
+
+async def handle_question_option_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle question option text input."""
+    text = update.message.text.strip()
+    question_id = get_flow_data_item(context, 'current_question_id', '')
+    admin_id = context.user_data.get('user_id', '')
+    
+    # Create option
+    data = {
+        'label_fa': text,
+        'value': text.lower().replace(' ', '_'),
+        'sort_order': 0
+    }
+    
+    result = await api_client.create_question_option(question_id, admin_id, data)
+    
+    if result:
+        await update.message.reply_text(
+            f"✅ گزینه «{text}» اضافه شد.\n\n"
+            f"گزینه بعدی را وارد کنید یا «اتمام» را بزنید.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ اتمام", callback_data=f"qopt_done_{question_id}")],
+                [InlineKeyboardButton("🔙 انصراف", callback_data="cancel")]
+            ])
+        )
+    else:
+        await update.message.reply_text("❌ خطا در افزودن گزینه.")
+
+
+async def finish_question_options(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Finish adding options to a question."""
+    query = update.callback_query
+    await query.answer()
+    
+    plan_id = get_flow_data_item(context, 'current_plan_id', '')
+    
+    await query.message.edit_text("✅ سوال با موفقیت ایجاد شد!")
+    
+    # Return to question list
+    query.data = f"plan_questions_{plan_id}"
+    await show_question_list(update, context)
 
 
 # ============== Template Handlers ==============
@@ -707,18 +858,168 @@ async def show_template_list(update: Update, context: ContextTypes.DEFAULT_TYPE)
     update_flow_data(context, 'current_plan_id', plan_id)
     set_step(context, 'template_list')
     
-    # TODO: Implement template list keyboard
+    # Get templates from API
+    templates = await api_client.get_templates(plan_id, active_only=False)
+    
+    keyboard = []
+    if templates:
+        for t in templates:
+            name = t.get('name_fa', 'بدون نام')
+            is_active = t.get('is_active', True)
+            status = "✅" if is_active else "❌"
+            keyboard.append([InlineKeyboardButton(
+                f"{status} 🖼️ {name}",
+                callback_data=f"template_{t['id']}"
+            )])
+    
+    keyboard.append([InlineKeyboardButton("➕ قالب جدید", callback_data=f"tpl_create_{plan_id}")])
+    keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data=f"plan_{plan_id}")])
+    
     await query.message.edit_text(
-        "قالب های طراحی:\n\n"
-        "(در حال توسعه...)",
-        reply_markup=get_cancel_keyboard("بازگشت")
+        f"🖼️ قالب‌های طراحی\n\n"
+        f"تعداد قالب‌ها: {len(templates) if templates else 0}",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
 async def handle_template_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle template name input."""
-    # TODO: Implement
-    pass
+    text = update.message.text.strip()
+    step = get_step(context)
+    
+    if step == 'template_create_name':
+        update_flow_data(context, 'template_name', text)
+        set_step(context, 'template_upload_image')
+        
+        await update.message.reply_text(
+            "📤 تصویر قالب را ارسال کنید:\n\n"
+            "این تصویر به عنوان پس‌زمینه استفاده می‌شود.\n"
+            "محل لوگو در مرحله بعد مشخص می‌شود.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 انصراف", callback_data="cancel")]
+            ])
+        )
+
+
+async def start_template_create(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Start creating a new template."""
+    query = update.callback_query
+    await query.answer()
+    
+    plan_id = query.data.replace("tpl_create_", "")
+    update_flow_data(context, 'current_plan_id', plan_id)
+    set_step(context, 'template_create_name')
+    
+    await query.message.edit_text(
+        "➕ ایجاد قالب جدید\n\n"
+        "نام قالب را به فارسی وارد کنید:",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel")]
+        ])
+    )
+
+
+async def handle_template_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle template image upload."""
+    if not update.message.photo:
+        await update.message.reply_text(
+            "❌ لطفا یک تصویر ارسال کنید.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 انصراف", callback_data="cancel")]
+            ])
+        )
+        return
+    
+    # Get photo file URL
+    photo = update.message.photo[-1]
+    file = await context.bot.get_file(photo.file_id)
+    
+    if file.file_path.startswith("https://"):
+        image_url = file.file_path
+    else:
+        bot_token = context.bot.token
+        image_url = f"https://api.telegram.org/file/bot{bot_token}/{file.file_path}"
+    
+    update_flow_data(context, 'template_image_url', image_url)
+    update_flow_data(context, 'template_image_width', photo.width)
+    update_flow_data(context, 'template_image_height', photo.height)
+    
+    set_step(context, 'template_set_placeholder')
+    
+    await update.message.reply_text(
+        f"✅ تصویر دریافت شد!\n\n"
+        f"📐 ابعاد: {photo.width}x{photo.height}\n\n"
+        f"محل قرارگیری لوگو را مشخص کنید:\n"
+        f"فرمت: x,y,width,height\n\n"
+        f"مثال: 100,100,200,200\n"
+        f"(یعنی از نقطه 100,100 با ابعاد 200x200)",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel")]
+        ])
+    )
+
+
+async def handle_template_placeholder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle template placeholder coordinates input."""
+    text = update.message.text.strip()
+    
+    try:
+        parts = [int(p.strip()) for p in text.split(',')]
+        if len(parts) != 4:
+            raise ValueError("Need 4 values")
+        x, y, w, h = parts
+    except (ValueError, IndexError):
+        await update.message.reply_text(
+            "❌ فرمت نادرست. لطفاً 4 عدد با کاما جدا شده وارد کنید:\n"
+            "x,y,width,height\n"
+            "(مثال: 100,50,200,200)",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 انصراف", callback_data="cancel")]
+            ])
+        )
+        return
+    
+    # Get stored data
+    plan_id = get_flow_data_item(context, 'current_plan_id', '')
+    name = get_flow_data_item(context, 'template_name', '')
+    image_url = get_flow_data_item(context, 'template_image_url', '')
+    image_width = get_flow_data_item(context, 'template_image_width', 0)
+    image_height = get_flow_data_item(context, 'template_image_height', 0)
+    admin_id = context.user_data.get('user_id', '')
+    
+    # Create template
+    data = {
+        'name_fa': name,
+        'image_url': image_url,
+        'image_width': image_width,
+        'image_height': image_height,
+        'placeholder_x': x,
+        'placeholder_y': y,
+        'placeholder_width': w,
+        'placeholder_height': h,
+        'is_active': True
+    }
+    
+    result = await api_client.create_template(plan_id, admin_id, data)
+    
+    if result:
+        await update.message.reply_text(
+            f"✅ قالب «{name}» با موفقیت ایجاد شد!\n\n"
+            f"📍 محل لوگو: ({x}, {y}) - {w}x{h}"
+        )
+        # Clear flow data and return to template list
+        clear_flow_data(context)
+        
+        # Create a fake query to return to list
+        class FakeQuery:
+            message = update.message
+            data = f"plan_templates_{plan_id}"
+            async def answer(self): pass
+        
+        fake_update = type('Update', (), {'callback_query': FakeQuery()})()
+        await show_template_list(fake_update, context)
+    else:
+        await update.message.reply_text("❌ خطا در ایجاد قالب.")
 
 
 # ============== Cancel/Back Handlers ==============

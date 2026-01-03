@@ -35,9 +35,15 @@ from handlers.flows.catalog_flow import (
     handle_plan_type,
     show_question_list,
     show_template_list,
+    start_question_create,
+    handle_question_type,
+    finish_question_options,
+    start_template_create,
+    handle_template_image,
     handle_cancel,
     handle_back_to_admin,
 )
+from utils.flow_manager import get_step, FLOW_CATALOG, get_flow
 
 # Import customer flow handlers
 from handlers.customer_questionnaire import (
@@ -106,6 +112,14 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_plan_type, pattern="^ptype_"))
     application.add_handler(CallbackQueryHandler(show_plan_actions, pattern="^plan_[a-f0-9-]+$"))
     
+    # Question handlers (admin)
+    application.add_handler(CallbackQueryHandler(start_question_create, pattern="^q_create_"))
+    application.add_handler(CallbackQueryHandler(handle_question_type, pattern="^qtype_"))
+    application.add_handler(CallbackQueryHandler(finish_question_options, pattern="^qopt_done_"))
+    
+    # Template handlers (admin)
+    application.add_handler(CallbackQueryHandler(start_template_create, pattern="^tpl_create_"))
+    
     # ============== Customer Questionnaire Handlers ==============
     # Questionnaire navigation
     application.add_handler(CallbackQueryHandler(handle_question_callback, pattern="^q_"))
@@ -128,6 +142,14 @@ def main() -> None:
     # ============== Photo Handler ==============
     async def handle_photo(update: Update, context):
         """Route photo uploads to appropriate handler."""
+        # Check if in catalog flow for template image upload
+        current_flow = get_flow(context)
+        current_step = get_step(context)
+        
+        if current_flow == FLOW_CATALOG and current_step == 'template_upload_image':
+            await handle_template_image(update, context)
+            return
+        
         # Try questionnaire first
         if await handle_question_photo_input(update, context):
             return
