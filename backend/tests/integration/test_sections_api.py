@@ -30,13 +30,17 @@ class TestSectionsAPI:
     @pytest_asyncio.fixture
     async def test_category(self, client: AsyncClient, admin_user):
         """Create a test category."""
+        import uuid
+        unique_slug = f"test-label-{uuid.uuid4().hex[:8]}"
         response = await client.post(
             "/api/v1/categories",
             json={
+                "slug": unique_slug,
                 "name_fa": "لیبل تستی",
                 "name_en": "Test Label",
                 "description_fa": "توضیحات تست",
                 "base_price": 10000,
+                "sort_order": 1,
             },
             headers={"X-Telegram-ID": str(admin_user.telegram_id)},
         )
@@ -46,15 +50,19 @@ class TestSectionsAPI:
     @pytest_asyncio.fixture
     async def test_plan(self, client: AsyncClient, test_category, admin_user):
         """Create a test design plan."""
+        import uuid
+        unique_slug = f"semi-private-{uuid.uuid4().hex[:8]}"
         response = await client.post(
             f"/api/v1/categories/{test_category['id']}/plans",
             json={
+                "slug": unique_slug,
                 "name_fa": "پلن نیمه‌خصوصی",
                 "name_en": "Semi-Private",
                 "plan_type": "SEMI_PRIVATE",
                 "has_questionnaire": True,
                 "has_templates": False,
                 "price": 50000,
+                "sort_order": 1,
             },
             headers={"X-Telegram-ID": str(admin_user.telegram_id)},
         )
