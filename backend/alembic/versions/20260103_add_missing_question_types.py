@@ -9,7 +9,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = '20260103_question_types'
-down_revision = '20260103_enhanced_questionnaire_templates'
+down_revision = '20260103_enhanced_qt'
 branch_labels = None
 depends_on = None
 
