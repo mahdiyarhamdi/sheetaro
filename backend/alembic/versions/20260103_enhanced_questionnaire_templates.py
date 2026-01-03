@@ -1,7 +1,7 @@
 """Enhanced questionnaire and template models.
 
 Revision ID: 20260103_enhanced_qt
-Revises: 20260103_add_category_base_price
+Revises: 20260103_base_price
 Create Date: 2026-01-03
 
 This migration adds:
@@ -19,7 +19,7 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 # revision identifiers
 revision = '20260103_enhanced_qt'
-down_revision = '20260103_add_category_base_price'
+down_revision = '20260103_base_price'
 branch_labels = None
 depends_on = None
 
