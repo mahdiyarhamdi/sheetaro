@@ -9,8 +9,8 @@ from app.services.category_service import CategoryService
 from app.repositories.category_repository import CategoryRepository
 from app.schemas.category import (
     QuestionCreate, QuestionUpdate, QuestionOptionCreate,
-    SectionCreate, SectionUpdate, SectionReorderRequest,
-    QuestionReorderRequest, ValidationRules,
+    SectionCreate, SectionUpdate, SectionReorderRequest, SectionReorderItem,
+    QuestionReorderRequest, QuestionReorderItem, ValidationRules,
 )
 from app.models.design_question import QuestionInputType
 
@@ -158,7 +158,7 @@ class TestQuestionCreation:
 
     @pytest.mark.asyncio
     async def test_create_question_multi_choice(self, mock_repository, sample_plan_id):
-        """Test creating a MULTI_CHOICE question with min/max selections."""
+        """Test creating a MULTI_CHOICE question with min/max value for selections."""
         options = [
             QuestionOptionCreate(value="size_5x5", label_fa="۵×۵ سانتی", sort_order=1),
             QuestionOptionCreate(value="size_10x5", label_fa="۱۰×۵ سانتی", sort_order=2),
@@ -170,8 +170,8 @@ class TestQuestionCreation:
             input_type=QuestionInputType.MULTI_CHOICE,
             is_required=True,
             validation_rules=ValidationRules(
-                min_selections=1,
-                max_selections=5,
+                min_value=1,  # Min selections
+                max_value=5,  # Max selections
             ),
             options=options,
             sort_order=4,
@@ -191,8 +191,8 @@ class TestQuestionCreation:
         result = await mock_repository.create_question(sample_plan_id, question_data)
         
         assert result.input_type == QuestionInputType.MULTI_CHOICE
-        assert result.validation_rules['min_selections'] == 1
-        assert result.validation_rules['max_selections'] == 5
+        assert result.validation_rules['min_value'] == 1
+        assert result.validation_rules['max_value'] == 5
 
     @pytest.mark.asyncio
     async def test_create_question_color_picker(self, mock_repository, sample_plan_id):
@@ -336,9 +336,9 @@ class TestQuestionOptionCreation:
         mock_option.label_fa = option_data.label_fa
         mock_option.price_modifier = option_data.price_modifier
         
-        mock_repository.add_question_option.return_value = mock_option
+        mock_repository.create_question_option.return_value = mock_option
         
-        result = await mock_repository.add_question_option(sample_question_id, option_data)
+        result = await mock_repository.create_question_option(sample_question_id, option_data)
         
         assert result.value == "gold"
         assert result.label_fa == "طلایی"
@@ -360,9 +360,9 @@ class TestQuestionOptionCreation:
         mock_option.label_fa = option_data.label_fa
         mock_option.image_url = option_data.image_url
         
-        mock_repository.add_question_option.return_value = mock_option
+        mock_repository.create_question_option.return_value = mock_option
         
-        result = await mock_repository.add_question_option(sample_question_id, option_data)
+        result = await mock_repository.create_question_option(sample_question_id, option_data)
         
         assert result.image_url == "https://example.com/textures/wood.jpg"
 
@@ -409,9 +409,11 @@ class TestSectionCreation:
     async def test_section_ordering(self, mock_repository, sample_plan_id):
         """Test reordering sections."""
         section_ids = [uuid4(), uuid4(), uuid4()]
-        reorder_request = SectionReorderRequest(
-            section_ids=[str(sid) for sid in section_ids]
-        )
+        reorder_items = [
+            SectionReorderItem(id=sid, sort_order=i + 1)
+            for i, sid in enumerate(section_ids)
+        ]
+        reorder_request = SectionReorderRequest(items=reorder_items)
         
         mock_repository.reorder_sections.return_value = True
         
@@ -438,9 +440,11 @@ class TestQuestionOrdering:
     async def test_question_ordering(self, mock_repository, sample_section_id):
         """Test reordering questions within a section."""
         question_ids = [uuid4(), uuid4(), uuid4()]
-        reorder_request = QuestionReorderRequest(
-            question_ids=[str(qid) for qid in question_ids]
-        )
+        reorder_items = [
+            QuestionReorderItem(id=qid, sort_order=i + 1)
+            for i, qid in enumerate(question_ids)
+        ]
+        reorder_request = QuestionReorderRequest(items=reorder_items)
         
         mock_repository.reorder_questions.return_value = True
         
@@ -484,25 +488,25 @@ class TestValidationRules:
         
         assert rules.regex == r'^[A-Za-z0-9]+$'
 
-    def test_validation_rules_selections(self):
-        """Test validation rules for multi-choice selections."""
+    def test_validation_rules_min_max_value(self):
+        """Test validation rules for min/max value."""
         rules = ValidationRules(
-            min_selections=1,
-            max_selections=5,
+            min_value=1,
+            max_value=100,
         )
         
-        assert rules.min_selections == 1
-        assert rules.max_selections == 5
+        assert rules.min_value == 1
+        assert rules.max_value == 100
 
     def test_validation_rules_file_upload(self):
         """Test validation rules for file upload."""
         rules = ValidationRules(
             allowed_types=["pdf", "doc", "docx"],
-            max_file_size_mb=10,
+            max_size_mb=10,
         )
         
         assert rules.allowed_types == ["pdf", "doc", "docx"]
-        assert rules.max_file_size_mb == 10
+        assert rules.max_size_mb == 10
 
     def test_validation_rules_empty(self):
         """Test empty validation rules."""
