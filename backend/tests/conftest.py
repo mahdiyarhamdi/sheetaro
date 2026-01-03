@@ -282,3 +282,232 @@ async def create_test_product(db_session: AsyncSession, data: dict = None) -> di
     await db_session.refresh(product)
     return product
 
+
+# ==================== Dynamic Category System Fixtures ====================
+
+async def create_test_category(db_session: AsyncSession, data: dict = None):
+    """Create a test category for dynamic product system."""
+    from app.models.category import Category
+    
+    category_data = data or {
+        "slug": "test-category",
+        "name_fa": "دسته تست",
+        "name_en": "Test Category",
+        "description_fa": "توضیحات تست",
+        "sort_order": 1,
+        "is_active": True,
+    }
+    
+    category = Category(**category_data)
+    db_session.add(category)
+    await db_session.flush()
+    await db_session.refresh(category)
+    return category
+
+
+async def create_test_plan_with_questionnaire(db_session: AsyncSession, category, data: dict = None):
+    """Create a plan configured for semi-private (has_questionnaire=True)."""
+    from app.models.design_plan import CategoryDesignPlan
+    from app.models.design_plan import DesignPlanType
+    
+    plan_data = data or {
+        "category_id": category.id,
+        "slug": "semi-private",
+        "name_fa": "نیمه‌خصوصی",
+        "name_en": "Semi-Private",
+        "plan_type": DesignPlanType.SEMI_PRIVATE,
+        "has_questionnaire": True,
+        "has_templates": False,
+        "price": Decimal("600000"),
+        "sort_order": 1,
+        "is_active": True,
+    }
+    
+    plan = CategoryDesignPlan(**plan_data)
+    db_session.add(plan)
+    await db_session.flush()
+    await db_session.refresh(plan)
+    return plan
+
+
+async def create_test_plan_with_templates(db_session: AsyncSession, category, data: dict = None):
+    """Create a plan configured for public (has_templates=True)."""
+    from app.models.design_plan import CategoryDesignPlan
+    from app.models.design_plan import DesignPlanType
+    
+    plan_data = data or {
+        "category_id": category.id,
+        "slug": "public",
+        "name_fa": "عمومی",
+        "name_en": "Public",
+        "plan_type": DesignPlanType.PUBLIC,
+        "has_questionnaire": False,
+        "has_templates": True,
+        "price": Decimal("0"),
+        "sort_order": 1,
+        "is_active": True,
+    }
+    
+    plan = CategoryDesignPlan(**plan_data)
+    db_session.add(plan)
+    await db_session.flush()
+    await db_session.refresh(plan)
+    return plan
+
+
+async def create_test_section(db_session: AsyncSession, plan, data: dict = None):
+    """Create a question section for testing."""
+    from app.models.question_section import QuestionSection
+    
+    section_data = data or {
+        "plan_id": plan.id,
+        "title_fa": "بخش تست",
+        "description_fa": "توضیحات بخش تست",
+        "sort_order": 1,
+        "is_active": True,
+    }
+    
+    section = QuestionSection(**section_data)
+    db_session.add(section)
+    await db_session.flush()
+    await db_session.refresh(section)
+    return section
+
+
+async def create_test_questions(db_session: AsyncSession, plan, section=None, count: int = 3):
+    """Create multiple questions of different types."""
+    from app.models.design_question import DesignQuestion, QuestionOption, QuestionInputType
+    
+    questions = []
+    question_types = [
+        (QuestionInputType.TEXT, "نام برند خود را وارد کنید"),
+        (QuestionInputType.SINGLE_CHOICE, "نوع جنس را انتخاب کنید"),
+        (QuestionInputType.COLOR_PICKER, "رنگ پس‌زمینه را انتخاب کنید"),
+    ]
+    
+    for i in range(min(count, len(question_types))):
+        input_type, question_text = question_types[i]
+        
+        question = DesignQuestion(
+            plan_id=plan.id,
+            section_id=section.id if section else None,
+            question_fa=question_text,
+            input_type=input_type,
+            is_required=True,
+            sort_order=i + 1,
+            is_active=True,
+        )
+        db_session.add(question)
+        await db_session.flush()
+        await db_session.refresh(question)
+        
+        # Add options for choice questions
+        if input_type == QuestionInputType.SINGLE_CHOICE:
+            for j, (value, label) in enumerate([("paper", "کاغذی"), ("pvc", "پی وی سی")]):
+                option = QuestionOption(
+                    question_id=question.id,
+                    value=value,
+                    label_fa=label,
+                    sort_order=j + 1,
+                    is_active=True,
+                )
+                db_session.add(option)
+            await db_session.flush()
+        
+        questions.append(question)
+    
+    return questions
+
+
+async def create_test_template(db_session: AsyncSession, plan, data: dict = None):
+    """Create a template with placeholder coordinates."""
+    from app.models.design_template import DesignTemplate
+    
+    template_data = data or {
+        "plan_id": plan.id,
+        "name_fa": "قالب تست",
+        "name_en": "Test Template",
+        "preview_url": "https://example.com/preview.png",
+        "file_url": "https://example.com/template.png",
+        "image_width": 1000,
+        "image_height": 800,
+        "placeholder_x": 100,
+        "placeholder_y": 100,
+        "placeholder_width": 200,
+        "placeholder_height": 200,
+        "sort_order": 1,
+        "is_active": True,
+    }
+    
+    template = DesignTemplate(**template_data)
+    db_session.add(template)
+    await db_session.flush()
+    await db_session.refresh(template)
+    return template
+
+
+# ==================== Pytest Fixtures ====================
+
+@pytest.fixture
+def sample_category_data():
+    """Sample category data for testing."""
+    return {
+        "slug": "labels",
+        "name_fa": "لیبل",
+        "name_en": "Labels",
+        "description_fa": "انواع لیبل چاپی",
+        "sort_order": 1,
+        "is_active": True,
+    }
+
+
+@pytest.fixture
+def sample_plan_data():
+    """Sample plan data for testing."""
+    return {
+        "slug": "semi-private",
+        "name_fa": "نیمه‌خصوصی",
+        "plan_type": "SEMI_PRIVATE",
+        "has_questionnaire": True,
+        "has_templates": False,
+        "price": 600000,
+        "sort_order": 1,
+    }
+
+
+@pytest.fixture
+def sample_section_data():
+    """Sample section data for testing."""
+    return {
+        "title_fa": "اطلاعات طراحی",
+        "description_fa": "در این بخش اطلاعات طراحی را وارد کنید",
+        "sort_order": 1,
+    }
+
+
+@pytest.fixture
+def sample_question_data():
+    """Sample question data for testing."""
+    return {
+        "question_fa": "نام برند خود را وارد کنید",
+        "input_type": "TEXT",
+        "is_required": True,
+        "placeholder_fa": "مثال: برند من",
+        "sort_order": 1,
+    }
+
+
+@pytest.fixture
+def sample_template_data():
+    """Sample template data for testing."""
+    return {
+        "name_fa": "قالب ساده",
+        "preview_url": "https://example.com/preview.png",
+        "file_url": "https://example.com/template.png",
+        "placeholder_x": 100,
+        "placeholder_y": 100,
+        "placeholder_width": 200,
+        "placeholder_height": 200,
+        "sort_order": 1,
+    }
+
