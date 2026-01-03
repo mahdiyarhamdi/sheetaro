@@ -15,6 +15,8 @@ FLOW_ORDERS = "orders"
 FLOW_PRODUCTS = "products"
 FLOW_PROFILE = "profile"
 FLOW_TRACKING = "tracking"
+FLOW_QUESTIONNAIRE = "questionnaire"
+FLOW_TEMPLATES = "templates"
 
 
 def set_flow(
@@ -216,5 +218,32 @@ PROFILE_STEPS = {
     'edit_phone': 'edit_phone',
     'edit_city': 'edit_city',
     'edit_address': 'edit_address',
+}
+
+# Questionnaire flow steps
+QUESTIONNAIRE_STEPS = {
+    'start': 'questionnaire_start',
+    'section_display': 'section_display',
+    'question_display': 'question_display',
+    'text_input': 'text_input',
+    'number_input': 'number_input',
+    'textarea_input': 'textarea_input',
+    'color_picker': 'color_picker',
+    'date_picker': 'date_picker',
+    'scale_input': 'scale_input',
+    'single_choice': 'single_choice',
+    'multi_choice': 'multi_choice',
+    'image_upload': 'image_upload',
+    'file_upload': 'file_upload',
+    'summary': 'questionnaire_summary',
+}
+
+# Template flow steps
+TEMPLATE_STEPS = {
+    'gallery': 'template_gallery',
+    'preview': 'template_preview',
+    'logo_upload': 'logo_upload',
+    'design_preview': 'design_preview',
+    'confirmation': 'design_confirmation',
 }
 

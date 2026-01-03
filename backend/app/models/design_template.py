@@ -21,6 +21,10 @@ class DesignTemplate(Base):
     preview_url = Column(String(500), nullable=False)  # Preview image URL (with red placeholder)
     file_url = Column(String(500), nullable=False)  # Original file URL for processing
     
+    # Image dimensions
+    image_width = Column(Integer, nullable=True)  # Original image width
+    image_height = Column(Integer, nullable=True)  # Original image height
+    
     # Placeholder position (red square for logo)
     placeholder_x = Column(Integer, nullable=False)  # X position from top-left
     placeholder_y = Column(Integer, nullable=False)  # Y position from top-left
@@ -34,6 +38,7 @@ class DesignTemplate(Base):
     
     # Relationships
     plan = relationship("CategoryDesignPlan", back_populates="templates")
+    processed_designs = relationship("ProcessedDesign", back_populates="template", cascade="all, delete-orphan")
     
     def __repr__(self) -> str:
         return f"<DesignTemplate(id={self.id}, name_fa={self.name_fa})>"

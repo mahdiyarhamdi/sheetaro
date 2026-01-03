@@ -10,7 +10,8 @@ from telegram.ext import ContextTypes
 
 from utils.flow_manager import (
     get_flow, get_step, clear_flow,
-    FLOW_ADMIN, FLOW_CATALOG, FLOW_ORDERS, FLOW_PRODUCTS, FLOW_PROFILE, FLOW_TRACKING
+    FLOW_ADMIN, FLOW_CATALOG, FLOW_ORDERS, FLOW_PRODUCTS, FLOW_PROFILE, FLOW_TRACKING,
+    FLOW_QUESTIONNAIRE, FLOW_TEMPLATES
 )
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,11 @@ async def route_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await route_profile_text(update, context, current_step)
     elif current_flow == FLOW_TRACKING:
         await route_tracking_text(update, context, current_step)
+    elif current_flow == FLOW_QUESTIONNAIRE:
+        await route_questionnaire_text(update, context, current_step)
+    elif current_flow == FLOW_TEMPLATES:
+        # Templates don't use text input, so just ignore
+        pass
     else:
         # Unknown flow, treat as menu
         logger.warning(f"Unknown flow: {current_flow}")
@@ -93,4 +99,10 @@ async def route_tracking_text(update: Update, context: ContextTypes.DEFAULT_TYPE
     """Route text input for tracking flow."""
     from handlers.tracking import handle_tracking_input
     await handle_tracking_input(update, context)
+
+
+async def route_questionnaire_text(update: Update, context: ContextTypes.DEFAULT_TYPE, step: str) -> None:
+    """Route text input for questionnaire flow."""
+    from handlers.customer_questionnaire import handle_question_text_input
+    await handle_question_text_input(update, context)
 

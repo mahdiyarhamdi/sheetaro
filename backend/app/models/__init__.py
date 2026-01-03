@@ -24,8 +24,10 @@ from app.models.settings import SystemSettings, SettingKeys
 from app.models.category import Category
 from app.models.attribute import CategoryAttribute, AttributeOption, AttributeInputType
 from app.models.design_plan import CategoryDesignPlan
+from app.models.question_section import QuestionSection
 from app.models.design_question import DesignQuestion, QuestionOption, QuestionInputType
 from app.models.design_template import DesignTemplate
+from app.models.processed_design import ProcessedDesign
 from app.models.order_step import OrderStepTemplate, OrderStep, StepType
 from app.models.question_answer import QuestionAnswer
 
@@ -54,10 +56,12 @@ __all__ = [
     "AttributeOption",
     "AttributeInputType",
     "CategoryDesignPlan",
+    "QuestionSection",
     "DesignQuestion",
     "QuestionOption",
     "QuestionInputType",
     "DesignTemplate",
+    "ProcessedDesign",
     "OrderStepTemplate",
     "OrderStep",
     "StepType",

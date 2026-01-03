@@ -797,6 +797,46 @@ async def cancel_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
 # ==================== Conversation Handler ====================
 
+# ==================== Integration Functions ====================
+
+async def continue_after_questionnaire(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Continue order flow after questionnaire completion."""
+    # Get answers from questionnaire
+    answers = context.user_data.get('questionnaire_answers', [])
+    order = context.user_data.get('order', {})
+    order['answers'] = answers
+    
+    # Clean up questionnaire state
+    context.user_data.pop('questionnaire_answers', None)
+    
+    # Continue to order summary
+    return await show_order_summary(update, context)
+
+
+async def continue_after_template(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Continue order flow after template selection."""
+    # Get template and design info
+    selected_template = context.user_data.get('selected_template', {})
+    processed_design = context.user_data.get('processed_design', {})
+    logo_url = context.user_data.get('logo_url', '')
+    
+    order = context.user_data.get('order', {})
+    order['template'] = selected_template
+    order['logo_url'] = logo_url
+    order['preview_url'] = processed_design.get('preview_url')
+    order['final_url'] = processed_design.get('final_url')
+    
+    # Clean up template state
+    context.user_data.pop('template_selection', None)
+    context.user_data.pop('selected_template', None)
+    context.user_data.pop('selected_template_id', None)
+    context.user_data.pop('processed_design', None)
+    context.user_data.pop('logo_url', None)
+    
+    # Continue to order summary
+    return await show_order_summary(update, context)
+
+
 dynamic_order_conversation = ConversationHandler(
     entry_points=[
         MessageHandler(filters.Regex("^(🛒 ثبت سفارش|ثبت سفارش)$"), start_dynamic_order),

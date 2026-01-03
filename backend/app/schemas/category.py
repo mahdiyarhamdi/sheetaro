@@ -187,9 +187,60 @@ class DesignPlanOut(DesignPlanBase):
 
 
 class DesignPlanWithDetails(DesignPlanOut):
-    """Design plan with questions and templates."""
+    """Design plan with sections, questions and templates."""
+    sections: List["SectionOut"] = []
     questions: List["QuestionOut"] = []
     templates: List["TemplateOut"] = []
+
+
+# ============== Question Section Schemas ==============
+
+class SectionBase(BaseModel):
+    """Base section schema for grouping questions."""
+    title_fa: str = Field(..., max_length=200)
+    description_fa: Optional[str] = None
+    sort_order: int = 0
+    is_active: bool = True
+
+
+class SectionCreate(SectionBase):
+    """Schema for creating a section."""
+    pass
+
+
+class SectionUpdate(BaseModel):
+    """Schema for updating a section."""
+    title_fa: Optional[str] = Field(None, max_length=200)
+    description_fa: Optional[str] = None
+    sort_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class SectionOut(SectionBase):
+    """Schema for section response."""
+    id: UUID
+    plan_id: UUID
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class SectionWithQuestions(SectionOut):
+    """Section with its questions."""
+    questions: List["QuestionWithOptions"] = []
+
+
+class SectionReorderItem(BaseModel):
+    """Item for reordering sections."""
+    id: UUID
+    sort_order: int
+
+
+class SectionReorderRequest(BaseModel):
+    """Request to reorder sections."""
+    items: List[SectionReorderItem]
 
 
 # ============== Question Schemas ==============
@@ -198,6 +249,8 @@ class QuestionOptionBase(BaseModel):
     """Base question option schema."""
     value: str = Field(..., max_length=100)
     label_fa: str = Field(..., max_length=200)
+    image_url: Optional[str] = Field(None, max_length=500)  # For visual options
+    price_modifier: int = 0  # Price adjustment
     sort_order: int = 0
     is_active: bool = True
 
@@ -211,6 +264,8 @@ class QuestionOptionUpdate(BaseModel):
     """Schema for updating a question option."""
     value: Optional[str] = Field(None, max_length=100)
     label_fa: Optional[str] = Field(None, max_length=200)
+    image_url: Optional[str] = Field(None, max_length=500)
+    price_modifier: Optional[int] = None
     sort_order: Optional[int] = None
     is_active: Optional[bool] = None
 
@@ -225,6 +280,18 @@ class QuestionOptionOut(QuestionOptionBase):
         from_attributes = True
 
 
+class ValidationRules(BaseModel):
+    """Validation rules for question answers."""
+    min_length: Optional[int] = None
+    max_length: Optional[int] = None
+    min_value: Optional[int] = None
+    max_value: Optional[int] = None
+    regex: Optional[str] = None
+    error_message_fa: Optional[str] = None
+    max_size_mb: Optional[int] = None  # For file uploads
+    allowed_types: Optional[List[str]] = None  # ["jpg", "png", "pdf"]
+
+
 class QuestionBase(BaseModel):
     """Base question schema."""
     question_fa: str
@@ -232,22 +299,30 @@ class QuestionBase(BaseModel):
     is_required: bool = True
     placeholder_fa: Optional[str] = Field(None, max_length=255)
     help_text_fa: Optional[str] = None
+    validation_rules: Optional[ValidationRules] = None
     sort_order: int = 0
     is_active: bool = True
 
 
 class QuestionCreate(QuestionBase):
     """Schema for creating a question."""
+    section_id: Optional[UUID] = None  # Optional section assignment
+    depends_on_question_id: Optional[UUID] = None  # Conditional logic
+    depends_on_values: Optional[List[str]] = None  # Show if answer is one of these
     options: Optional[List[QuestionOptionCreate]] = None
 
 
 class QuestionUpdate(BaseModel):
     """Schema for updating a question."""
+    section_id: Optional[UUID] = None
     question_fa: Optional[str] = None
     input_type: Optional[QuestionInputType] = None
     is_required: Optional[bool] = None
     placeholder_fa: Optional[str] = Field(None, max_length=255)
     help_text_fa: Optional[str] = None
+    validation_rules: Optional[ValidationRules] = None
+    depends_on_question_id: Optional[UUID] = None
+    depends_on_values: Optional[List[str]] = None
     sort_order: Optional[int] = None
     is_active: Optional[bool] = None
 
@@ -256,6 +331,9 @@ class QuestionOut(QuestionBase):
     """Schema for question response."""
     id: UUID
     plan_id: UUID
+    section_id: Optional[UUID] = None
+    depends_on_question_id: Optional[UUID] = None
+    depends_on_values: Optional[List[str]] = None
     created_at: datetime
     updated_at: datetime
     
@@ -268,6 +346,30 @@ class QuestionWithOptions(QuestionOut):
     options: List[QuestionOptionOut] = []
 
 
+class QuestionReorderItem(BaseModel):
+    """Item for reordering questions."""
+    id: UUID
+    sort_order: int
+
+
+class QuestionReorderRequest(BaseModel):
+    """Request to reorder questions."""
+    items: List[QuestionReorderItem]
+
+
+class ValidateAnswerRequest(BaseModel):
+    """Request to validate a single answer."""
+    answer_text: Optional[str] = None
+    answer_values: Optional[List[str]] = None
+    answer_file_url: Optional[str] = None
+
+
+class ValidateAnswerResponse(BaseModel):
+    """Response for answer validation."""
+    is_valid: bool
+    error_message: Optional[str] = None
+
+
 # ============== Template Schemas ==============
 
 class TemplateBase(BaseModel):
@@ -276,6 +378,8 @@ class TemplateBase(BaseModel):
     description_fa: Optional[str] = Field(None, max_length=500)
     preview_url: str = Field(..., max_length=500)
     file_url: str = Field(..., max_length=500)
+    image_width: Optional[int] = None  # Original image width
+    image_height: Optional[int] = None  # Original image height
     placeholder_x: int
     placeholder_y: int
     placeholder_width: int
@@ -295,6 +399,8 @@ class TemplateUpdate(BaseModel):
     description_fa: Optional[str] = Field(None, max_length=500)
     preview_url: Optional[str] = Field(None, max_length=500)
     file_url: Optional[str] = Field(None, max_length=500)
+    image_width: Optional[int] = None
+    image_height: Optional[int] = None
     placeholder_x: Optional[int] = None
     placeholder_y: Optional[int] = None
     placeholder_width: Optional[int] = None
@@ -323,6 +429,37 @@ class ApplyLogoResponse(BaseModel):
     """Response after applying logo to template."""
     preview_url: str
     final_url: str
+
+
+# ============== Processed Design Schemas ==============
+
+class ProcessedDesignBase(BaseModel):
+    """Base processed design schema."""
+    template_id: UUID
+    logo_url: str = Field(..., max_length=500)
+    preview_url: str = Field(..., max_length=500)
+    final_url: str = Field(..., max_length=500)
+
+
+class ProcessedDesignCreate(BaseModel):
+    """Schema for creating a processed design."""
+    template_id: UUID
+    logo_url: str = Field(..., max_length=500)
+
+
+class ProcessedDesignOut(ProcessedDesignBase):
+    """Schema for processed design response."""
+    id: UUID
+    order_id: Optional[UUID] = None
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class ProcessedDesignWithTemplate(ProcessedDesignOut):
+    """Processed design with template details."""
+    template: TemplateOut
 
 
 # ============== Step Template Schemas ==============
@@ -400,4 +537,6 @@ class SubmitAnswersRequest(BaseModel):
 # Update forward references
 CategoryWithDetails.model_rebuild()
 DesignPlanWithDetails.model_rebuild()
+SectionWithQuestions.model_rebuild()
+ProcessedDesignWithTemplate.model_rebuild()
 

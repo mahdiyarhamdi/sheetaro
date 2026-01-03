@@ -15,10 +15,13 @@ from app.api.routers.categories import (
     attributes_router,
     options_router,
     plans_router,
+    sections_router,
     questions_router,
     question_options_router,
     templates_router,
     step_templates_router,
+    processed_designs_router,
+    answers_router,
 )
 from app.utils.logger import logger
 
@@ -156,10 +159,13 @@ app.include_router(categories_router, tags=["Categories"])
 app.include_router(attributes_router, tags=["Attributes"])
 app.include_router(options_router, tags=["Options"])
 app.include_router(plans_router, tags=["Plans"])
+app.include_router(sections_router, tags=["Sections"])
 app.include_router(questions_router, tags=["Questions"])
 app.include_router(question_options_router, tags=["Question Options"])
 app.include_router(templates_router, tags=["Templates"])
 app.include_router(step_templates_router, tags=["Step Templates"])
+app.include_router(processed_designs_router, tags=["Processed Designs"])
+app.include_router(answers_router, tags=["Answers"])
 
 
 if __name__ == "__main__":

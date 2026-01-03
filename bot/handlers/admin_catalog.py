@@ -51,6 +51,11 @@ async def handle_catalog_text_input(update: Update, context: ContextTypes.DEFAUL
         await plan_create_slug(update, context)
     elif state == 'plan_price':
         await plan_create_price(update, context)
+    # Section states
+    elif state == 'section_title':
+        await section_create_title(update, context)
+    elif state == 'section_description':
+        await section_create_description(update, context)
     # Question states
     elif state == 'question_text':
         await question_create_text(update, context)
@@ -96,7 +101,10 @@ async def handle_catalog_text_input(update: Update, context: ContextTypes.DEFAUL
     TEMPLATE_CREATE_NAME,
     TEMPLATE_UPLOAD_PREVIEW,
     TEMPLATE_SET_PLACEHOLDER,
-) = range(33)
+    TEMPLATE_EDIT_POS,
+    TEMPLATE_EDIT_IMG,
+    TEMPLATE_EDIT_NAME,
+) = range(36)
 
 
 def get_catalog_menu_keyboard():
@@ -221,11 +229,27 @@ def get_template_list_keyboard(templates: list, plan_id: str):
     keyboard = []
     for t in templates:
         name = t.get('name_fa', 'بدون نام')
+        status = "✅" if t.get('is_active', True) else "❌"
         keyboard.append([
-            InlineKeyboardButton(f"🖼️ {name}", callback_data=f"template_{t['id']}")
+            InlineKeyboardButton(f"{status} 🖼️ {name}", callback_data=f"template_{t['id']}")
         ])
     keyboard.append([InlineKeyboardButton("➕ قالب جدید", callback_data=f"template_create_{plan_id}")])
     keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data=f"plan_{plan_id}")])
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_template_actions_keyboard(template_id: str, plan_id: str, is_active: bool):
+    """Get actions keyboard for a template."""
+    toggle_text = "غیرفعال کردن" if is_active else "فعال کردن"
+    keyboard = [
+        [InlineKeyboardButton("👁️ پیش‌نمایش با لوگوی نمونه", callback_data=f"tpl_demo_{template_id}")],
+        [InlineKeyboardButton("✏️ ویرایش محل لوگو", callback_data=f"tpl_edit_pos_{template_id}")],
+        [InlineKeyboardButton("🔄 تغییر تصویر", callback_data=f"tpl_edit_img_{template_id}")],
+        [InlineKeyboardButton("✏️ تغییر نام", callback_data=f"tpl_edit_name_{template_id}")],
+        [InlineKeyboardButton(f"🔄 {toggle_text}", callback_data=f"tpl_toggle_{template_id}")],
+        [InlineKeyboardButton("🗑️ حذف", callback_data=f"tpl_delete_{template_id}")],
+        [InlineKeyboardButton("🔙 بازگشت", callback_data=f"plan_templates_{plan_id}")],
+    ]
     return InlineKeyboardMarkup(keyboard)
 
 
@@ -244,12 +268,57 @@ def get_input_type_keyboard():
 def get_question_type_keyboard():
     """Get keyboard for selecting question input type."""
     keyboard = [
-        [InlineKeyboardButton("متنی", callback_data="qtype_TEXT")],
+        [InlineKeyboardButton("متنی (یک خط)", callback_data="qtype_TEXT")],
+        [InlineKeyboardButton("متنی (چند خط)", callback_data="qtype_TEXTAREA")],
+        [InlineKeyboardButton("عددی", callback_data="qtype_NUMBER")],
         [InlineKeyboardButton("تک‌گزینه‌ای", callback_data="qtype_SINGLE_CHOICE")],
         [InlineKeyboardButton("چندگزینه‌ای", callback_data="qtype_MULTI_CHOICE")],
         [InlineKeyboardButton("آپلود عکس", callback_data="qtype_IMAGE_UPLOAD")],
         [InlineKeyboardButton("انتخاب رنگ", callback_data="qtype_COLOR_PICKER")],
+        [InlineKeyboardButton("انتخاب تاریخ", callback_data="qtype_DATE_PICKER")],
+        [InlineKeyboardButton("امتیازدهی", callback_data="qtype_SCALE")],
         [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_section_list_keyboard(sections: list, plan_id: str):
+    """Get keyboard with list of sections."""
+    keyboard = []
+    for i, section in enumerate(sections, 1):
+        title = section.get('title_fa', 'بدون عنوان')
+        q_count = len(section.get('questions', []))
+        keyboard.append([
+            InlineKeyboardButton(
+                f"{i}. {title} ({q_count} سوال)",
+                callback_data=f"section_{section['id']}"
+            )
+        ])
+    keyboard.append([InlineKeyboardButton("➕ بخش جدید", callback_data=f"section_create_{plan_id}")])
+    keyboard.append([InlineKeyboardButton("📋 همه سوالات", callback_data=f"plan_all_questions_{plan_id}")])
+    keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data=f"plan_{plan_id}")])
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_section_actions_keyboard(section_id: str, plan_id: str):
+    """Get actions keyboard for a section."""
+    keyboard = [
+        [InlineKeyboardButton("📋 سوالات بخش", callback_data=f"section_questions_{section_id}")],
+        [InlineKeyboardButton("➕ سوال جدید", callback_data=f"section_q_create_{section_id}")],
+        [InlineKeyboardButton("✏️ ویرایش", callback_data=f"section_edit_{section_id}")],
+        [InlineKeyboardButton("🗑️ حذف", callback_data=f"section_delete_{section_id}")],
+        [InlineKeyboardButton("🔙 بازگشت", callback_data=f"plan_sections_{plan_id}")],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_questionnaire_menu_keyboard(plan_id: str, section_count: int, question_count: int):
+    """Get questionnaire management menu keyboard."""
+    keyboard = [
+        [InlineKeyboardButton(f"📂 مدیریت بخش‌ها ({section_count})", callback_data=f"plan_sections_{plan_id}")],
+        [InlineKeyboardButton(f"📋 همه سوالات ({question_count})", callback_data=f"plan_all_questions_{plan_id}")],
+        [InlineKeyboardButton("👁️ پیش‌نمایش", callback_data=f"plan_preview_{plan_id}")],
+        [InlineKeyboardButton("🔙 بازگشت به پلن", callback_data=f"plan_{plan_id}")],
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -915,45 +984,261 @@ async def plan_create_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return PLAN_LIST
 
 
-# ==================== Question Handlers ====================
+# ==================== Section Handlers ====================
 
-async def show_question_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Show list of questions for a plan."""
+async def show_questionnaire_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show questionnaire management menu."""
     query = update.callback_query
     await query.answer()
     
     plan_id = query.data.replace("plan_questions_", "")
     context.user_data['current_plan_id'] = plan_id
     
+    # Get sections and questions
+    sections = await api_client.get_sections(plan_id, active_only=False)
+    questions = await api_client.get_questions(plan_id, active_only=False)
+    
+    section_count = len(sections) if sections else 0
+    question_count = len(questions) if questions else 0
+    
+    plan = await api_client.get_design_plan(plan_id)
+    plan_name = plan.get('name_fa', '') if plan else ''
+    
+    await query.message.edit_text(
+        f"📝 مدیریت پرسشنامه\n\n"
+        f"پلن: {plan_name}\n"
+        f"تعداد بخش‌ها: {section_count}\n"
+        f"تعداد سوالات: {question_count}\n\n"
+        "یک گزینه را انتخاب کنید:",
+        reply_markup=get_questionnaire_menu_keyboard(plan_id, section_count, question_count)
+    )
+    return QUESTION_LIST
+
+
+async def show_section_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show list of sections for a plan."""
+    query = update.callback_query
+    await query.answer()
+    
+    plan_id = query.data.replace("plan_sections_", "")
+    context.user_data['current_plan_id'] = plan_id
+    
+    sections = await api_client.get_sections(plan_id, active_only=False)
+    if sections is None:
+        await query.message.edit_text("❌ خطا در دریافت بخش‌ها.")
+        return QUESTION_LIST
+    
+    plan = await api_client.get_design_plan(plan_id)
+    plan_name = plan.get('name_fa', '') if plan else ''
+    
+    await query.message.edit_text(
+        f"📂 بخش‌های پرسشنامه «{plan_name}»\n\n"
+        "بخش‌ها به ترتیب زیر نمایش داده می‌شوند:\n\n"
+        "یک بخش را انتخاب کنید یا بخش جدید بسازید:",
+        reply_markup=get_section_list_keyboard(sections, plan_id)
+    )
+    return QUESTION_LIST
+
+
+async def show_section_actions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show actions for a section."""
+    query = update.callback_query
+    await query.answer()
+    
+    section_id = query.data.replace("section_", "")
+    context.user_data['current_section_id'] = section_id
+    
+    section = await api_client.get_section(section_id)
+    if not section:
+        await query.message.edit_text("❌ بخش یافت نشد.")
+        return QUESTION_LIST
+    
+    plan_id = context.user_data.get('current_plan_id', '')
+    title = section.get('title_fa', 'بدون عنوان')
+    desc = section.get('description_fa', '')
+    q_count = len(section.get('questions', []))
+    
+    text = f"📂 {title}\n\n"
+    if desc:
+        text += f"📝 {desc}\n\n"
+    text += f"تعداد سوالات: {q_count}\n\n"
+    text += "یک عملیات را انتخاب کنید:"
+    
+    await query.message.edit_text(text, reply_markup=get_section_actions_keyboard(section_id, plan_id))
+    return QUESTION_LIST
+
+
+async def start_section_create(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Start section creation process."""
+    query = update.callback_query
+    await query.answer()
+    
+    plan_id = query.data.replace("section_create_", "")
+    context.user_data['current_plan_id'] = plan_id
+    context.user_data['creating_section'] = {'plan_id': plan_id}
+    context.user_data['catalog_input_state'] = 'section_title'
+    
+    await query.message.edit_text(
+        "➕ ایجاد بخش جدید\n\n"
+        "مرحله ۱ از ۲: عنوان بخش\n\n"
+        "لطفاً عنوان فارسی بخش را وارد کنید:\n"
+        "(مثال: اطلاعات کسب‌وکار، ترجیحات طراحی)",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
+        ])
+    )
+    return QUESTION_LIST
+
+
+async def section_create_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle section title input."""
+    title = update.message.text.strip()
+    context.user_data['creating_section']['title_fa'] = title
+    context.user_data['catalog_input_state'] = 'section_description'
+    
+    await update.message.reply_text(
+        f"✅ عنوان: {title}\n\n"
+        "مرحله ۲ از ۲: توضیحات (اختیاری)\n\n"
+        "توضیحات این بخش را وارد کنید:\n"
+        "(این متن بالای سوالات بخش نمایش داده می‌شود)\n\n"
+        "برای رد کردن، دکمه زیر را بزنید:",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⏭️ رد کردن", callback_data="section_skip_desc")],
+            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
+        ])
+    )
+    return QUESTION_LIST
+
+
+async def section_create_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle section description input and create section."""
+    desc = update.message.text.strip()
+    context.user_data['creating_section']['description_fa'] = desc
+    return await finalize_section_create(update, context)
+
+
+async def section_skip_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Skip section description and create section."""
+    query = update.callback_query
+    await query.answer()
+    return await finalize_section_create(update, context)
+
+
+async def finalize_section_create(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Finalize section creation."""
+    context.user_data.pop('catalog_input_state', None)
+    
+    data = context.user_data.get('creating_section', {})
+    plan_id = data.pop('plan_id', context.user_data.get('current_plan_id', ''))
+    admin_id = context.user_data.get('user_id', '')
+    
+    result = await api_client.create_section(plan_id, admin_id, data)
+    
+    msg_target = update.callback_query.message if update.callback_query else update.message
+    
+    if result:
+        await msg_target.reply_text(
+            f"✅ بخش «{data['title_fa']}» با موفقیت ایجاد شد!\n\n"
+            "اکنون می‌توانید سوالات را به این بخش اضافه کنید.",
+            reply_markup=get_section_actions_keyboard(result['id'], plan_id)
+        )
+        context.user_data['current_section_id'] = result['id']
+    else:
+        await msg_target.reply_text("❌ خطا در ایجاد بخش.")
+    
+    return QUESTION_LIST
+
+
+# ==================== Question Handlers ====================
+
+async def show_question_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show list of all questions for a plan."""
+    query = update.callback_query
+    await query.answer()
+    
+    plan_id = query.data.replace("plan_all_questions_", "")
+    context.user_data['current_plan_id'] = plan_id
+    
     questions = await api_client.get_questions(plan_id, active_only=False)
     if questions is None:
         await query.message.edit_text("❌ خطا در دریافت سوالات.")
-        return PLAN_ACTIONS
+        return QUESTION_LIST
     
     await query.message.edit_text(
-        "📝 سوالات پرسشنامه:\n\n"
+        "📝 همه سوالات پرسشنامه:\n\n"
         "یک سوال را انتخاب کنید یا سوال جدید بسازید:",
         reply_markup=get_question_list_keyboard(questions, plan_id)
     )
     return QUESTION_LIST
 
 
-async def start_question_create(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Start question creation process."""
+async def show_section_questions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show questions for a specific section."""
     query = update.callback_query
     await query.answer()
     
-    plan_id = query.data.replace("q_create_", "")
-    context.user_data['current_plan_id'] = plan_id
-    context.user_data['creating_question'] = {'plan_id': plan_id}
+    section_id = query.data.replace("section_questions_", "")
+    context.user_data['current_section_id'] = section_id
+    
+    section = await api_client.get_section(section_id)
+    if not section:
+        await query.message.edit_text("❌ بخش یافت نشد.")
+        return QUESTION_LIST
+    
+    questions = section.get('questions', [])
+    title = section.get('title_fa', 'بدون عنوان')
+    plan_id = context.user_data.get('current_plan_id', '')
+    
+    keyboard = []
+    for i, q in enumerate(questions, 1):
+        text = q.get('question_fa', 'بدون متن')[:25]
+        input_type = q.get('input_type', '')
+        required = "*" if q.get('is_required') else ""
+        keyboard.append([
+            InlineKeyboardButton(
+                f"{i}. {text}...{required} ({input_type})",
+                callback_data=f"question_{q['id']}"
+            )
+        ])
+    keyboard.append([InlineKeyboardButton("➕ سوال جدید", callback_data=f"section_q_create_{section_id}")])
+    keyboard.append([InlineKeyboardButton("🔙 بازگشت به بخش", callback_data=f"section_{section_id}")])
+    
+    await query.message.edit_text(
+        f"📋 سوالات بخش «{title}»:\n\n"
+        f"* = سوال اجباری\n\n"
+        "یک سوال را انتخاب کنید:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return QUESTION_LIST
+
+
+async def start_question_create(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Start question creation process (from plan level)."""
+    query = update.callback_query
+    await query.answer()
+    
+    # Check if from section or plan
+    if "section_q_create_" in query.data:
+        section_id = query.data.replace("section_q_create_", "")
+        context.user_data['current_section_id'] = section_id
+        context.user_data['creating_question'] = {
+            'plan_id': context.user_data.get('current_plan_id', ''),
+            'section_id': section_id
+        }
+    else:
+        plan_id = query.data.replace("question_create_", "")
+        context.user_data['current_plan_id'] = plan_id
+        context.user_data['creating_question'] = {'plan_id': plan_id}
+    
     context.user_data['catalog_input_state'] = 'question_text'
     
     await query.message.edit_text(
-        "ایجاد سوال جدید\n\n"
-        "متن سوال را به فارسی وارد کنید:\n"
-        "(مثال: کسب و کار شما چیست؟)",
+        "➕ ایجاد سوال جدید\n\n"
+        "مرحله ۱ از ۴: متن سوال\n\n"
+        "لطفاً متن سوال را به فارسی وارد کنید:\n"
+        "(مثال: نام کسب‌وکار شما چیست؟)",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
+            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
         ])
     )
     return QUESTION_CREATE_TEXT
@@ -1143,6 +1428,159 @@ async def template_set_placeholder(update: Update, context: ContextTypes.DEFAULT
         return TEMPLATE_LIST
 
 
+async def show_template_actions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show template details and actions."""
+    query = update.callback_query
+    await query.answer()
+    
+    template_id = query.data.replace("template_", "")
+    context.user_data['current_template_id'] = template_id
+    
+    # Get templates from plan
+    plan_id = context.user_data.get('current_plan_id', '')
+    templates = await api_client.get_templates(plan_id, active_only=False)
+    
+    template = None
+    for t in (templates or []):
+        if t['id'] == template_id:
+            template = t
+            break
+    
+    if not template:
+        await query.message.edit_text("❌ قالب یافت نشد.")
+        return TEMPLATE_LIST
+    
+    name = template.get('name_fa', 'بدون نام')
+    is_active = template.get('is_active', True)
+    status = "✅ فعال" if is_active else "❌ غیرفعال"
+    
+    x = template.get('placeholder_x', 0)
+    y = template.get('placeholder_y', 0)
+    w = template.get('placeholder_width', 0)
+    h = template.get('placeholder_height', 0)
+    
+    text = (
+        f"🖼️ {name}\n\n"
+        f"📐 ابعاد تصویر: {template.get('image_width', '?')}x{template.get('image_height', '?')}\n"
+        f"📍 محل لوگو: ({x},{y}) {w}x{h}\n"
+        f"📊 وضعیت: {status}\n\n"
+        "یک عملیات را انتخاب کنید:"
+    )
+    
+    # Try to send preview image
+    preview_url = template.get('preview_url', '')
+    if preview_url:
+        try:
+            await query.message.delete()
+            await context.bot.send_photo(
+                chat_id=update.effective_chat.id,
+                photo=preview_url,
+                caption=text,
+                reply_markup=get_template_actions_keyboard(template_id, plan_id, is_active)
+            )
+            return TEMPLATE_ACTIONS
+        except Exception as e:
+            logger.error(f"Error sending template preview: {e}")
+    
+    await query.message.edit_text(
+        text,
+        reply_markup=get_template_actions_keyboard(template_id, plan_id, is_active)
+    )
+    return TEMPLATE_ACTIONS
+
+
+async def toggle_template(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Toggle template active status."""
+    query = update.callback_query
+    await query.answer()
+    
+    template_id = query.data.replace("tpl_toggle_", "")
+    admin_id = context.user_data.get('user_id', '')
+    
+    # Get current template status
+    plan_id = context.user_data.get('current_plan_id', '')
+    templates = await api_client.get_templates(plan_id, active_only=False)
+    
+    current_status = True
+    for t in (templates or []):
+        if t['id'] == template_id:
+            current_status = t.get('is_active', True)
+            break
+    
+    # Toggle status
+    result = await api_client.update_template(template_id, admin_id, {'is_active': not current_status})
+    
+    if result:
+        new_status = "فعال" if not current_status else "غیرفعال"
+        await query.message.reply_text(f"✅ قالب {new_status} شد.")
+    else:
+        await query.message.reply_text("❌ خطا در تغییر وضعیت قالب.")
+    
+    # Return to template list
+    return await show_template_list(update, context)
+
+
+async def delete_template(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Delete a template."""
+    query = update.callback_query
+    await query.answer()
+    
+    template_id = query.data.replace("tpl_delete_", "")
+    admin_id = context.user_data.get('user_id', '')
+    
+    success = await api_client.delete_template(template_id, admin_id)
+    
+    if success:
+        await query.message.reply_text("✅ قالب با موفقیت حذف شد.")
+    else:
+        await query.message.reply_text("❌ خطا در حذف قالب.")
+    
+    # Return to template list
+    return await show_template_list(update, context)
+
+
+async def show_template_demo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show template preview with a demo logo."""
+    query = update.callback_query
+    await query.answer("در حال پردازش...")
+    
+    template_id = query.data.replace("tpl_demo_", "")
+    
+    # Use a placeholder logo (a simple colored rectangle or default logo)
+    demo_logo_url = "https://via.placeholder.com/200x200/FF0000/FFFFFF?text=Logo"
+    
+    result = await api_client.apply_logo_to_template(template_id, demo_logo_url)
+    
+    if result and result.get('preview_url'):
+        try:
+            await context.bot.send_photo(
+                chat_id=update.effective_chat.id,
+                photo=result['preview_url'],
+                caption="👁️ پیش‌نمایش قالب با لوگوی نمونه\n\n"
+                        "این تصویر نحوه قرارگیری لوگو را نشان می‌دهد.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 بازگشت", callback_data=f"template_{template_id}")]
+                ])
+            )
+        except Exception as e:
+            logger.error(f"Error sending demo preview: {e}")
+            await query.message.reply_text(
+                f"پیش‌نمایش: {result['preview_url']}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 بازگشت", callback_data=f"template_{template_id}")]
+                ])
+            )
+    else:
+        await query.message.reply_text(
+            "❌ خطا در ایجاد پیش‌نمایش.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 بازگشت", callback_data=f"template_{template_id}")]
+            ])
+        )
+    
+    return TEMPLATE_ACTIONS
+
+
 # ==================== Cancel Handler ====================
 
 async def cancel_create(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1281,7 +1719,15 @@ catalog_conversation = ConversationHandler(
         ],
         TEMPLATE_LIST: [
             CallbackQueryHandler(start_template_create, pattern="^template_create_"),
+            CallbackQueryHandler(show_template_actions, pattern="^template_[a-f0-9-]+$"),
             CallbackQueryHandler(show_plan_actions, pattern="^plan_"),
+        ],
+        TEMPLATE_ACTIONS: [
+            CallbackQueryHandler(show_template_demo, pattern="^tpl_demo_"),
+            CallbackQueryHandler(toggle_template, pattern="^tpl_toggle_"),
+            CallbackQueryHandler(delete_template, pattern="^tpl_delete_"),
+            CallbackQueryHandler(show_template_list, pattern="^plan_templates_"),
+            CallbackQueryHandler(show_template_actions, pattern="^template_[a-f0-9-]+$"),
         ],
         TEMPLATE_CREATE_NAME: [
             MessageHandler(filters.TEXT & ~filters.COMMAND, template_create_name),

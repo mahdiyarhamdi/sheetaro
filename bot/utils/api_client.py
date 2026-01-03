@@ -698,6 +698,92 @@ class APIClient:
     
     # ==================== Question APIs ====================
     
+    # ==================== Section APIs ====================
+    
+    async def get_sections(self, plan_id: str, active_only: bool = True) -> Optional[List[Dict[str, Any]]]:
+        """Get all sections for a plan with their questions."""
+        client = await self._get_client()
+        try:
+            response = await client.get(
+                f"/api/v1/plans/{plan_id}/sections",
+                params={"active_only": active_only}
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error getting sections: {e}")
+            return None
+    
+    async def get_section(self, section_id: str) -> Optional[Dict[str, Any]]:
+        """Get a section by ID."""
+        client = await self._get_client()
+        try:
+            response = await client.get(f"/api/v1/sections/{section_id}")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error getting section: {e}")
+            return None
+    
+    async def create_section(self, plan_id: str, admin_id: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Create a new section."""
+        client = await self._get_client()
+        try:
+            response = await client.post(
+                f"/api/v1/plans/{plan_id}/sections",
+                json=data,
+                params={"admin_id": admin_id}
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error creating section: {e}")
+            return None
+    
+    async def update_section(self, section_id: str, admin_id: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Update a section."""
+        client = await self._get_client()
+        try:
+            response = await client.patch(
+                f"/api/v1/sections/{section_id}",
+                json=data,
+                params={"admin_id": admin_id}
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error updating section: {e}")
+            return None
+    
+    async def delete_section(self, section_id: str, admin_id: str) -> bool:
+        """Delete a section."""
+        client = await self._get_client()
+        try:
+            response = await client.delete(
+                f"/api/v1/sections/{section_id}",
+                params={"admin_id": admin_id}
+            )
+            return response.status_code == 204
+        except httpx.HTTPError as e:
+            logger.error(f"Error deleting section: {e}")
+            return False
+    
+    async def reorder_sections(self, items: List[Dict[str, Any]], admin_id: str) -> bool:
+        """Reorder sections."""
+        client = await self._get_client()
+        try:
+            response = await client.patch(
+                "/api/v1/sections/reorder",
+                json={"items": items},
+                params={"admin_id": admin_id}
+            )
+            return response.status_code == 200
+        except httpx.HTTPError as e:
+            logger.error(f"Error reordering sections: {e}")
+            return False
+    
+    # ==================== Question APIs ====================
+    
     async def get_questions(self, plan_id: str, active_only: bool = True) -> Optional[List[Dict[str, Any]]]:
         """Get all questions for a plan."""
         client = await self._get_client()
@@ -841,6 +927,83 @@ class APIClient:
             return response.json()
         except httpx.HTTPError as e:
             logger.error(f"Error applying logo to template: {e}")
+            return None
+    
+    # ==================== Questionnaire Answer APIs ====================
+    
+    async def validate_answer(self, question_id: str, answer_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Validate a single answer for a question."""
+        client = await self._get_client()
+        try:
+            response = await client.post(
+                f"/api/v1/questions/{question_id}/validate",
+                json=answer_data
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error validating answer: {e}")
+            return None
+    
+    async def submit_answers(self, order_id: str, answers: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """Submit all questionnaire answers for an order."""
+        client = await self._get_client()
+        try:
+            response = await client.post(
+                f"/api/v1/orders/{order_id}/answers",
+                json={"answers": answers}
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error submitting answers: {e}")
+            return None
+    
+    async def get_order_answers(self, order_id: str) -> Optional[List[Dict[str, Any]]]:
+        """Get all answers for an order."""
+        client = await self._get_client()
+        try:
+            response = await client.get(f"/api/v1/orders/{order_id}/answers")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error getting order answers: {e}")
+            return None
+    
+    async def get_answers_summary(self, order_id: str) -> Optional[List[Dict[str, Any]]]:
+        """Get a formatted summary of answers for an order."""
+        client = await self._get_client()
+        try:
+            response = await client.get(f"/api/v1/orders/{order_id}/answers/summary")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error getting answers summary: {e}")
+            return None
+    
+    async def create_order_design(self, order_id: str, template_id: str, logo_url: str) -> Optional[Dict[str, Any]]:
+        """Create a processed design for an order."""
+        client = await self._get_client()
+        try:
+            response = await client.post(
+                f"/api/v1/orders/{order_id}/design",
+                json={"template_id": template_id, "logo_url": logo_url}
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error creating order design: {e}")
+            return None
+    
+    async def get_order_designs(self, order_id: str) -> Optional[List[Dict[str, Any]]]:
+        """Get all processed designs for an order."""
+        client = await self._get_client()
+        try:
+            response = await client.get(f"/api/v1/orders/{order_id}/design")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error getting order designs: {e}")
             return None
 
 

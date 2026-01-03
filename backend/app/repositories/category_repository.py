@@ -9,18 +9,24 @@ from sqlalchemy.orm import selectinload
 from app.models.category import Category
 from app.models.attribute import CategoryAttribute, AttributeOption
 from app.models.design_plan import CategoryDesignPlan
+from app.models.question_section import QuestionSection
 from app.models.design_question import DesignQuestion, QuestionOption
 from app.models.design_template import DesignTemplate
+from app.models.processed_design import ProcessedDesign
 from app.models.order_step import OrderStepTemplate
+from app.models.question_answer import QuestionAnswer
 from app.schemas.category import (
     CategoryCreate, CategoryUpdate,
     AttributeCreate, AttributeUpdate,
     AttributeOptionCreate, AttributeOptionUpdate,
     DesignPlanCreate, DesignPlanUpdate,
+    SectionCreate, SectionUpdate,
     QuestionCreate, QuestionUpdate,
     QuestionOptionCreate, QuestionOptionUpdate,
     TemplateCreate, TemplateUpdate,
     StepTemplateCreate, StepTemplateUpdate,
+    ProcessedDesignCreate,
+    QuestionAnswerCreate,
 )
 
 
@@ -200,11 +206,12 @@ class CategoryRepository:
         return result.scalar_one_or_none()
     
     async def get_plan_with_details(self, plan_id: UUID) -> Optional[CategoryDesignPlan]:
-        """Get design plan with questions and templates."""
+        """Get design plan with sections, questions and templates."""
         result = await self.db.execute(
             select(CategoryDesignPlan)
             .where(CategoryDesignPlan.id == plan_id)
             .options(
+                selectinload(CategoryDesignPlan.sections).selectinload(QuestionSection.questions).selectinload(DesignQuestion.options),
                 selectinload(CategoryDesignPlan.questions).selectinload(DesignQuestion.options),
                 selectinload(CategoryDesignPlan.templates),
             )
@@ -239,6 +246,67 @@ class CategoryRepository:
         await self.db.commit()
         return result.rowcount > 0
     
+    # ============== Sections ==============
+    
+    async def get_sections_by_plan(self, plan_id: UUID, active_only: bool = True) -> List[QuestionSection]:
+        """Get all sections for a plan."""
+        query = select(QuestionSection).where(QuestionSection.plan_id == plan_id)
+        if active_only:
+            query = query.where(QuestionSection.is_active == True)
+        query = query.order_by(QuestionSection.sort_order).options(
+            selectinload(QuestionSection.questions).selectinload(DesignQuestion.options)
+        )
+        result = await self.db.execute(query)
+        return result.scalars().all()
+    
+    async def get_section_by_id(self, section_id: UUID) -> Optional[QuestionSection]:
+        """Get section by ID."""
+        result = await self.db.execute(
+            select(QuestionSection)
+            .where(QuestionSection.id == section_id)
+            .options(selectinload(QuestionSection.questions).selectinload(DesignQuestion.options))
+        )
+        return result.scalar_one_or_none()
+    
+    async def create_section(self, plan_id: UUID, data: SectionCreate) -> QuestionSection:
+        """Create a new section."""
+        section = QuestionSection(plan_id=plan_id, **data.model_dump())
+        self.db.add(section)
+        await self.db.commit()
+        await self.db.refresh(section)
+        return section
+    
+    async def update_section(self, section_id: UUID, data: SectionUpdate) -> Optional[QuestionSection]:
+        """Update a section."""
+        update_data = data.model_dump(exclude_unset=True)
+        if not update_data:
+            return await self.get_section_by_id(section_id)
+        
+        await self.db.execute(
+            update(QuestionSection).where(QuestionSection.id == section_id).values(**update_data)
+        )
+        await self.db.commit()
+        return await self.get_section_by_id(section_id)
+    
+    async def delete_section(self, section_id: UUID) -> bool:
+        """Delete a section."""
+        result = await self.db.execute(
+            delete(QuestionSection).where(QuestionSection.id == section_id)
+        )
+        await self.db.commit()
+        return result.rowcount > 0
+    
+    async def reorder_sections(self, items: List[dict]) -> bool:
+        """Reorder sections by updating sort_order."""
+        for item in items:
+            await self.db.execute(
+                update(QuestionSection)
+                .where(QuestionSection.id == item['id'])
+                .values(sort_order=item['sort_order'])
+            )
+        await self.db.commit()
+        return True
+    
     # ============== Questions ==============
     
     async def get_questions_by_plan(self, plan_id: UUID, active_only: bool = True) -> List[DesignQuestion]:
@@ -246,7 +314,22 @@ class CategoryRepository:
         query = select(DesignQuestion).where(DesignQuestion.plan_id == plan_id)
         if active_only:
             query = query.where(DesignQuestion.is_active == True)
-        query = query.order_by(DesignQuestion.sort_order).options(selectinload(DesignQuestion.options))
+        query = query.order_by(DesignQuestion.sort_order).options(
+            selectinload(DesignQuestion.options),
+            selectinload(DesignQuestion.depends_on)
+        )
+        result = await self.db.execute(query)
+        return result.scalars().all()
+    
+    async def get_questions_by_section(self, section_id: UUID, active_only: bool = True) -> List[DesignQuestion]:
+        """Get all questions for a section."""
+        query = select(DesignQuestion).where(DesignQuestion.section_id == section_id)
+        if active_only:
+            query = query.where(DesignQuestion.is_active == True)
+        query = query.order_by(DesignQuestion.sort_order).options(
+            selectinload(DesignQuestion.options),
+            selectinload(DesignQuestion.depends_on)
+        )
         result = await self.db.execute(query)
         return result.scalars().all()
     
@@ -294,6 +377,17 @@ class CategoryRepository:
         )
         await self.db.commit()
         return result.rowcount > 0
+    
+    async def reorder_questions(self, items: List[dict]) -> bool:
+        """Reorder questions by updating sort_order."""
+        for item in items:
+            await self.db.execute(
+                update(DesignQuestion)
+                .where(DesignQuestion.id == item['id'])
+                .values(sort_order=item['sort_order'])
+            )
+        await self.db.commit()
+        return True
     
     # ============== Question Options ==============
     
@@ -420,6 +514,89 @@ class CategoryRepository:
         """Delete a step template."""
         result = await self.db.execute(
             delete(OrderStepTemplate).where(OrderStepTemplate.id == template_id)
+        )
+        await self.db.commit()
+        return result.rowcount > 0
+    
+    # ============== Processed Designs ==============
+    
+    async def get_processed_designs_by_order(self, order_id: UUID) -> List[ProcessedDesign]:
+        """Get all processed designs for an order."""
+        result = await self.db.execute(
+            select(ProcessedDesign)
+            .where(ProcessedDesign.order_id == order_id)
+            .options(selectinload(ProcessedDesign.template))
+        )
+        return result.scalars().all()
+    
+    async def get_processed_design_by_id(self, design_id: UUID) -> Optional[ProcessedDesign]:
+        """Get processed design by ID."""
+        result = await self.db.execute(
+            select(ProcessedDesign)
+            .where(ProcessedDesign.id == design_id)
+            .options(selectinload(ProcessedDesign.template))
+        )
+        return result.scalar_one_or_none()
+    
+    async def create_processed_design(
+        self, order_id: Optional[UUID], template_id: UUID,
+        logo_url: str, preview_url: str, final_url: str
+    ) -> ProcessedDesign:
+        """Create a new processed design."""
+        design = ProcessedDesign(
+            order_id=order_id,
+            template_id=template_id,
+            logo_url=logo_url,
+            preview_url=preview_url,
+            final_url=final_url
+        )
+        self.db.add(design)
+        await self.db.commit()
+        await self.db.refresh(design)
+        return design
+    
+    # ============== Question Answers ==============
+    
+    async def get_answers_by_order(self, order_id: UUID) -> List[QuestionAnswer]:
+        """Get all answers for an order."""
+        result = await self.db.execute(
+            select(QuestionAnswer)
+            .where(QuestionAnswer.order_id == order_id)
+            .options(selectinload(QuestionAnswer.question))
+        )
+        return result.scalars().all()
+    
+    async def get_answer_by_id(self, answer_id: UUID) -> Optional[QuestionAnswer]:
+        """Get answer by ID."""
+        result = await self.db.execute(
+            select(QuestionAnswer).where(QuestionAnswer.id == answer_id)
+        )
+        return result.scalar_one_or_none()
+    
+    async def create_answer(self, order_id: UUID, data: QuestionAnswerCreate) -> QuestionAnswer:
+        """Create a new answer."""
+        answer = QuestionAnswer(order_id=order_id, **data.model_dump())
+        self.db.add(answer)
+        await self.db.commit()
+        await self.db.refresh(answer)
+        return answer
+    
+    async def submit_answers(self, order_id: UUID, answers: List[QuestionAnswerCreate]) -> List[QuestionAnswer]:
+        """Submit all answers for an order."""
+        created_answers = []
+        for answer_data in answers:
+            answer = QuestionAnswer(order_id=order_id, **answer_data.model_dump())
+            self.db.add(answer)
+            created_answers.append(answer)
+        await self.db.commit()
+        for answer in created_answers:
+            await self.db.refresh(answer)
+        return created_answers
+    
+    async def delete_answers_by_order(self, order_id: UUID) -> bool:
+        """Delete all answers for an order."""
+        result = await self.db.execute(
+            delete(QuestionAnswer).where(QuestionAnswer.order_id == order_id)
         )
         await self.db.commit()
         return result.rowcount > 0

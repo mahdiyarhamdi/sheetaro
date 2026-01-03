@@ -39,6 +39,18 @@ from handlers.flows.catalog_flow import (
     handle_back_to_admin,
 )
 
+# Import customer flow handlers
+from handlers.customer_questionnaire import (
+    handle_question_callback,
+    handle_question_text_input,
+    handle_question_photo_input,
+)
+from handlers.customer_templates import (
+    handle_template_selection,
+    handle_logo_upload,
+    handle_template_callback,
+)
+
 # Load environment variables
 load_dotenv()
 
@@ -94,12 +106,37 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_plan_type, pattern="^ptype_"))
     application.add_handler(CallbackQueryHandler(show_plan_actions, pattern="^plan_[a-f0-9-]+$"))
     
+    # ============== Customer Questionnaire Handlers ==============
+    # Questionnaire navigation
+    application.add_handler(CallbackQueryHandler(handle_question_callback, pattern="^q_"))
+    application.add_handler(CallbackQueryHandler(handle_question_callback, pattern="^qans_"))
+    application.add_handler(CallbackQueryHandler(handle_question_callback, pattern="^qmulti_"))
+    application.add_handler(CallbackQueryHandler(handle_question_callback, pattern="^qcolor_"))
+    application.add_handler(CallbackQueryHandler(handle_question_callback, pattern="^qscale_"))
+    
+    # ============== Customer Template Handlers ==============
+    application.add_handler(CallbackQueryHandler(handle_template_selection, pattern="^select_tpl_"))
+    application.add_handler(CallbackQueryHandler(handle_template_callback, pattern="^confirm_design$"))
+    application.add_handler(CallbackQueryHandler(handle_template_callback, pattern="^change_logo$"))
+    application.add_handler(CallbackQueryHandler(handle_template_callback, pattern="^retry_logo$"))
+    application.add_handler(CallbackQueryHandler(handle_template_callback, pattern="^order_back_tpl$"))
+    
     # ============== Central Text Router ==============
     # This handles all text messages and routes them to the appropriate flow
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, route_text_input))
     
-    # ============== Photo Handler for Receipts ==============
-    # TODO: Add photo handler for receipt uploads
+    # ============== Photo Handler ==============
+    async def handle_photo(update: Update, context):
+        """Route photo uploads to appropriate handler."""
+        # Try questionnaire first
+        if await handle_question_photo_input(update, context):
+            return
+        # Try template logo upload
+        if await handle_logo_upload(update, context):
+            return
+        # Default: ignore
+    
+    application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     
     # Start bot
     logger.info("Starting bot with unified flow manager...")

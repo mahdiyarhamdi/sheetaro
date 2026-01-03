@@ -13,11 +13,17 @@ from app.schemas.category import (
     AttributeCreate, AttributeUpdate, AttributeOut, AttributeWithOptions,
     AttributeOptionCreate, AttributeOptionUpdate, AttributeOptionOut,
     DesignPlanCreate, DesignPlanUpdate, DesignPlanOut, DesignPlanWithDetails,
+    SectionCreate, SectionUpdate, SectionOut, SectionWithQuestions, SectionReorderRequest,
     QuestionCreate, QuestionUpdate, QuestionOut, QuestionWithOptions,
+    QuestionReorderRequest, ValidateAnswerRequest, ValidateAnswerResponse,
     QuestionOptionCreate, QuestionOptionUpdate, QuestionOptionOut,
     TemplateCreate, TemplateUpdate, TemplateOut, ApplyLogoRequest, ApplyLogoResponse,
+    ProcessedDesignOut, ProcessedDesignCreate, ProcessedDesignWithTemplate,
     StepTemplateCreate, StepTemplateUpdate, StepTemplateOut,
+    QuestionAnswerOut, QuestionAnswerCreate, SubmitAnswersRequest,
 )
+from app.services.questionnaire_service import QuestionnaireService
+from app.repositories.category_repository import CategoryRepository
 
 router = APIRouter(prefix="/api/v1/categories", tags=["categories"])
 
@@ -302,6 +308,121 @@ async def delete_plan(
         raise HTTPException(status_code=404, detail="Plan not found")
 
 
+# ============== Section Endpoints ==============
+
+@plans_router.get("/{plan_id}/sections", response_model=List[SectionWithQuestions])
+async def list_sections(
+    plan_id: UUID,
+    active_only: bool = True,
+    db: AsyncSession = Depends(get_db),
+):
+    """List all sections for a plan with their questions."""
+    repo = CategoryRepository(db)
+    return await repo.get_sections_by_plan(plan_id, active_only)
+
+
+@plans_router.post("/{plan_id}/sections", response_model=SectionOut, status_code=status.HTTP_201_CREATED)
+async def create_section(
+    plan_id: UUID,
+    data: SectionCreate,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(get_current_admin_user),
+):
+    """Create a new section. Admin only."""
+    repo = CategoryRepository(db)
+    return await repo.create_section(plan_id, data)
+
+
+# Sections CRUD
+sections_router = APIRouter(prefix="/api/v1/sections", tags=["sections"])
+
+
+@sections_router.get("/{section_id}", response_model=SectionWithQuestions)
+async def get_section(
+    section_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a section by ID with its questions."""
+    repo = CategoryRepository(db)
+    section = await repo.get_section_by_id(section_id)
+    if not section:
+        raise HTTPException(status_code=404, detail="Section not found")
+    return section
+
+
+@sections_router.patch("/{section_id}", response_model=SectionOut)
+async def update_section(
+    section_id: UUID,
+    data: SectionUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(get_current_admin_user),
+):
+    """Update a section. Admin only."""
+    repo = CategoryRepository(db)
+    section = await repo.update_section(section_id, data)
+    if not section:
+        raise HTTPException(status_code=404, detail="Section not found")
+    return section
+
+
+@sections_router.delete("/{section_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_section(
+    section_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(get_current_admin_user),
+):
+    """Delete a section. Admin only."""
+    repo = CategoryRepository(db)
+    deleted = await repo.delete_section(section_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Section not found")
+
+
+@sections_router.patch("/reorder", status_code=status.HTTP_200_OK)
+async def reorder_sections(
+    data: SectionReorderRequest,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(get_current_admin_user),
+):
+    """Reorder sections. Admin only."""
+    repo = CategoryRepository(db)
+    items = [{"id": item.id, "sort_order": item.sort_order} for item in data.items]
+    await repo.reorder_sections(items)
+    return {"success": True}
+
+
+@sections_router.get("/{section_id}/questions", response_model=List[QuestionWithOptions])
+async def list_section_questions(
+    section_id: UUID,
+    active_only: bool = True,
+    db: AsyncSession = Depends(get_db),
+):
+    """List all questions for a section."""
+    repo = CategoryRepository(db)
+    return await repo.get_questions_by_section(section_id, active_only)
+
+
+@sections_router.post("/{section_id}/questions", response_model=QuestionWithOptions, status_code=status.HTTP_201_CREATED)
+async def create_section_question(
+    section_id: UUID,
+    data: QuestionCreate,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(get_current_admin_user),
+):
+    """Create a new question in a section. Admin only."""
+    repo = CategoryRepository(db)
+    # Get section to find plan_id
+    section = await repo.get_section_by_id(section_id)
+    if not section:
+        raise HTTPException(status_code=404, detail="Section not found")
+    
+    # Create question with section_id
+    data_dict = data.model_dump()
+    data_dict['section_id'] = section_id
+    question_data = QuestionCreate(**data_dict)
+    return await repo.create_question(section.plan_id, question_data)
+
+
 # ============== Question Endpoints ==============
 
 @plans_router.get("/{plan_id}/questions", response_model=List[QuestionWithOptions])
@@ -370,6 +491,35 @@ async def delete_question(
     deleted = await service.delete_question(question_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Question not found")
+
+
+@questions_router.post("/{question_id}/validate", response_model=ValidateAnswerResponse)
+async def validate_answer(
+    question_id: UUID,
+    data: ValidateAnswerRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Validate an answer for a question."""
+    repo = CategoryRepository(db)
+    question = await repo.get_question_by_id(question_id)
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    
+    questionnaire_service = QuestionnaireService(repo)
+    return questionnaire_service.validate_answer(question, data)
+
+
+@questions_router.patch("/reorder", status_code=status.HTTP_200_OK)
+async def reorder_questions(
+    data: QuestionReorderRequest,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(get_current_admin_user),
+):
+    """Reorder questions. Admin only."""
+    repo = CategoryRepository(db)
+    items = [{"id": item.id, "sort_order": item.sort_order} for item in data.items]
+    await repo.reorder_questions(items)
+    return {"success": True}
 
 
 @questions_router.post("/{question_id}/options", response_model=QuestionOptionOut, status_code=status.HTTP_201_CREATED)
@@ -587,4 +737,126 @@ async def delete_step_template(
     deleted = await service.delete_step_template(template_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Step template not found")
+
+
+# ============== Processed Design Endpoints ==============
+
+processed_designs_router = APIRouter(prefix="/api/v1/processed-designs", tags=["processed-designs"])
+
+
+@processed_designs_router.get("/{design_id}", response_model=ProcessedDesignWithTemplate)
+async def get_processed_design(
+    design_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a processed design by ID."""
+    repo = CategoryRepository(db)
+    design = await repo.get_processed_design_by_id(design_id)
+    if not design:
+        raise HTTPException(status_code=404, detail="Processed design not found")
+    return design
+
+
+# ============== Questionnaire Answer Endpoints ==============
+
+answers_router = APIRouter(prefix="/api/v1/orders", tags=["answers"])
+
+
+@answers_router.get("/{order_id}/answers", response_model=List[QuestionAnswerOut])
+async def list_order_answers(
+    order_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """List all questionnaire answers for an order."""
+    repo = CategoryRepository(db)
+    return await repo.get_answers_by_order(order_id)
+
+
+@answers_router.post("/{order_id}/answers", status_code=status.HTTP_201_CREATED)
+async def submit_order_answers(
+    order_id: UUID,
+    data: SubmitAnswersRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Submit all questionnaire answers for an order."""
+    repo = CategoryRepository(db)
+    
+    # Get the order to find the plan_id
+    from app.repositories.order_repository import OrderRepository
+    order_repo = OrderRepository(db)
+    order = await order_repo.get_order_by_id(order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # For now, we need to get plan_id from order or pass it
+    # This assumes order has a design_plan_id field
+    plan_id = getattr(order, 'design_plan_id', None)
+    if not plan_id:
+        # Submit without validation if no plan_id
+        answers = await repo.submit_answers(order_id, data.answers)
+        return {"success": True, "answer_count": len(answers)}
+    
+    questionnaire_service = QuestionnaireService(repo)
+    result = await questionnaire_service.submit_questionnaire(order_id, plan_id, data.answers)
+    
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result["errors"])
+    
+    return result
+
+
+@answers_router.get("/{order_id}/answers/summary")
+async def get_order_answers_summary(
+    order_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a formatted summary of answers for an order."""
+    repo = CategoryRepository(db)
+    questionnaire_service = QuestionnaireService(repo)
+    return await questionnaire_service.get_answers_summary(order_id)
+
+
+@answers_router.get("/{order_id}/design", response_model=List[ProcessedDesignWithTemplate])
+async def get_order_designs(
+    order_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all processed designs for an order."""
+    repo = CategoryRepository(db)
+    return await repo.get_processed_designs_by_order(order_id)
+
+
+@answers_router.post("/{order_id}/design", response_model=ProcessedDesignOut, status_code=status.HTTP_201_CREATED)
+async def create_order_design(
+    order_id: UUID,
+    data: ProcessedDesignCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Process a template with logo and save as order design."""
+    repo = CategoryRepository(db)
+    
+    # Get template
+    template = await repo.get_template_by_id(data.template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    # Process template with logo
+    template_service = TemplateService(repository=repo)
+    base_url = str(request.base_url).rstrip('/')
+    
+    try:
+        result = await template_service.process_and_save_design(
+            template=template,
+            logo_url=data.logo_url,
+            order_id=str(order_id),
+            base_url=base_url,
+        )
+        
+        # Get the created design
+        from uuid import UUID as PyUUID
+        design = await repo.get_processed_design_by_id(PyUUID(result["design_id"]))
+        return design
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 

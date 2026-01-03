@@ -32,6 +32,7 @@ class CategoryDesignPlan(Base):
     
     # Relationships
     category = relationship("Category", back_populates="design_plans")
+    sections = relationship("QuestionSection", back_populates="plan", cascade="all, delete-orphan")
     questions = relationship("DesignQuestion", back_populates="plan", cascade="all, delete-orphan")
     templates = relationship("DesignTemplate", back_populates="plan", cascade="all, delete-orphan")
     

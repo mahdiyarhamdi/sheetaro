@@ -133,19 +133,71 @@ docker-compose up --build
 - `PATCH /plans/{id}` - Update plan (Admin)
 - `DELETE /plans/{id}` - Delete plan (Admin)
 
+#### Sections (`/api/v1/plans/{id}/sections`) - Question Grouping
+- `GET /plans/{id}/sections` - List questionnaire sections
+- `POST /plans/{id}/sections` - Create section (Admin)
+- `GET /sections/{id}` - Get section details
+- `PATCH /sections/{id}` - Update section (Admin)
+- `DELETE /sections/{id}` - Delete section (Admin)
+- `PATCH /sections/reorder` - Reorder sections (Admin)
+
 #### Questions (`/api/v1/plans/{id}/questions`) - For Semi-Private Plans
 - `GET /plans/{id}/questions` - List questionnaire questions
 - `POST /plans/{id}/questions` - Create question with options (Admin)
+- `GET /questions/{id}` - Get question details
 - `PATCH /questions/{id}` - Update question (Admin)
 - `DELETE /questions/{id}` - Delete question (Admin)
 - `POST /questions/{id}/options` - Add option to question (Admin)
+- `POST /questions/{id}/validate` - Validate an answer against question rules
+
+**Question Input Types:**
+- `TEXT` - Short text input
+- `TEXTAREA` - Long text input
+- `NUMBER` - Numeric input with min/max validation
+- `SINGLE_CHOICE` - Single option selection
+- `MULTI_CHOICE` - Multiple option selection
+- `IMAGE_UPLOAD` - Image file upload
+- `FILE_UPLOAD` - Any file upload
+- `COLOR_PICKER` - Color selection (hex code)
+- `DATE_PICKER` - Date input (Jalali format)
+- `SCALE` - Numeric scale (1-5 or 1-10)
+
+**Validation Rules (JSON):**
+```json
+{
+  "min_length": 2,        // For TEXT
+  "max_length": 100,
+  "min_value": 1,         // For NUMBER/SCALE
+  "max_value": 1000,
+  "pattern": "^[\\w]+$",  // Regex pattern
+  "min_selections": 1,    // For MULTI_CHOICE
+  "max_selections": 5
+}
+```
 
 #### Templates (`/api/v1/plans/{id}/templates`) - For Public Plans
 - `GET /plans/{id}/templates` - List design templates
 - `POST /plans/{id}/templates` - Create template with placeholder info (Admin)
+- `GET /templates/{id}` - Get template details
 - `PATCH /templates/{id}` - Update template (Admin)
 - `DELETE /templates/{id}` - Delete template (Admin)
 - `POST /templates/{id}/apply-logo` - Apply user logo to template placeholder
+
+**Template Placeholder:**
+When uploading a template, specify where the user's logo will be placed:
+- `placeholder_x`, `placeholder_y` - Top-left corner position
+- `placeholder_width`, `placeholder_height` - Size of placeholder area
+- The preview will show a red square indicating the logo placement area
+- User logos are automatically resized to fit and centered in the placeholder
+
+#### Questionnaire Answers (`/api/v1/orders/{id}/answers`)
+- `POST /orders/{id}/answers` - Submit all questionnaire answers
+- `GET /orders/{id}/answers` - Get saved answers
+- `GET /orders/{id}/answers/summary` - Get formatted answer summary
+
+#### Processed Designs (`/api/v1/orders/{id}/design`)
+- `POST /orders/{id}/design` - Create processed design from template + logo
+- `GET /orders/{id}/design` - Get order's processed design(s)
 
 #### Step Templates (`/api/v1/categories/{id}/steps`)
 - `GET /categories/{id}/steps` - List order step templates

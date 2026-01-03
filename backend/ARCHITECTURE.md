@@ -443,12 +443,23 @@ Category (e.g., "Label")
     │   └── AttributeOption (e.g., "5x5cm", "10x10cm")
     │
     ├── CategoryDesignPlan (e.g., "Public", "Semi-Private")
-    │   ├── [if has_questionnaire] DesignQuestion
-    │   │   └── QuestionOption
+    │   │
+    │   ├── [if has_questionnaire] QuestionSection (e.g., "Brand Info", "Design Preferences")
+    │   │   └── DesignQuestion (e.g., "Brand Name", "Preferred Colors")
+    │   │       ├── validation_rules (min_length, max_value, pattern, etc.)
+    │   │       ├── depends_on_question_id (conditional logic)
+    │   │       └── QuestionOption (for SINGLE_CHOICE, MULTI_CHOICE)
+    │   │
     │   └── [if has_templates] DesignTemplate
-    │       └── Placeholder info (x, y, w, h)
+    │       ├── image_url, image_width, image_height
+    │       ├── placeholder_x, placeholder_y, placeholder_width, placeholder_height
+    │       └── preview_url (with red square showing placeholder)
     │
-    └── OrderStepTemplate (e.g., "validation", "payment")
+    ├── OrderStepTemplate (e.g., "validation", "payment")
+    │
+    └── Order
+        ├── QuestionAnswer (stores questionnaire responses)
+        └── ProcessedDesign (stores final design from template + logo)
 ```
 
 ### Design Plans
@@ -467,6 +478,55 @@ For public plan templates:
 2. Placeholder is visualized as red square in preview
 3. When user selects template and uploads logo, system auto-places logo at placeholder position
 4. Uses Pillow (PIL) for image processing
+
+### Questionnaire System
+
+For semi-private plans, admin creates questionnaires:
+
+1. **Sections**: Group related questions (e.g., "Brand Info", "Design Preferences")
+2. **Questions**: Various input types with validation
+
+**Supported Input Types:**
+| Type | Description | Validation Options |
+|------|-------------|-------------------|
+| `TEXT` | Short text input | min_length, max_length, pattern |
+| `TEXTAREA` | Long text input | min_length, max_length |
+| `NUMBER` | Numeric input | min_value, max_value |
+| `SINGLE_CHOICE` | Single option select | From defined options |
+| `MULTI_CHOICE` | Multiple options | min_selections, max_selections |
+| `IMAGE_UPLOAD` | Image file | File size, dimensions |
+| `FILE_UPLOAD` | Any file | File size, extensions |
+| `COLOR_PICKER` | Hex color | Format validation |
+| `DATE_PICKER` | Date input | Jalali format |
+| `SCALE` | 1-5 or 1-10 scale | min_value, max_value |
+
+**Conditional Logic:**
+Questions can depend on previous answers:
+```json
+{
+  "depends_on_question_id": "q-123",
+  "depends_on_values": ["premium", "vip"]
+}
+```
+The question only shows if the answer to q-123 is "premium" or "vip".
+
+### Customer Flow
+
+**Public Plan Flow:**
+```
+Select Category → Select Attributes → Select Plan → 
+    → See Template Gallery → Select Template → 
+    → Upload Logo → Preview Design → Confirm → 
+    → Order Summary → Payment → Receipt Upload → Done
+```
+
+**Semi-Private Plan Flow:**
+```
+Select Category → Select Attributes → Select Plan →
+    → Fill Questionnaire (section by section) →
+    → Review Answers → Order Summary →
+    → Payment → Receipt Upload → Done
+```
 
 ---
 

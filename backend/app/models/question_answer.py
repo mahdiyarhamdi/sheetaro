@@ -27,7 +27,7 @@ class QuestionAnswer(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     
     # Relationships
-    question = relationship("DesignQuestion")
+    question = relationship("DesignQuestion", back_populates="answers")
     
     def __repr__(self) -> str:
         return f"<QuestionAnswer(id={self.id}, order_id={self.order_id}, question_id={self.question_id})>"
