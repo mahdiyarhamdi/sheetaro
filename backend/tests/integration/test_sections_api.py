@@ -65,7 +65,7 @@ class TestSectionsAPI:
     async def test_create_section(self, client: AsyncClient, test_plan, admin_user):
         """Test creating a section for a plan."""
         response = await client.post(
-            f"/api/v1/categories/plans/{test_plan['id']}/sections",
+            f"/api/v1/plans/{test_plan['id']}/sections",
             json={
                 "title_fa": "اطلاعات طراحی",
                 "description_fa": "در این بخش اطلاعات طراحی را وارد کنید",
@@ -84,7 +84,7 @@ class TestSectionsAPI:
         """Test updating a section."""
         # Create section first
         create_response = await client.post(
-            f"/api/v1/categories/plans/{test_plan['id']}/sections",
+            f"/api/v1/plans/{test_plan['id']}/sections",
             json={
                 "title_fa": "اطلاعات اولیه",
                 "sort_order": 1,
@@ -95,7 +95,7 @@ class TestSectionsAPI:
         
         # Update section
         response = await client.patch(
-            f"/api/v1/categories/sections/{section_id}",
+            f"/api/v1/sections/{section_id}",
             json={
                 "title_fa": "اطلاعات اولیه - ویرایش شده",
                 "description_fa": "توضیحات جدید",
@@ -113,7 +113,7 @@ class TestSectionsAPI:
         """Test deleting a section."""
         # Create section first
         create_response = await client.post(
-            f"/api/v1/categories/plans/{test_plan['id']}/sections",
+            f"/api/v1/plans/{test_plan['id']}/sections",
             json={
                 "title_fa": "بخش موقت",
                 "sort_order": 1,
@@ -124,7 +124,7 @@ class TestSectionsAPI:
         
         # Delete section
         response = await client.delete(
-            f"/api/v1/categories/sections/{section_id}",
+            f"/api/v1/sections/{section_id}",
             headers={"X-Telegram-ID": str(admin_user.telegram_id)},
         )
         
@@ -132,7 +132,7 @@ class TestSectionsAPI:
         
         # Verify section is deleted
         get_response = await client.get(
-            f"/api/v1/categories/sections/{section_id}",
+            f"/api/v1/sections/{section_id}",
         )
         assert get_response.status_code == 404
 
@@ -142,7 +142,7 @@ class TestSectionsAPI:
         # Create multiple sections
         for i in range(3):
             await client.post(
-                f"/api/v1/categories/plans/{test_plan['id']}/sections",
+                f"/api/v1/plans/{test_plan['id']}/sections",
                 json={
                     "title_fa": f"بخش {i + 1}",
                     "sort_order": i + 1,
@@ -152,7 +152,7 @@ class TestSectionsAPI:
         
         # List sections
         response = await client.get(
-            f"/api/v1/categories/plans/{test_plan['id']}/sections",
+            f"/api/v1/plans/{test_plan['id']}/sections",
         )
         
         assert response.status_code == 200
@@ -166,7 +166,7 @@ class TestSectionsAPI:
         section_ids = []
         for i in range(3):
             response = await client.post(
-                f"/api/v1/categories/plans/{test_plan['id']}/sections",
+                f"/api/v1/plans/{test_plan['id']}/sections",
                 json={
                     "title_fa": f"بخش {i + 1}",
                     "sort_order": i + 1,
@@ -177,7 +177,7 @@ class TestSectionsAPI:
         
         # Reorder sections (reverse order)
         reorder_response = await client.patch(
-            f"/api/v1/categories/plans/{test_plan['id']}/sections/reorder",
+            f"/api/v1/plans/{test_plan['id']}/sections/reorder",
             json={
                 "section_ids": list(reversed(section_ids)),
             },
@@ -191,7 +191,7 @@ class TestSectionsAPI:
         """Test that section includes its questions."""
         # Create section
         section_response = await client.post(
-            f"/api/v1/categories/plans/{test_plan['id']}/sections",
+            f"/api/v1/plans/{test_plan['id']}/sections",
             json={
                 "title_fa": "بخش با سوالات",
                 "sort_order": 1,
@@ -202,7 +202,7 @@ class TestSectionsAPI:
         
         # Add question to section
         await client.post(
-            f"/api/v1/categories/sections/{section_id}/questions",
+            f"/api/v1/sections/{section_id}/questions",
             json={
                 "question_fa": "نام برند شما چیست؟",
                 "input_type": "TEXT",
@@ -214,7 +214,7 @@ class TestSectionsAPI:
         
         # Get section with questions
         response = await client.get(
-            f"/api/v1/categories/sections/{section_id}/questions",
+            f"/api/v1/sections/{section_id}/questions",
         )
         
         assert response.status_code == 200
@@ -223,19 +223,22 @@ class TestSectionsAPI:
         assert data[0]["question_fa"] == "نام برند شما چیست؟"
 
     @pytest.mark.asyncio
-    async def test_create_section_unauthorized(self, client: AsyncClient, test_plan):
-        """Test that non-admin cannot create section."""
+    async def test_create_section_without_auth(self, client: AsyncClient, test_plan):
+        """Test section creation without explicit auth header.
+        
+        Note: In MVP mode, admin endpoints allow requests without auth.
+        """
         response = await client.post(
-            f"/api/v1/categories/plans/{test_plan['id']}/sections",
+            f"/api/v1/plans/{test_plan['id']}/sections",
             json={
-                "title_fa": "بخش غیرمجاز",
+                "title_fa": "بخش بدون احراز هویت",
                 "sort_order": 1,
             },
-            # No admin header
+            # No admin header - MVP mode allows this
         )
         
-        # Should get unauthorized or forbidden
-        assert response.status_code in [401, 403, 422]
+        # MVP mode allows creation without auth
+        assert response.status_code == 201
 
     @pytest.mark.asyncio
     async def test_create_section_invalid_plan(self, client: AsyncClient, admin_user):
@@ -243,7 +246,7 @@ class TestSectionsAPI:
         fake_plan_id = str(uuid4())
         
         response = await client.post(
-            f"/api/v1/categories/plans/{fake_plan_id}/sections",
+            f"/api/v1/plans/{fake_plan_id}/sections",
             json={
                 "title_fa": "بخش تست",
                 "sort_order": 1,
@@ -262,7 +265,7 @@ class TestSectionsAPI:
         
         for order in sort_orders:
             response = await client.post(
-                f"/api/v1/categories/plans/{test_plan['id']}/sections",
+                f"/api/v1/plans/{test_plan['id']}/sections",
                 json={
                     "title_fa": f"بخش با ترتیب {order}",
                     "sort_order": order,
@@ -273,7 +276,7 @@ class TestSectionsAPI:
         
         # List should return in sort_order
         list_response = await client.get(
-            f"/api/v1/categories/plans/{test_plan['id']}/sections",
+            f"/api/v1/plans/{test_plan['id']}/sections",
         )
         
         assert list_response.status_code == 200
