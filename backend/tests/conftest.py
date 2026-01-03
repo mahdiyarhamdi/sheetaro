@@ -61,7 +61,7 @@ BEGIN
         CREATE TYPE designplantype AS ENUM ('PUBLIC', 'SEMI_PRIVATE', 'PRIVATE', 'OWN_DESIGN');
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'questioninputtype') THEN
-        CREATE TYPE questioninputtype AS ENUM ('TEXT', 'SINGLE_CHOICE', 'MULTI_CHOICE', 'IMAGE_UPLOAD', 'COLOR_PICKER');
+        CREATE TYPE questioninputtype AS ENUM ('TEXT', 'TEXTAREA', 'NUMBER', 'SINGLE_CHOICE', 'MULTI_CHOICE', 'IMAGE_UPLOAD', 'FILE_UPLOAD', 'COLOR_PICKER', 'DATE_PICKER', 'SCALE');
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'steptype') THEN
         CREATE TYPE steptype AS ENUM ('VALIDATION', 'PAYMENT', 'DESIGN', 'PRINT', 'SHIPPING');
