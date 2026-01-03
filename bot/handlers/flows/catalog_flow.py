@@ -770,7 +770,7 @@ async def handle_question_type(update: Update, context: ContextTypes.DEFAULT_TYP
     
     # Create question
     data = {
-        'text_fa': question_text,
+        'question_fa': question_text,
         'input_type': input_type,
         'is_required': True,
         'sort_order': 0
