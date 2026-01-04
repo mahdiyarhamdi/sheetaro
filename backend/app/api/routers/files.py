@@ -1,10 +1,11 @@
 """File upload API router."""
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Request
 from fastapi.responses import FileResponse
 from uuid import UUID
 from pathlib import Path
 
+from app.core.rate_limit import limiter, RateLimits
 from app.schemas.file import FileUploadResponse
 from app.services.file_service import FileService, MAX_FILE_SIZE, UPLOAD_DIR
 
@@ -18,7 +19,9 @@ router = APIRouter()
     summary="Upload design file",
     description=f"Upload a design file (PDF, AI, PSD, PNG, JPG, SVG). Max size: {MAX_FILE_SIZE / 1024 / 1024}MB",
 )
+@limiter.limit(RateLimits.FILE_UPLOAD)
 async def upload_file(
+    request: Request,
     file: UploadFile = File(..., description="Design file to upload"),
     user_id: UUID = Query(..., description="User ID"),
 ) -> FileUploadResponse:
@@ -93,6 +96,7 @@ async def delete_file(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="File not found"
         )
+
 
 
 

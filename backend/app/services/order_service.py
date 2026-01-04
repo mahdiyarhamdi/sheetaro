@@ -1,4 +1,17 @@
-"""Order service for business logic."""
+"""Order service for business logic.
+
+This module contains the OrderService class which handles all business logic
+related to order management, including:
+- Order creation with automatic price calculation
+- Order status management and transitions
+- Print shop workflow (accept, print, ship)
+- Order cancellation with state validation
+
+Example usage:
+    service = OrderService(db)
+    order = await service.create_order(user_id, order_data)
+    await service.update_order_status(order.id, status_data)
+"""
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
@@ -27,9 +40,20 @@ DESIGN_PRICES = {
 
 
 class OrderService:
-    """Service layer for order business logic."""
+    """Service layer for order business logic.
+    
+    Handles all order-related operations including creation, updates,
+    status transitions, and print shop workflow.
+    
+    Attributes:
+        db: Async database session.
+        repository: Order repository for database operations.
+        product_repo: Product repository for product lookups.
+        user_repo: User repository for user lookups.
+    """
     
     def __init__(self, db: AsyncSession):
+        """Initialize OrderService with database session."""
         self.db = db
         self.repository = OrderRepository(db)
         self.product_repo = ProductRepository(db)
@@ -42,7 +66,18 @@ class OrderService:
         design_plan: DesignPlan,
         validation_requested: bool,
     ) -> dict:
-        """Calculate order prices."""
+        """Calculate order prices based on product and options.
+        
+        Args:
+            product_base_price: Base price per unit from product.
+            quantity: Number of units ordered.
+            design_plan: Selected design plan type.
+            validation_requested: Whether validation was requested.
+        
+        Returns:
+            Dictionary with design_price, validation_price, print_price,
+            total_price, and max_revisions.
+        """
         design_price = DESIGN_PRICES.get(design_plan, Decimal('0'))
         validation_price = VALIDATION_PRICE if validation_requested else Decimal('0')
         print_price = product_base_price * quantity
@@ -270,6 +305,7 @@ class OrderService:
             )
             return OrderOut.model_validate(updated_order)
         return None
+
 
 
 

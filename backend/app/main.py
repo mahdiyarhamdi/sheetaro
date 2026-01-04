@@ -6,8 +6,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import SQLAlchemyError
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
+from app.core.rate_limit import limiter, rate_limit_exceeded_handler
 from app.api.routers import health, users, products, orders, payments, validation, invoices, subscriptions, files
 from app.api.routers import settings as settings_router
 from app.api.routers.categories import (
@@ -23,7 +26,7 @@ from app.api.routers.categories import (
     processed_designs_router,
     answers_router,
 )
-from app.utils.logger import logger
+from app.utils.logger import logger, set_request_context, clear_request_context
 
 
 @asynccontextmanager
@@ -45,6 +48,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Rate Limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
 # CORS Middleware
 app.add_middleware(
     CORSMiddleware,
@@ -52,6 +59,54 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+
+# Request context middleware for logging
+@app.middleware("http")
+async def request_context_middleware(request: Request, call_next):
+    """Middleware to set request context for logging."""
+    import uuid
+    
+    # Generate request ID
+    request_id = str(uuid.uuid4())[:8]
+    
+    # Get client IP (handle proxy headers)
+    client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+    if not client_ip:
+        client_ip = request.headers.get("X-Real-IP", "")
+    if not client_ip and request.client:
+        client_ip = request.client.host
+    
+    # Get user agent
+    user_agent = request.headers.get("User-Agent", "")
+    
+    # Get user_id from query params if available
+    user_id = request.query_params.get("user_id", "")
+    
+    # Set context for logging
+    set_request_context(
+        request_id=request_id,
+        client_ip=client_ip,
+        user_agent=user_agent[:200] if user_agent else None,  # Truncate long user agents
+        user_id=user_id if user_id else None,
+    )
+    
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        clear_request_context()
+
+
+# Import custom exceptions
+from app.exceptions import (
+    SheetaroException,
+    BusinessException,
+    ResourceNotFoundException,
+    AuthorizationException,
+    PermissionDeniedException,
+    AdminRequiredException,
 )
 
 
@@ -76,13 +131,73 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
+@app.exception_handler(ResourceNotFoundException)
+async def resource_not_found_handler(request: Request, exc: ResourceNotFoundException) -> JSONResponse:
+    """Handle resource not found errors."""
+    logger.warning(f"Resource not found: {exc.message}")
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content=exc.to_dict(),
+    )
+
+
+@app.exception_handler(AdminRequiredException)
+async def admin_required_handler(request: Request, exc: AdminRequiredException) -> JSONResponse:
+    """Handle admin required errors."""
+    logger.warning(f"Admin access denied: {exc.message}")
+    return JSONResponse(
+        status_code=status.HTTP_403_FORBIDDEN,
+        content=exc.to_dict(),
+    )
+
+
+@app.exception_handler(PermissionDeniedException)
+async def permission_denied_handler(request: Request, exc: PermissionDeniedException) -> JSONResponse:
+    """Handle permission denied errors."""
+    logger.warning(f"Permission denied: {exc.message}")
+    return JSONResponse(
+        status_code=status.HTTP_403_FORBIDDEN,
+        content=exc.to_dict(),
+    )
+
+
+@app.exception_handler(AuthorizationException)
+async def authorization_exception_handler(request: Request, exc: AuthorizationException) -> JSONResponse:
+    """Handle authorization errors."""
+    logger.warning(f"Authorization error: {exc.message}")
+    return JSONResponse(
+        status_code=status.HTTP_403_FORBIDDEN,
+        content=exc.to_dict(),
+    )
+
+
+@app.exception_handler(BusinessException)
+async def business_exception_handler(request: Request, exc: BusinessException) -> JSONResponse:
+    """Handle business logic errors."""
+    logger.warning(f"Business error: {exc.message}")
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content=exc.to_dict(),
+    )
+
+
+@app.exception_handler(SheetaroException)
+async def sheetaro_exception_handler(request: Request, exc: SheetaroException) -> JSONResponse:
+    """Handle base Sheetaro errors."""
+    logger.error(f"Application error: {exc.message}")
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content=exc.to_dict(),
+    )
+
+
 @app.exception_handler(SQLAlchemyError)
 async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError) -> JSONResponse:
     """Handle database errors."""
     logger.error(f"Database error: {str(exc)}", exc_info=True)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "Database error occurred"},
+        content={"error": "DATABASE_ERROR", "message": "Database error occurred", "details": {}},
     )
 
 
@@ -92,7 +207,7 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
     logger.error(f"Unexpected error: {str(exc)}", exc_info=True)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "Internal server error"},
+        content={"error": "INTERNAL_ERROR", "message": "Internal server error", "details": {}},
     )
 
 

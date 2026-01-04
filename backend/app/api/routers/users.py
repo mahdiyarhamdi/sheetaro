@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_db
+from app.core.rate_limit import limiter, RateLimits
 from app.schemas.user import UserCreate, UserUpdate, UserOut
 from app.services.user_service import UserService
 
@@ -207,7 +208,9 @@ async def demote_from_admin(
     summary="Self-promote to admin (secret code)",
     description="Promote a user to admin using secret code mechanism",
 )
+@limiter.limit(RateLimits.MAKE_ADMIN)
 async def self_promote_to_admin(
+    request: Request,
     user_id: UUID,
     db: AsyncSession = Depends(get_db),
 ) -> UserOut:

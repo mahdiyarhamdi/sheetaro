@@ -203,6 +203,9 @@ python bot.py
 | `SECRET_KEY` | کلید امنیتی | `your-secret-key` |
 | `TELEGRAM_BOT_TOKEN` | توکن ربات تلگرام | `123456:ABC-DEF...` |
 | `API_BASE_URL` | آدرس API | `http://backend:3001` |
+| `DEBUG` | فعال‌سازی حالت دیباگ | `false` |
+| `APP_NAME` | نام اپلیکیشن | `Sheetaro` |
+| `APP_VERSION` | نسخه اپلیکیشن | `1.0.0` |
 
 ## Logging
 
@@ -210,13 +213,29 @@ python bot.py
 
 ```json
 {
-  "timestamp": "2024-01-01T12:00:00",
+  "timestamp": "2024-01-01T12:00:00Z",
   "level": "INFO",
   "event_type": "user.signup",
   "telegram_id": 123456,
-  "username": "user123"
+  "username": "user123",
+  "client_ip": "192.168.1.100",
+  "user_agent": "Mozilla/5.0...",
+  "request_id": "abc12345"
 }
 ```
+
+## محدودیت نرخ (Rate Limiting)
+
+API ها با استفاده از slowapi و Redis محدود شده‌اند:
+
+| نوع درخواست | محدودیت |
+|-------------|---------|
+| ورود/احراز هویت | 5 در دقیقه |
+| شروع پرداخت | 10 در دقیقه |
+| آپلود رسید | 5 در دقیقه |
+| آپلود فایل | 20 در دقیقه |
+| خواندن | 100 در دقیقه |
+| نوشتن | 30 در دقیقه |
 
 ## معماری ربات
 
@@ -268,5 +287,5 @@ docker-compose exec backend pytest --cov=app
 
 ---
 
-**Last Updated**: 2026-01-03
+**Last Updated**: 2026-01-04
 

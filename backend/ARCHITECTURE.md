@@ -30,7 +30,9 @@ Sheetaro backend is a FastAPI application for a **multi-role print ordering syst
 | Cache | Redis | 7 |
 | Auth | python-jose | ~3.3 |
 | HTTP Client | httpx | ~0.27 |
+| Rate Limiting | slowapi | ~0.1.9 |
 | File Storage | S3-Compatible | - |
+| Image Processing | Pillow | ~10.4 |
 | PDF Generation | (TBD) | - |
 
 ---
@@ -101,6 +103,7 @@ backend/
 ├── app/
 │   ├── __init__.py
 │   ├── main.py                 # FastAPI app entry point
+│   ├── exceptions.py           # Custom exceptions (SheetaroException hierarchy)
 │   ├── api/
 │   │   ├── __init__.py
 │   │   ├── deps.py             # Shared dependencies (DB session, auth)
@@ -122,8 +125,9 @@ backend/
 │   │       └── settings.py     # System settings (payment card)
 │   ├── core/
 │   │   ├── config.py           # Settings (pydantic-settings)
-│   │   ├── database.py         # DB engine & session factory
-│   │   └── security.py         # JWT, password hashing
+│   │   ├── database.py         # DB engine, session factory, UnitOfWork
+│   │   ├── security.py         # JWT, password hashing
+│   │   └── rate_limit.py       # Rate limiting (slowapi + Redis)
 │   ├── models/
 │   │   ├── enums.py            # All enums (UserRole, OrderStatus, etc.)
 │   │   ├── user.py             # User model
@@ -532,29 +536,45 @@ Select Category → Select Attributes → Select Plan →
 
 ## Logging
 
-Structured JSON logging for all events:
+Structured JSON logging with request context:
 
 ```json
 {
-  "timestamp": "2024-01-01T12:00:00",
+  "timestamp": "2024-01-01T12:00:00Z",
   "level": "INFO",
   "event_type": "user.signup",
   "telegram_id": 123456,
-  "user_id": "uuid-here"
+  "user_id": "uuid-here",
+  "ip": "192.168.1.100",
+  "ua": "Mozilla/5.0...",
+  "request_id": "abc12345"
 }
 ```
 
-Required events to log:
-- `user.signup` - New user registration
-- `user.login` - User authenticated
-- `user.update` - Profile updated
-- `user.promoted_to_admin` - User became admin
-- `user.demoted_from_admin` - Admin reverted to customer
-- `order.create` - New order
-- `order.status_change` - Order status update
-- `payment.receipt_uploaded` - Receipt image uploaded
-- `payment.approved` - Payment approved by admin
-- `payment.rejected` - Payment rejected by admin
+### Logging Features
+
+- **Request Context**: IP address, user agent, request ID automatically captured
+- **Context Variables**: Thread-safe storage via `contextvars`
+- **Helper Functions**: `log_user_signup()`, `log_payment_approved()`, etc.
+
+### Required Events to Log
+
+| Event | Description | Fields |
+|-------|-------------|--------|
+| `user.signup` | New user registration | telegram_id, user_id, username |
+| `user.login` | User authenticated | telegram_id, user_id |
+| `user.update` | Profile updated | telegram_id, user_id |
+| `user.promoted_to_admin` | User became admin | target_telegram_id, promoted_by |
+| `user.demoted_from_admin` | Admin reverted to customer | target_telegram_id, demoted_by |
+| `order.create` | New order | order_id, user_id, product_id, design_plan |
+| `order.status_change` | Order status update | order_id, old_status, new_status |
+| `payment.initiated` | Payment started | payment_id, order_id, amount |
+| `payment.receipt_uploaded` | Receipt image uploaded | payment_id, user_id, receipt_url |
+| `payment.approved` | Payment approved | payment_id, admin_id |
+| `payment.rejected` | Payment rejected | payment_id, admin_id, reason |
+| `file.uploaded` | File uploaded | user_id, filename, file_size |
+| `validation.requested` | Validation requested | order_id, user_id |
+| `validation.report_submitted` | Report submitted | order_id, validator_id, passed |
 
 ---
 
@@ -568,7 +588,64 @@ All secrets via environment:
 DATABASE_URL=postgresql+asyncpg://...
 SECRET_KEY=<random-32-bytes>
 TELEGRAM_BOT_TOKEN=<from-botfather>
+REDIS_URL=redis://localhost:6379/0
 ```
+
+### Authentication Dependencies
+
+Role-based access control using FastAPI dependencies:
+
+```python
+from app.api.deps import require_admin, require_staff, require_print_shop
+
+# Admin-only endpoint
+@router.post("/products")
+async def create_product(
+    product_data: ProductCreate,
+    admin_user: AuthenticatedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    ...
+
+# Staff endpoint (admin, designer, validator, print_shop)
+@router.patch("/orders/{order_id}/status")
+async def update_status(
+    staff_user: AuthenticatedUser = Depends(require_staff),
+):
+    ...
+```
+
+Available dependencies:
+- `require_admin` - Admin only (403 if not admin)
+- `require_staff` - Any staff role
+- `require_designer` - Designer or admin
+- `require_validator` - Validator or admin
+- `require_print_shop` - Print shop or admin
+- `get_current_user` - Any authenticated user
+
+### Rate Limiting
+
+Using slowapi with Redis backend:
+
+```python
+from app.core.rate_limit import limiter, RateLimits
+
+@router.post("/payments/initiate")
+@limiter.limit(RateLimits.PAYMENT_INITIATE)  # 10/minute
+async def initiate_payment(request: Request, ...):
+    ...
+```
+
+Rate limit presets:
+| Preset | Limit | Use Case |
+|--------|-------|----------|
+| `LOGIN` | 5/min | Authentication |
+| `PAYMENT_INITIATE` | 10/min | Payment start |
+| `RECEIPT_UPLOAD` | 5/min | Receipt upload |
+| `FILE_UPLOAD` | 20/min | File uploads |
+| `READ` | 100/min | General reads |
+| `WRITE` | 30/min | General writes |
+| `MAKE_ADMIN` | 3/hour | Admin promotion |
 
 ### CORS
 
@@ -596,6 +673,32 @@ class UserCreate(BaseModel):
         return validate_iranian_phone(v)
 ```
 
+### Custom Exceptions
+
+Standardized error handling with custom exception hierarchy:
+
+```python
+from app.exceptions import (
+    ResourceNotFoundException,
+    AdminRequiredException,
+    ValidationException,
+)
+
+# In service layer
+if not user:
+    raise ResourceNotFoundException("User", user_id)
+
+if not current_user.is_admin:
+    raise AdminRequiredException()
+```
+
+Exception classes:
+- `SheetaroException` - Base exception
+- `BusinessException` - Business logic errors (400)
+- `ResourceNotFoundException` - Not found (404)
+- `AuthorizationException` - Permission denied (403)
+- `OrderException`, `PaymentException` - Domain-specific
+
 ---
 
 ## Testing
@@ -604,23 +707,31 @@ Test structure:
 
 ```
 tests/
-├── conftest.py              # Test fixtures and configuration
-├── unit/                    # Unit tests for services
+├── conftest.py                    # Test fixtures and configuration
+├── unit/                          # Unit tests for services
 │   ├── test_user_service.py
 │   ├── test_product_service.py
 │   ├── test_order_service.py
-│   ├── test_payment_service.py  # Includes card-to-card tests
+│   ├── test_payment_service.py    # Includes card-to-card tests
+│   ├── test_invoice_service.py    # Invoice business logic
+│   ├── test_validation_service.py # Design validation logic
+│   ├── test_file_service.py       # File upload/delete logic
 │   ├── test_subscription_service.py
 │   └── test_settings_service.py
-├── integration/             # API endpoint tests
-│   ├── test_users_api.py    # Includes admin management tests
+├── integration/                   # API endpoint tests
+│   ├── test_users_api.py          # Includes admin management tests
 │   ├── test_products_api.py
 │   ├── test_orders_api.py
-│   ├── test_payments_api.py # Includes card-to-card flow tests
+│   ├── test_payments_api.py       # Includes card-to-card flow tests
+│   ├── test_invoices_api.py       # Invoice API tests
+│   ├── test_validation_api.py     # Validation API tests
+│   ├── test_files_api.py          # File upload API tests
 │   └── test_subscriptions_api.py
-└── e2e/                     # End-to-end flow tests
+└── e2e/                           # End-to-end flow tests
     ├── test_order_flow.py
-    └── test_payment_flow.py
+    ├── test_payment_flow.py
+    ├── test_semi_private_flow.py  # Semi-private design plan
+    └── test_validation_flow.py    # Design validation with fixes
 ```
 
 Run tests:
@@ -634,6 +745,15 @@ pytest --cov=app --cov-report=html
 
 # Specific test file
 pytest tests/unit/test_payment_service.py -v
+
+# Run only unit tests
+pytest tests/unit/ -v
+
+# Run integration tests
+pytest tests/integration/ -v
+
+# Run e2e tests
+pytest tests/e2e/ -v
 ```
 
 ---
@@ -728,6 +848,6 @@ The Telegram bot uses a **unified flow management** architecture:
 
 ---
 
-**Last Updated**: 2026-01-03
+**Last Updated**: 2026-01-04
 
 

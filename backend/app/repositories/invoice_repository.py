@@ -27,6 +27,19 @@ class InvoiceRepository:
         random_part = ''.join(random.choices(string.digits, k=5))
         return f"INV-{date_part}-{random_part}"
     
+    def _serialize_items(self, items) -> list[dict]:
+        """Convert invoice items to JSON-serializable format."""
+        items_data = []
+        for item in items:
+            item_dict = item.model_dump()
+            # Convert Decimal to int for JSON serialization
+            if 'unit_price' in item_dict:
+                item_dict['unit_price'] = int(item_dict['unit_price'])
+            if 'total' in item_dict:
+                item_dict['total'] = int(item_dict['total'])
+            items_data.append(item_dict)
+        return items_data
+    
     async def create(
         self,
         user_id: UUID,
@@ -34,7 +47,7 @@ class InvoiceRepository:
     ) -> Invoice:
         """Create a new invoice."""
         # Calculate subtotal
-        items_data = [item.model_dump() for item in invoice_data.items]
+        items_data = self._serialize_items(invoice_data.items)
         subtotal = sum(Decimal(str(item['total'])) for item in items_data)
         total_amount = subtotal + invoice_data.tax_amount - invoice_data.discount_amount
         
@@ -152,7 +165,7 @@ class InvoiceRepository:
         
         # If items are updated, recalculate totals
         if 'items' in update_data:
-            items_data = [item.model_dump() for item in invoice_data.items]
+            items_data = self._serialize_items(invoice_data.items)
             update_data['items'] = items_data
             subtotal = sum(Decimal(str(item['total'])) for item in items_data)
             update_data['subtotal'] = subtotal
@@ -180,6 +193,7 @@ class InvoiceRepository:
         )
         await self.db.flush()
         return await self.get_by_id(invoice_id)
+
 
 
 

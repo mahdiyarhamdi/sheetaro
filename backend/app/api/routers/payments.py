@@ -1,10 +1,11 @@
 """Payment API router."""
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 
-from app.api.deps import get_db
+from app.api.deps import get_db, AuthenticatedUser, require_admin_by_query
+from app.core.rate_limit import limiter, RateLimits
 from app.schemas.payment import (
     PaymentInitiate, PaymentInitiateResponse, PaymentCallback,
     PaymentOut, PaymentListResponse, PaymentSummary,
@@ -22,7 +23,9 @@ router = APIRouter()
     summary="Initiate payment",
     description="Initiate a payment and get redirect URL",
 )
+@limiter.limit(RateLimits.PAYMENT_INITIATE)
 async def initiate_payment(
+    request: Request,
     payment_data: PaymentInitiate,
     user_id: UUID = Query(..., description="User ID"),
     db: AsyncSession = Depends(get_db),
@@ -66,20 +69,14 @@ async def payment_callback(
     description="Get all payments awaiting admin approval",
 )
 async def get_pending_approval(
-    admin_id: UUID = Query(..., description="Admin user ID"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     db: AsyncSession = Depends(get_db),
+    admin_user: AuthenticatedUser = Depends(require_admin_by_query),
 ) -> PaymentListResponse:
     """Get payments pending approval (admin only)."""
     service = PaymentService(db)
-    try:
-        return await service.get_pending_approval_payments(admin_id, page, page_size)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e)
-        )
+    return await service.get_pending_approval_payments(admin_user.user_id, page, page_size)
 
 
 @router.get(
@@ -144,7 +141,9 @@ async def get_payment_summary(
     summary="Upload payment receipt",
     description="Upload receipt image for card-to-card payment",
 )
+@limiter.limit(RateLimits.RECEIPT_UPLOAD)
 async def upload_receipt(
+    request: Request,
     payment_id: UUID,
     receipt_data: ReceiptUpload,
     user_id: UUID = Query(..., description="User ID"),
@@ -175,20 +174,16 @@ async def approve_payment(
     payment_id: UUID,
     approve_data: PaymentApprove,
     db: AsyncSession = Depends(get_db),
+    admin_user: AuthenticatedUser = Depends(require_admin_by_query),
 ) -> PaymentOut:
     """Approve payment (admin only)."""
     service = PaymentService(db)
     try:
         return await service.approve_payment(
             payment_id=payment_id,
-            admin_id=approve_data.admin_id,
+            admin_id=admin_user.user_id,
         )
     except ValueError as e:
-        if "Admin access required" in str(e):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=str(e)
-            )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
@@ -205,21 +200,17 @@ async def reject_payment(
     payment_id: UUID,
     reject_data: PaymentReject,
     db: AsyncSession = Depends(get_db),
+    admin_user: AuthenticatedUser = Depends(require_admin_by_query),
 ) -> PaymentOut:
     """Reject payment (admin only)."""
     service = PaymentService(db)
     try:
         return await service.reject_payment(
             payment_id=payment_id,
-            admin_id=reject_data.admin_id,
+            admin_id=admin_user.user_id,
             reason=reject_data.reason,
         )
     except ValueError as e:
-        if "Admin access required" in str(e):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=str(e)
-            )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)

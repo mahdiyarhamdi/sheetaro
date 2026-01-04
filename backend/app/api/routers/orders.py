@@ -5,7 +5,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 from typing import Optional
 
-from app.api.deps import get_db
+from app.api.deps import (
+    get_db,
+    AuthenticatedUser,
+    get_current_user,
+    require_admin,
+    require_staff,
+    require_print_shop_by_query,
+)
 from app.schemas.order import (
     OrderCreate, OrderUpdate, OrderStatusUpdate,
     OrderOut, OrderListResponse
@@ -123,9 +130,9 @@ async def update_order_status(
     order_id: UUID,
     status_data: OrderStatusUpdate,
     db: AsyncSession = Depends(get_db),
-    # TODO: Add admin/staff authentication
+    staff_user: AuthenticatedUser = Depends(require_staff),
 ) -> OrderOut:
-    """Update order status."""
+    """Update order status (staff only)."""
     service = OrderService(db)
     order = await service.update_order_status(order_id, status_data)
     if not order:
@@ -169,15 +176,15 @@ async def cancel_order(
     "/printshop/orders",
     response_model=OrderListResponse,
     summary="Get print shop queue",
-    description="Get orders ready for printing",
+    description="Get orders ready for printing (Print shop/Staff only)",
 )
 async def get_printshop_queue(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     db: AsyncSession = Depends(get_db),
-    # TODO: Add print shop authentication
+    staff_user: AuthenticatedUser = Depends(require_staff),
 ) -> OrderListResponse:
-    """Get orders ready for print shop."""
+    """Get orders ready for print shop (staff only)."""
     service = OrderService(db)
     return await service.get_printshop_queue(page=page, page_size=page_size)
 
@@ -186,17 +193,17 @@ async def get_printshop_queue(
     "/printshop/accept/{order_id}",
     response_model=OrderOut,
     summary="Accept order",
-    description="Accept order by print shop",
+    description="Accept order by print shop (Print shop only)",
 )
 async def accept_order(
     order_id: UUID,
-    printshop_id: UUID = Query(..., description="Print shop user ID"),
     db: AsyncSession = Depends(get_db),
+    printshop_user: AuthenticatedUser = Depends(require_print_shop_by_query),
 ) -> OrderOut:
-    """Accept order by print shop."""
+    """Accept order by print shop (print shop only)."""
     service = OrderService(db)
     try:
-        order = await service.accept_order_by_printshop(order_id, printshop_id)
+        order = await service.accept_order_by_printshop(order_id, printshop_user.user_id)
         if not order:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -208,6 +215,7 @@ async def accept_order(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+
 
 
 

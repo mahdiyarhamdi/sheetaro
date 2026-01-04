@@ -11,20 +11,35 @@ class TestOrdersAPI:
     @pytest.fixture
     async def setup_user_and_product(self, client: AsyncClient, sample_user_data, sample_product_data):
         """Create user and product for order tests."""
-        # Create user
+        # Create admin user first for product creation
+        admin_data = {
+            "telegram_id": 999999999,
+            "username": "admin_user",
+            "first_name": "Admin",
+            "last_name": "User",
+            "role": "ADMIN",
+        }
+        admin_response = await client.post("/api/v1/users", json=admin_data)
+        admin = admin_response.json()
+        
+        # Create product with admin auth
+        product_response = await client.post(
+            "/api/v1/products",
+            json=sample_product_data,
+            params={"user_id": admin["id"]}
+        )
+        product = product_response.json()
+        
+        # Create customer user
         user_response = await client.post("/api/v1/users", json=sample_user_data)
         user = user_response.json()
         
-        # Create product
-        product_response = await client.post("/api/v1/products", json=sample_product_data)
-        product = product_response.json()
-        
-        return user, product
+        return user, product, admin
     
     @pytest.mark.asyncio
     async def test_create_order(self, client: AsyncClient, setup_user_and_product, sample_order_data):
         """Test POST /api/v1/orders - create new order."""
-        user, product = setup_user_and_product
+        user, product, admin = setup_user_and_product
         sample_order_data["product_id"] = product["id"]
         
         response = await client.post(
@@ -42,7 +57,7 @@ class TestOrdersAPI:
     @pytest.mark.asyncio
     async def test_get_orders(self, client: AsyncClient, setup_user_and_product, sample_order_data):
         """Test GET /api/v1/orders - list user orders."""
-        user, product = setup_user_and_product
+        user, product, admin = setup_user_and_product
         sample_order_data["product_id"] = product["id"]
         
         # Create order
@@ -62,7 +77,7 @@ class TestOrdersAPI:
     @pytest.mark.asyncio
     async def test_get_order_by_id(self, client: AsyncClient, setup_user_and_product, sample_order_data):
         """Test GET /api/v1/orders/{order_id}."""
-        user, product = setup_user_and_product
+        user, product, admin = setup_user_and_product
         sample_order_data["product_id"] = product["id"]
         
         # Create order
@@ -82,7 +97,7 @@ class TestOrdersAPI:
     @pytest.mark.asyncio
     async def test_cancel_order(self, client: AsyncClient, setup_user_and_product, sample_order_data):
         """Test POST /api/v1/orders/{order_id}/cancel."""
-        user, product = setup_user_and_product
+        user, product, admin = setup_user_and_product
         sample_order_data["product_id"] = product["id"]
         
         # Create order
@@ -105,7 +120,7 @@ class TestOrdersAPI:
     @pytest.mark.asyncio
     async def test_update_order_status(self, client: AsyncClient, setup_user_and_product, sample_order_data):
         """Test PATCH /api/v1/orders/{order_id}/status."""
-        user, product = setup_user_and_product
+        user, product, admin = setup_user_and_product
         sample_order_data["product_id"] = product["id"]
         
         # Create order
@@ -116,10 +131,11 @@ class TestOrdersAPI:
         )
         order_id = create_response.json()["id"]
         
-        # Update status
+        # Update status (staff/admin only)
         response = await client.patch(
             f"/api/v1/orders/{order_id}/status",
-            json={"status": "READY_FOR_PRINT"}
+            json={"status": "READY_FOR_PRINT"},
+            params={"user_id": admin["id"]}  # Use admin for staff auth
         )
         
         assert response.status_code == 200
@@ -129,7 +145,7 @@ class TestOrdersAPI:
     @pytest.mark.asyncio
     async def test_printshop_queue(self, client: AsyncClient, setup_user_and_product, sample_order_data):
         """Test GET /api/v1/printshop/orders."""
-        user, product = setup_user_and_product
+        user, product, admin = setup_user_and_product
         sample_order_data["product_id"] = product["id"]
         
         # Create order and set to READY_FOR_PRINT
@@ -142,10 +158,14 @@ class TestOrdersAPI:
         
         await client.patch(
             f"/api/v1/orders/{order_id}/status",
-            json={"status": "READY_FOR_PRINT"}
+            json={"status": "READY_FOR_PRINT"},
+            params={"user_id": admin["id"]}  # Use admin for staff auth
         )
         
-        response = await client.get("/api/v1/printshop/orders")
+        response = await client.get(
+            "/api/v1/printshop/orders",
+            params={"user_id": admin["id"]}  # Use admin for staff auth
+        )
         
         assert response.status_code == 200
         data = response.json()

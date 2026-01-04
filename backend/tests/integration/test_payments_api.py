@@ -11,12 +11,27 @@ class TestPaymentsAPI:
     @pytest.fixture
     async def setup_order(self, client: AsyncClient, sample_user_data, sample_product_data, sample_order_data):
         """Create user, product, and order for payment tests."""
+        # Create admin user for product creation
+        admin_data = {
+            "telegram_id": 777777777,
+            "username": "admin_payments_test",
+            "first_name": "Admin",
+            "last_name": "Payments",
+            "role": "ADMIN",
+        }
+        admin_response = await client.post("/api/v1/users", json=admin_data)
+        admin = admin_response.json()
+        
         # Create user
         user_response = await client.post("/api/v1/users", json=sample_user_data)
         user = user_response.json()
         
-        # Create product
-        product_response = await client.post("/api/v1/products", json=sample_product_data)
+        # Create product with admin auth
+        product_response = await client.post(
+            "/api/v1/products",
+            json=sample_product_data,
+            params={"user_id": admin["id"]}
+        )
         product = product_response.json()
         
         # Create order
@@ -142,12 +157,27 @@ class TestCardToCardPaymentsAPI:
     @pytest.fixture
     async def setup_order_with_payment(self, client: AsyncClient, sample_user_data, sample_product_data, sample_order_data):
         """Create user, product, order, and initiated payment."""
+        # Create admin user for product creation
+        admin_data = {
+            "telegram_id": 666666666,
+            "username": "admin_c2c_test",
+            "first_name": "Admin",
+            "last_name": "C2C",
+            "role": "ADMIN",
+        }
+        admin_response = await client.post("/api/v1/users", json=admin_data)
+        admin = admin_response.json()
+        
         # Create user
         user_response = await client.post("/api/v1/users", json=sample_user_data)
         user = user_response.json()
         
-        # Create product
-        product_response = await client.post("/api/v1/products", json=sample_product_data)
+        # Create product with admin auth
+        product_response = await client.post(
+            "/api/v1/products",
+            json=sample_product_data,
+            params={"user_id": admin["id"]}
+        )
         product = product_response.json()
         
         # Create order
@@ -233,10 +263,10 @@ class TestCardToCardPaymentsAPI:
         )
         
         # Approve
-        approve_data = {"admin_id": admin["id"]}
         response = await client.post(
             f"/api/v1/payments/{payment['payment_id']}/approve",
-            json=approve_data
+            json={"admin_id": admin["id"]},
+            params={"admin_id": admin["id"]}
         )
         
         assert response.status_code == 200
@@ -258,10 +288,10 @@ class TestCardToCardPaymentsAPI:
         )
         
         # Reject
-        reject_data = {"admin_id": admin["id"], "reason": "رسید نامعتبر است"}
         response = await client.post(
             f"/api/v1/payments/{payment['payment_id']}/reject",
-            json=reject_data
+            json={"admin_id": admin["id"], "reason": "رسید نامعتبر است"},
+            params={"admin_id": admin["id"]}
         )
         
         assert response.status_code == 200

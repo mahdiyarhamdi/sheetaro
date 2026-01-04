@@ -30,6 +30,11 @@ docker-compose up --build
 | `SECRET_KEY` | JWT secret key | Yes | - |
 | `CORS_ORIGINS` | Allowed origins (comma-separated) | No | `http://localhost:3000` |
 | `DEBUG` | Enable debug mode | No | `false` |
+| `APP_NAME` | Application name | No | `Sheetaro` |
+| `APP_VERSION` | Application version | No | `1.0.0` |
+| `SMTP_HOST` | SMTP server host | No | `mailhog` |
+| `SMTP_PORT` | SMTP server port | No | `1025` |
+| `EMAIL_FROM` | Sender email address | No | - |
 
 ## API Endpoints
 
@@ -231,22 +236,26 @@ backend/
 ├── alembic/                 # Database migrations
 ├── app/
 │   ├── api/
-│   │   ├── deps.py         # Dependencies (DB, auth)
+│   │   ├── deps.py         # Dependencies (DB, auth, role checks)
 │   │   └── routers/        # API route handlers
 │   ├── core/
-│   │   ├── config.py       # Settings
-│   │   ├── database.py     # DB connection
-│   │   └── security.py     # JWT, auth
+│   │   ├── config.py       # Settings (pydantic-settings)
+│   │   ├── database.py     # DB connection, UnitOfWork
+│   │   ├── security.py     # JWT, password hashing
+│   │   └── rate_limit.py   # Rate limiting (slowapi + Redis)
 │   ├── models/             # SQLAlchemy models
-│   ├── repositories/       # Database operations
-│   ├── schemas/            # Pydantic schemas
+│   ├── repositories/       # Database operations (CRUD)
+│   ├── schemas/            # Pydantic schemas (input/output)
 │   ├── services/           # Business logic
-│   ├── utils/              # Utilities
+│   ├── utils/
+│   │   └── logger.py       # Structured JSON logging
+│   ├── exceptions.py       # Custom exception classes
 │   └── main.py             # FastAPI app
 ├── tests/
-│   ├── unit/               # Unit tests
-│   ├── integration/        # API tests
-│   └── e2e/                # End-to-end tests
+│   ├── conftest.py         # Test fixtures
+│   ├── unit/               # Unit tests (services)
+│   ├── integration/        # API endpoint tests
+│   └── e2e/                # End-to-end flow tests
 ├── requirements.txt
 └── Dockerfile
 ```
@@ -289,7 +298,32 @@ PENDING → AWAITING_APPROVAL → SUCCESS
 | Private Design | 5,000,000 |
 | Advanced Search Subscription | 250,000/month |
 
+## Rate Limiting
+
+API endpoints are rate-limited using slowapi with Redis backend:
+
+| Endpoint Type | Limit |
+|---------------|-------|
+| Login/Auth | 5/minute |
+| Payment Initiate | 10/minute |
+| Receipt Upload | 5/minute |
+| File Upload | 20/minute |
+| General Read | 100/minute |
+| General Write | 30/minute |
+| Admin Promote | 3/hour |
+
+When rate limit is exceeded, the API returns `429 Too Many Requests` with a `Retry-After` header.
+
+## Authentication
+
+Most endpoints require authentication via `user_id` query parameter. Role-based access control:
+
+- **Public** - No auth required (health check, product listing)
+- **Authenticated** - Valid user_id required
+- **Admin** - Admin role required (product CRUD, settings)
+- **Staff** - Any staff role (admin, designer, validator, print_shop)
+
 ---
 
-**Last Updated**: 2026-01-03
+**Last Updated**: 2026-01-04
 

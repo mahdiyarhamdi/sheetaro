@@ -1,4 +1,23 @@
-"""Payment service for business logic."""
+"""Payment service for business logic.
+
+This module handles all payment-related business logic including:
+- Payment initiation (PSP redirect)
+- Payment callbacks and verification
+- Card-to-card payment flow (upload receipt, admin approval)
+- Payment summary and history
+
+The system supports two payment methods:
+1. PSP Gateway (mock implementation)
+2. Card-to-card with manual admin approval
+
+Example usage:
+    service = PaymentService(db)
+    result = await service.initiate_payment(user_id, payment_data)
+    # Customer pays and uploads receipt
+    await service.upload_receipt(payment_id, user_id, receipt_url)
+    # Admin approves
+    await service.approve_payment(payment_id, admin_id)
+"""
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID, uuid4
@@ -22,9 +41,19 @@ MOCK_PSP_URL = "https://sandbox.zarinpal.com/pg/StartPay/"
 
 
 class PaymentService:
-    """Service layer for payment business logic."""
+    """Service layer for payment business logic.
+    
+    Handles payment initiation, verification, and the card-to-card
+    approval workflow.
+    
+    Attributes:
+        db: Async database session.
+        repository: Payment repository for database operations.
+        order_repo: Order repository for order lookups.
+    """
     
     def __init__(self, db: AsyncSession):
+        """Initialize PaymentService with database session."""
         self.db = db
         self.repository = PaymentRepository(db)
         self.order_repo = OrderRepository(db)

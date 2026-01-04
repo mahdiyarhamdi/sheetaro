@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 from typing import Optional
 
-from app.api.deps import get_db
+from app.api.deps import get_db, AuthenticatedUser, require_admin
 from app.schemas.product import ProductCreate, ProductUpdate, ProductOut, ProductListResponse
 from app.services.product_service import ProductService
 from app.models.enums import ProductType
@@ -67,9 +67,9 @@ async def get_product(
 async def create_product(
     product_data: ProductCreate,
     db: AsyncSession = Depends(get_db),
-    # TODO: Add admin authentication dependency
+    admin_user: AuthenticatedUser = Depends(require_admin),
 ) -> ProductOut:
-    """Create a new product."""
+    """Create a new product (admin only)."""
     service = ProductService(db)
     return await service.create_product(product_data)
 
@@ -84,9 +84,9 @@ async def update_product(
     product_id: UUID,
     product_data: ProductUpdate,
     db: AsyncSession = Depends(get_db),
-    # TODO: Add admin authentication dependency
+    admin_user: AuthenticatedUser = Depends(require_admin),
 ) -> ProductOut:
-    """Update product by ID."""
+    """Update product by ID (admin only)."""
     service = ProductService(db)
     product = await service.update_product(product_id, product_data)
     if not product:
@@ -106,9 +106,9 @@ async def update_product(
 async def delete_product(
     product_id: UUID,
     db: AsyncSession = Depends(get_db),
-    # TODO: Add admin authentication dependency
+    admin_user: AuthenticatedUser = Depends(require_admin),
 ) -> None:
-    """Delete product by ID."""
+    """Delete product by ID (admin only)."""
     service = ProductService(db)
     success = await service.delete_product(product_id)
     if not success:
@@ -116,6 +116,7 @@ async def delete_product(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Product with id {product_id} not found"
         )
+
 
 
 
