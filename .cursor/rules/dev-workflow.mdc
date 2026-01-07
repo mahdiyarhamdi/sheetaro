@@ -60,8 +60,8 @@ Password: 3225tht13Q?GA=
 # اتصال به سرور
 ssh root@54.38.152.52
 
-# مسیر پروژه روی سرور (اگر متفاوت است، آپدیت کن)
-cd /root/Sheetaro
+# مسیر پروژه روی سرور
+cd /root/sheetaro
 
 # گرفتن آخرین تغییرات
 git pull origin main
@@ -77,7 +77,7 @@ docker-compose logs -f --tail=50
 
 ### دستور سریع دیپلوی (از لوکال):
 ```bash
-ssh root@54.38.152.52 "cd /root/Sheetaro && git pull && docker-compose down && docker-compose up -d --build"
+ssh root@54.38.152.52 "cd /root/sheetaro && git pull && docker-compose down && docker-compose up -d --build"
 ```
 
 ## چک‌لیست قبل از هر PR/Merge

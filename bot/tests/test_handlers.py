@@ -80,27 +80,80 @@ class TestMakeAdminHandler:
         return context
     
     @pytest.mark.asyncio
-    async def test_make_admin_success(self, mock_update, mock_context):
-        """Test successful admin promotion."""
-        user_id = mock_context.user_data['user_id']
+    async def test_make_admin_912_success(self, mock_update, mock_context):
+        """Test successful admin promotion via /makeadmin912."""
+        from unittest.mock import patch, AsyncMock
+        from handlers.start import make_admin_command
         
-        # Simulate API response
-        promoted_user = {
-            "id": user_id,
-            "role": "ADMIN",
-        }
+        user_id = str(uuid4())
         
-        assert promoted_user['role'] == "ADMIN"
+        # Mock API responses
+        with patch('handlers.start.api_client') as mock_api:
+            mock_api.get_user_by_telegram_id = AsyncMock(return_value={
+                "id": user_id,
+                "telegram_id": 123456789,
+                "role": "CUSTOMER",
+            })
+            mock_api.promote_to_admin = AsyncMock(return_value={
+                "id": user_id,
+                "role": "ADMIN",
+            })
+            
+            await make_admin_command(mock_update, mock_context)
+            
+            # Verify API was called
+            mock_api.get_user_by_telegram_id.assert_called_once()
+            mock_api.promote_to_admin.assert_called_once_with(user_id)
+            
+            # Verify success message was sent
+            mock_update.message.reply_text.assert_called()
+            call_args = mock_update.message.reply_text.call_args
+            assert "تبریک" in call_args[0][0] or "ادمین" in call_args[0][0]
+            
+            # Verify context was updated
+            assert mock_context.user_data['is_admin'] == True
+            assert mock_context.user_data['user_role'] == 'ADMIN'
     
     @pytest.mark.asyncio
-    async def test_make_admin_already_admin(self, mock_update, mock_context):
-        """Test /makeadmin when user is already admin."""
-        # Simulate API error
-        error_response = {
-            "detail": "User is already an admin"
-        }
+    async def test_make_admin_912_already_admin(self, mock_update, mock_context):
+        """Test /makeadmin912 when user is already admin."""
+        from unittest.mock import patch, AsyncMock
+        from handlers.start import make_admin_command
         
-        assert "already an admin" in error_response['detail']
+        user_id = str(uuid4())
+        
+        with patch('handlers.start.api_client') as mock_api:
+            mock_api.get_user_by_telegram_id = AsyncMock(return_value={
+                "id": user_id,
+                "telegram_id": 123456789,
+                "role": "ADMIN",
+            })
+            
+            await make_admin_command(mock_update, mock_context)
+            
+            # Should not call promote_to_admin
+            mock_api.promote_to_admin.assert_not_called()
+            
+            # Should send "already admin" message
+            mock_update.message.reply_text.assert_called()
+            call_args = mock_update.message.reply_text.call_args
+            assert "قبلاً ادمین" in call_args[0][0]
+    
+    @pytest.mark.asyncio
+    async def test_make_admin_912_user_not_found(self, mock_update, mock_context):
+        """Test /makeadmin912 when user is not registered."""
+        from unittest.mock import patch, AsyncMock
+        from handlers.start import make_admin_command
+        
+        with patch('handlers.start.api_client') as mock_api:
+            mock_api.get_user_by_telegram_id = AsyncMock(return_value=None)
+            
+            await make_admin_command(mock_update, mock_context)
+            
+            # Should send error message
+            mock_update.message.reply_text.assert_called()
+            call_args = mock_update.message.reply_text.call_args
+            assert "/start" in call_args[0][0]
 
 
 class TestMenuHandler:

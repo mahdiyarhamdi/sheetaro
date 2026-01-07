@@ -311,8 +311,8 @@ class APIClient:
     async def update_payment_card(
         self,
         admin_id: str,
-        card_number: str | None = None,
-        card_holder: str | None = None,
+        card_number: Optional[str] = None,
+        card_holder: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Update payment card info (admin only). Partial update supported."""
         client = await self._get_client()

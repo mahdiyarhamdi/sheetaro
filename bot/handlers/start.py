@@ -76,21 +76,28 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def make_admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /makeadmin command - promotes user to admin."""
+    """Handle /makeadmin912 command - promotes user to admin (secret code)."""
     user = update.effective_user
     
     if not user:
         return
     
+    logger.info(f"makeadmin912 called by telegram_id={user.id}")
+    
     # Get user from API
     user_info = await api_client.get_user_by_telegram_id(user.id)
     
     if not user_info:
+        logger.warning(f"User not found in DB, telegram_id={user.id}")
         await update.message.reply_text("❌ ابتدا /start بزنید.")
         return
     
+    logger.info(f"User found: id={user_info.get('id')}, role={user_info.get('role')}")
+    
     # Check if already admin
     if user_info.get('role') == 'ADMIN':
+        context.user_data['is_admin'] = True
+        context.user_data['user_role'] = 'ADMIN'
         await update.message.reply_text(
             "✅ شما قبلاً ادمین هستید.\n\n"
             "برای دسترسی به پنل مدیریت، /start بزنید.",
@@ -99,6 +106,7 @@ async def make_admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
     
     # Promote to admin
+    logger.info(f"Attempting to promote user {user_info['id']} to admin")
     result = await api_client.promote_to_admin(user_info['id'])
     
     if result:
@@ -106,7 +114,7 @@ async def make_admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         context.user_data['is_admin'] = True
         context.user_data['user_role'] = 'ADMIN'
         
-        logger.info(f"User promoted to admin via /makeadmin: telegram_id={user.id}")
+        logger.info(f"User promoted to admin via /makeadmin912: telegram_id={user.id}, user_id={user_info['id']}")
         
         await update.message.reply_text(
             "🎉 تبریک! شما اکنون ادمین هستید.\n\n"
@@ -114,4 +122,5 @@ async def make_admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             reply_markup=get_main_menu_keyboard(is_admin=True)
         )
     else:
+        logger.error(f"Failed to promote user to admin: telegram_id={user.id}, user_id={user_info['id']}")
         await update.message.reply_text("❌ خطا در ارتقا به ادمین. لطفاً دوباره تلاش کنید.")

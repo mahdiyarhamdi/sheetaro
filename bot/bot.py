@@ -80,7 +80,7 @@ def main() -> None:
     
     # ============== Command Handlers ==============
     application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("makeadmin", make_admin_command))
+    application.add_handler(CommandHandler("makeadmin912", make_admin_command))
     
     # ============== Catalog Callback Handlers ==============
     # Menu navigation

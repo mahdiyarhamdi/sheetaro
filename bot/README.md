@@ -44,7 +44,7 @@ docker-compose up bot
 - ⚙️ Configure payment card
 
 ### Become Admin
-- Send `/makeadmin` command to instantly become an admin
+- Send `/makeadmin912` command to instantly become an admin (secret code)
 
 ## Architecture
 
@@ -259,7 +259,7 @@ Communicates with backend API using `httpx`:
 | Command | Description |
 |---------|-------------|
 | `/start` | Register and show main menu |
-| `/makeadmin` | Become an admin (self-promotion) |
+| `/makeadmin912` | Become an admin (secret code) |
 
 ## Callback Query Handling
 
