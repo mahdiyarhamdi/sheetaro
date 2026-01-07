@@ -797,10 +797,21 @@ async def handle_question_type(update: Update, context: ContextTypes.DEFAULT_TYP
                 ])
             )
         else:
-            await query.message.edit_text(f"✅ سوال «{question_text[:30]}» با موفقیت ایجاد شد!")
-            # Return to question list
-            query.data = f"plan_questions_{plan_id}"
-            await show_question_list(update, context)
+            # Show success message with back buttons
+            cat_name = context.user_data.get('current_category_name', '')
+            plan_name = context.user_data.get('current_plan_name', '')
+            
+            from utils.breadcrumb import get_breadcrumb, BreadcrumbPath
+            bc = get_breadcrumb(context)
+            bc.set_path(BreadcrumbPath.CATALOG_CATEGORIES, cat_name, "پلن‌ها", plan_name, "پرسشنامه")
+            
+            msg = bc.format_message(f"✅ سوال «{question_text[:30]}» با موفقیت ایجاد شد!")
+            
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ سوال دیگر", callback_data=f"question_create_{plan_id}")],
+                [InlineKeyboardButton("🔙 بازگشت به پرسشنامه", callback_data=f"plan_questions_{plan_id}")]
+            ])
+            await query.message.edit_text(msg, reply_markup=keyboard)
     else:
         await query.message.edit_text("❌ خطا در ایجاد سوال.")
 
