@@ -11,9 +11,18 @@ from telegram.ext import (
 )
 
 from utils.api_client import api_client
+from utils.breadcrumb import Breadcrumb, BreadcrumbPath, get_breadcrumb
 from keyboards.manager import get_main_menu_keyboard
 
 logger = logging.getLogger(__name__)
+
+
+def _bc_msg(context: ContextTypes.DEFAULT_TYPE, message: str, path: BreadcrumbPath = None, *extras: str) -> str:
+    """Helper to format message with breadcrumb."""
+    bc = get_breadcrumb(context)
+    if path:
+        bc.set_path(path, *extras)
+    return bc.format_message(message)
 
 
 async def handle_catalog_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -350,12 +359,14 @@ async def show_catalog_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             await update.message.reply_text("❌ شما به این بخش دسترسی ندارید.")
         return ConversationHandler.END
     
-    menu_text = (
+    menu_text = _bc_msg(
+        context,
         "🛠️ مدیریت کاتالوگ محصولات\n\n"
         "از این بخش می‌توانید:\n"
         "• دسته‌بندی‌های محصول را مدیریت کنید\n"
         "• ویژگی‌ها و گزینه‌ها را تعریف کنید\n"
-        "• پلن‌های طراحی، پرسشنامه و قالب‌ها را مدیریت کنید"
+        "• پلن‌های طراحی، پرسشنامه و قالب‌ها را مدیریت کنید",
+        BreadcrumbPath.CATALOG_MENU
     )
     
     if query:
@@ -379,17 +390,21 @@ async def show_category_list(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return CATALOG_MENU
     
     if not categories:
-        await query.message.edit_text(
+        msg = _bc_msg(
+            context,
             "📂 هنوز هیچ دسته‌بندی تعریف نشده است.\n\n"
             "برای شروع، یک دسته‌بندی جدید ایجاد کنید.",
-            reply_markup=get_category_list_keyboard([])
+            BreadcrumbPath.CATALOG_CATEGORIES
         )
+        await query.message.edit_text(msg, reply_markup=get_category_list_keyboard([]))
     else:
-        await query.message.edit_text(
+        msg = _bc_msg(
+            context,
             "📂 لیست دسته‌بندی‌ها:\n\n"
             "یک دسته را انتخاب کنید یا دسته جدید بسازید:",
-            reply_markup=get_category_list_keyboard(categories)
+            BreadcrumbPath.CATALOG_CATEGORIES
         )
+        await query.message.edit_text(msg, reply_markup=get_category_list_keyboard(categories))
     return CATEGORY_LIST
 
 
@@ -411,13 +426,19 @@ async def show_category_actions(update: Update, context: ContextTypes.DEFAULT_TY
     slug = category.get('slug', '')
     is_active = "✅ فعال" if category.get('is_active') else "❌ غیرفعال"
     
-    await query.message.edit_text(
+    # Store category name for breadcrumb
+    context.user_data['current_category_name'] = name
+    
+    msg = _bc_msg(
+        context,
         f"{icon} {name}\n\n"
         f"📌 شناسه: {slug}\n"
         f"📊 وضعیت: {is_active}\n\n"
         "یک عملیات را انتخاب کنید:",
-        reply_markup=get_category_actions_keyboard(category_id)
+        BreadcrumbPath.CATALOG_CATEGORIES,
+        name
     )
+    await query.message.edit_text(msg, reply_markup=get_category_actions_keyboard(category_id))
     return CATEGORY_ACTIONS
 
 
@@ -429,12 +450,18 @@ async def start_category_create(update: Update, context: ContextTypes.DEFAULT_TY
     context.user_data['creating_category'] = {}
     context.user_data['catalog_input_state'] = 'category_name'
     
-    await query.message.edit_text(
-        "ایجاد دسته بندی جدید\n\n"
-        "لطفا نام فارسی دسته بندی را وارد کنید:\n"
+    msg = _bc_msg(
+        context,
+        "➕ ایجاد دسته‌بندی جدید\n\n"
+        "مرحله ۱ از ۴: نام دسته‌بندی\n\n"
+        "لطفا نام فارسی دسته‌بندی را وارد کنید:\n"
         "(مثال: لیبل، فاکتور، کارت ویزیت)",
+        BreadcrumbPath.CATALOG_CATEGORY_CREATE
+    )
+    await query.message.edit_text(
+        msg,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
+            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
         ])
     )
     return CATEGORY_CREATE_NAME
@@ -446,12 +473,17 @@ async def category_create_name(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data['creating_category']['name_fa'] = name
     context.user_data['catalog_input_state'] = 'category_slug'
     
-    await update.message.reply_text(
-        f"نام: {name}\n\n"
+    bc = get_breadcrumb(context)
+    msg = bc.format_message(
+        f"✅ نام: {name}\n\n"
+        "مرحله ۲ از ۴: شناسه\n\n"
         "حالا شناسه انگلیسی (slug) را وارد کنید:\n"
-        "(فقط حروف کوچک انگلیسی و خط تیره، مثال: label)",
+        "(فقط حروف کوچک انگلیسی و خط تیره، مثال: label)"
+    )
+    await update.message.reply_text(
+        msg,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
+            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
         ])
     )
     return CATEGORY_CREATE_SLUG
@@ -460,12 +492,18 @@ async def category_create_name(update: Update, context: ContextTypes.DEFAULT_TYP
 async def category_create_slug(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle category slug input."""
     slug = update.message.text.strip().lower()
+    bc = get_breadcrumb(context)
+    
     # Simple validation
     if not slug.replace('-', '').replace('_', '').isalnum():
+        msg = bc.format_message(
+            "❌ شناسه نامعتبر است.\n"
+            "فقط از حروف انگلیسی، اعداد و خط تیره استفاده کنید."
+        )
         await update.message.reply_text(
-            "شناسه نامعتبر است. فقط از حروف انگلیسی، اعداد و خط تیره استفاده کنید.",
+            msg,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
+                [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
             ])
         )
         return CATEGORY_CREATE_SLUG
@@ -473,12 +511,16 @@ async def category_create_slug(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data['creating_category']['slug'] = slug
     context.user_data['catalog_input_state'] = 'category_icon'
     
+    msg = bc.format_message(
+        f"✅ شناسه: {slug}\n\n"
+        "مرحله ۳ از ۴: آیکون\n\n"
+        "حالا یک نماد (emoji) برای آیکون دسته وارد کنید:\n"
+        "(مثال: 🏷️ یا 📄)"
+    )
     await update.message.reply_text(
-        f"شناسه: {slug}\n\n"
-        "حالا یک نماد برای آیکون دسته وارد کنید:\n"
-        "(یک حرف یا کلمه کوتاه)",
+        msg,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
+            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
         ])
     )
     return CATEGORY_CREATE_ICON
@@ -490,12 +532,17 @@ async def category_create_icon(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data['creating_category']['icon'] = icon
     context.user_data['catalog_input_state'] = 'category_price'
     
-    await update.message.reply_text(
-        f"نماد: {icon}\n\n"
+    bc = get_breadcrumb(context)
+    msg = bc.format_message(
+        f"✅ نماد: {icon}\n\n"
+        "مرحله ۴ از ۴: قیمت پایه\n\n"
         "حالا قیمت پایه را به تومان وارد کنید:\n"
-        "(برای رایگان، 0 وارد کنید)",
+        "(برای رایگان، 0 وارد کنید)"
+    )
+    await update.message.reply_text(
+        msg,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("انصراف", callback_data="cancel_create")]
+            [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
         ])
     )
     return CATEGORY_CREATE_PRICE
@@ -503,10 +550,13 @@ async def category_create_icon(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def category_create_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle category base price input and create category."""
+    bc = get_breadcrumb(context)
+    
     try:
         price = int(update.message.text.strip().replace(',', ''))
     except ValueError:
-        await update.message.reply_text("لطفا یک عدد معتبر وارد کنید.")
+        msg = bc.format_message("❌ لطفا یک عدد معتبر وارد کنید.")
+        await update.message.reply_text(msg)
         return CATEGORY_CREATE_PRICE
     
     data = context.user_data.get('creating_category', {})
@@ -520,19 +570,27 @@ async def category_create_price(update: Update, context: ContextTypes.DEFAULT_TY
     result = await api_client.create_category(admin_id, data)
     
     if result:
-        await update.message.reply_text(
-            f"دسته بندی {data['name_fa']} با موفقیت ایجاد شد!\n"
-            f"قیمت پایه: {price:,} تومان\n\n"
-            "اکنون می توانید ویژگی ها و پلن های طراحی را برای این دسته تعریف کنید.",
-            reply_markup=get_category_actions_keyboard(result['id'])
-        )
+        name = data['name_fa']
         context.user_data['current_category_id'] = result['id']
+        context.user_data['current_category_name'] = name
+        
+        msg = _bc_msg(
+            context,
+            f"✅ دسته‌بندی «{name}» با موفقیت ایجاد شد!\n\n"
+            f"💰 قیمت پایه: {price:,} تومان\n\n"
+            "اکنون می‌توانید ویژگی‌ها و پلن‌های طراحی را برای این دسته تعریف کنید.",
+            BreadcrumbPath.CATALOG_CATEGORIES,
+            name
+        )
+        await update.message.reply_text(msg, reply_markup=get_category_actions_keyboard(result['id']))
         return CATEGORY_ACTIONS
     else:
-        await update.message.reply_text(
-            "خطا در ایجاد دسته بندی. لطفا دوباره تلاش کنید.",
-            reply_markup=get_category_list_keyboard([])
+        msg = _bc_msg(
+            context,
+            "❌ خطا در ایجاد دسته‌بندی. لطفا دوباره تلاش کنید.",
+            BreadcrumbPath.CATALOG_CATEGORIES
         )
+        await update.message.reply_text(msg, reply_markup=get_category_list_keyboard([]))
         return CATEGORY_LIST
 
 
@@ -572,12 +630,17 @@ async def show_attribute_list(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     category = await api_client.get_category(category_id)
     cat_name = category.get('name_fa', '') if category else ''
+    context.user_data['current_category_name'] = cat_name
     
-    await query.message.edit_text(
+    msg = _bc_msg(
+        context,
         f"📋 ویژگی‌های دسته «{cat_name}»:\n\n"
         "یک ویژگی را انتخاب کنید یا ویژگی جدید بسازید:",
-        reply_markup=get_attribute_list_keyboard(attributes, category_id)
+        BreadcrumbPath.CATALOG_CATEGORIES,
+        cat_name,
+        "ویژگی‌ها"
     )
+    await query.message.edit_text(msg, reply_markup=get_attribute_list_keyboard(attributes, category_id))
     return ATTRIBUTE_LIST
 
 
@@ -813,12 +876,17 @@ async def show_plan_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     category = await api_client.get_category(category_id)
     cat_name = category.get('name_fa', '') if category else ''
+    context.user_data['current_category_name'] = cat_name
     
-    await query.message.edit_text(
+    msg = _bc_msg(
+        context,
         f"🎯 پلن‌های طراحی دسته «{cat_name}»:\n\n"
         "یک پلن را انتخاب کنید یا پلن جدید بسازید:",
-        reply_markup=get_plan_list_keyboard(plans, category_id)
+        BreadcrumbPath.CATALOG_CATEGORIES,
+        cat_name,
+        "پلن‌ها"
     )
+    await query.message.edit_text(msg, reply_markup=get_plan_list_keyboard(plans, category_id))
     return PLAN_LIST
 
 
@@ -841,6 +909,9 @@ async def show_plan_actions(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     has_questionnaire = plan.get('has_questionnaire', False)
     has_templates = plan.get('has_templates', False)
     
+    # Store for breadcrumb
+    context.user_data['current_plan_name'] = name
+    
     type_str = []
     if has_questionnaire:
         type_str.append("📝 پرسشنامه")
@@ -850,12 +921,21 @@ async def show_plan_actions(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         type_str.append("📤 آپلود فایل")
     
     category_id = context.user_data.get('current_category_id', '')
+    cat_name = context.user_data.get('current_category_name', '')
     
-    await query.message.edit_text(
+    msg = _bc_msg(
+        context,
         f"🎯 {name}\n\n"
         f"💰 قیمت: {price_str}\n"
         f"📊 نوع: {', '.join(type_str) if type_str else 'ساده'}\n\n"
         "یک عملیات را انتخاب کنید:",
+        BreadcrumbPath.CATALOG_CATEGORIES,
+        cat_name,
+        "پلن‌ها",
+        name
+    )
+    await query.message.edit_text(
+        msg,
         reply_markup=get_plan_actions_keyboard(plan_id, category_id, has_questionnaire, has_templates)
     )
     return PLAN_ACTIONS
@@ -1003,15 +1083,24 @@ async def show_questionnaire_menu(update: Update, context: ContextTypes.DEFAULT_
     
     plan = await api_client.get_design_plan(plan_id)
     plan_name = plan.get('name_fa', '') if plan else ''
+    context.user_data['current_plan_name'] = plan_name
     
-    await query.message.edit_text(
+    cat_name = context.user_data.get('current_category_name', '')
+    
+    msg = _bc_msg(
+        context,
         f"📝 مدیریت پرسشنامه\n\n"
         f"پلن: {plan_name}\n"
         f"تعداد بخش‌ها: {section_count}\n"
         f"تعداد سوالات: {question_count}\n\n"
         "یک گزینه را انتخاب کنید:",
-        reply_markup=get_questionnaire_menu_keyboard(plan_id, section_count, question_count)
+        BreadcrumbPath.CATALOG_CATEGORIES,
+        cat_name,
+        "پلن‌ها",
+        plan_name,
+        "پرسشنامه"
     )
+    await query.message.edit_text(msg, reply_markup=get_questionnaire_menu_keyboard(plan_id, section_count, question_count))
     return QUESTION_LIST
 
 
@@ -1232,11 +1321,24 @@ async def start_question_create(update: Update, context: ContextTypes.DEFAULT_TY
     
     context.user_data['catalog_input_state'] = 'question_text'
     
-    await query.message.edit_text(
+    cat_name = context.user_data.get('current_category_name', '')
+    plan_name = context.user_data.get('current_plan_name', '')
+    
+    msg = _bc_msg(
+        context,
         "➕ ایجاد سوال جدید\n\n"
-        "مرحله ۱ از ۴: متن سوال\n\n"
+        "مرحله ۱ از ۲: متن سوال\n\n"
         "لطفاً متن سوال را به فارسی وارد کنید:\n"
         "(مثال: نام کسب‌وکار شما چیست؟)",
+        BreadcrumbPath.CATALOG_CATEGORIES,
+        cat_name,
+        "پلن‌ها",
+        plan_name,
+        "پرسشنامه",
+        "➕ سوال جدید"
+    )
+    await query.message.edit_text(
+        msg,
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_create")]
         ])
@@ -1251,11 +1353,13 @@ async def question_create_text(update: Update, context: ContextTypes.DEFAULT_TYP
     # Clear input state - next step is callback
     context.user_data.pop('catalog_input_state', None)
     
-    await update.message.reply_text(
-        f"سوال: {text}\n\n"
-        "نوع پاسخ را انتخاب کنید:",
-        reply_markup=get_question_type_keyboard()
+    bc = get_breadcrumb(context)
+    msg = bc.format_message(
+        f"✅ سوال: {text}\n\n"
+        "مرحله ۲ از ۲: نوع پاسخ\n\n"
+        "نوع پاسخ را انتخاب کنید:"
     )
+    await update.message.reply_text(msg, reply_markup=get_question_type_keyboard())
     return QUESTION_CREATE_TYPE
 
 
@@ -1273,16 +1377,46 @@ async def question_create_type(update: Update, context: ContextTypes.DEFAULT_TYP
     
     result = await api_client.create_question(plan_id, admin_id, data)
     
+    cat_name = context.user_data.get('current_category_name', '')
+    plan_name = context.user_data.get('current_plan_name', '')
+    
     if result:
-        msg = f"✅ سوال با موفقیت ایجاد شد!\n\n"
+        question_text = data.get('question_fa', '')[:30]
+        msg_text = f"✅ سوال «{question_text}...» با موفقیت ایجاد شد!\n\n"
         if question_type in ['SINGLE_CHOICE', 'MULTI_CHOICE']:
-            msg += "اکنون می‌توانید گزینه‌های پاسخ را اضافه کنید."
+            msg_text += "اکنون می‌توانید گزینه‌های پاسخ را اضافه کنید."
         
-        await query.message.edit_text(msg)
-        # Return to question list
+        msg = _bc_msg(
+            context,
+            msg_text,
+            BreadcrumbPath.CATALOG_CATEGORIES,
+            cat_name,
+            "پلن‌ها",
+            plan_name,
+            "پرسشنامه"
+        )
+        
+        # Add back button
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ سوال دیگر", callback_data=f"question_create_{plan_id}")],
+            [InlineKeyboardButton("🔙 بازگشت به پرسشنامه", callback_data=f"plan_questions_{plan_id}")]
+        ])
+        await query.message.edit_text(msg, reply_markup=keyboard)
         return QUESTION_LIST
     else:
-        await query.message.edit_text("❌ خطا در ایجاد سوال.")
+        msg = _bc_msg(
+            context,
+            "❌ خطا در ایجاد سوال.",
+            BreadcrumbPath.CATALOG_CATEGORIES,
+            cat_name,
+            "پلن‌ها",
+            plan_name,
+            "پرسشنامه"
+        )
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 بازگشت", callback_data=f"plan_questions_{plan_id}")]
+        ])
+        await query.message.edit_text(msg, reply_markup=keyboard)
         return QUESTION_LIST
 
 
@@ -1595,9 +1729,14 @@ async def cancel_create(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     context.user_data.pop('creating_plan', None)
     context.user_data.pop('creating_question', None)
     context.user_data.pop('creating_template', None)
+    context.user_data.pop('creating_section', None)
     context.user_data.pop('catalog_input_state', None)
     
-    await query.message.edit_text("عملیات لغو شد.")
+    bc = get_breadcrumb(context)
+    bc.set_path(BreadcrumbPath.CATALOG_MENU)
+    
+    msg = bc.format_message("❌ عملیات لغو شد.")
+    await query.message.edit_text(msg)
     return await show_catalog_menu(update, context)
 
 

@@ -121,6 +121,7 @@ bot/
 │   ├── api_client.py      # Backend API client
 │   ├── helpers.py         # Helper functions (role-based menu)
 │   ├── flow_manager.py    # Unified flow state management
+│   ├── breadcrumb.py      # Admin panel navigation breadcrumbs
 │   └── notifications.py   # Admin notification utilities
 ├── requirements.txt
 └── Dockerfile
@@ -188,6 +189,34 @@ All keyboards are consolidated in `keyboards/manager.py` as the single source of
 **Important**: All menus include emojis for consistency. Never create duplicate keyboard functions.
 
 ## Key Components
+
+### Breadcrumb Navigation (`utils/breadcrumb.py`)
+
+All admin menus display a breadcrumb at the bottom of each message showing the current navigation path:
+
+```
+📍 پنل مدیریت › مدیریت کاتالوگ › دسته‌بندی‌ها › لیبل › پلن‌ها › نیمه‌خصوصی › پرسشنامه
+```
+
+Usage:
+```python
+from utils.breadcrumb import Breadcrumb, BreadcrumbPath, get_breadcrumb
+
+# Set breadcrumb path
+bc = get_breadcrumb(context)
+bc.set_path(BreadcrumbPath.CATALOG_CATEGORIES, "لیبل", "پلن‌ها")
+
+# Format message with breadcrumb
+msg = bc.format_message("📂 پلن‌های طراحی:")
+
+# Go back one level
+bc.pop()
+```
+
+This provides:
+- Clear location awareness for admins
+- Easy back navigation
+- Consistent UX across all admin panels
 
 ### Flow Manager (`utils/flow_manager.py`)
 
