@@ -112,12 +112,11 @@ bot/
 │       ├── product_flow.py
 │       └── profile_flow.py
 ├── keyboards/              # Telegram keyboards
-│   ├── main_menu.py       # Main menu (dynamic for admin/customer)
+│   ├── manager.py         # Main keyboard manager (SINGLE SOURCE OF TRUTH)
 │   ├── products.py        # Product selection keyboards
 │   ├── orders.py          # Order-related keyboards
 │   ├── profile.py         # Profile edit keyboards
-│   ├── admin.py           # Admin panel keyboards
-│   └── manager.py         # Keyboard manager utilities
+│   └── admin.py           # Admin inline keyboards (payment review, etc.)
 ├── utils/
 │   ├── api_client.py      # Backend API client
 │   ├── helpers.py         # Helper functions (role-based menu)
@@ -173,6 +172,20 @@ The main menu is role-based:
 - **Admins**: 7 buttons (same + Admin Panel)
 
 Role is stored in `context.user_data['user_role']` after `/start`.
+
+### Keyboard Management
+
+All keyboards are consolidated in `keyboards/manager.py` as the single source of truth:
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `get_main_menu_keyboard(is_admin)` | Reply | Main menu with emojis |
+| `get_admin_menu_keyboard()` | Reply | Admin panel menu with emojis |
+| `get_back_keyboard()` | Reply | Simple back button |
+| `get_catalog_menu_keyboard()` | Inline | Catalog management |
+| `get_category_list_keyboard()` | Inline | Category list |
+
+**Important**: All menus include emojis for consistency. Never create duplicate keyboard functions.
 
 ## Key Components
 
@@ -263,4 +276,4 @@ This ensures callbacks work regardless of conversation state.
 
 ---
 
-**Last Updated**: 2026-01-03
+**Last Updated**: 2026-01-07

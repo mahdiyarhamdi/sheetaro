@@ -1,0 +1,95 @@
+---
+alwaysApply: true
+---
+# Development Workflow - گردش کار توسعه
+
+## قانون اصلی: هر تغییر کد باید این مراحل را طی کند
+
+### 1. نوشتن تست (Test First)
+- قبل از هر تغییر یا بعد از آن، تست مربوطه را بنویس
+- تست‌ها باید در مسیرهای زیر باشند:
+  - `backend/tests/unit/` - تست‌های واحد
+  - `backend/tests/integration/` - تست‌های یکپارچگی
+  - `backend/tests/e2e/` - تست‌های سرتاسری
+  - `bot/tests/` - تست‌های ربات تلگرام
+
+### 2. اجرا و دیباگ تست‌ها (Run & Debug)
+- تست‌ها را اجرا کن تا همه پاس شوند
+- اجرای تست بکند:
+  ```bash
+  cd backend && python -m pytest tests/ -v
+  ```
+- اجرای تست ربات:
+  ```bash
+  cd bot && python -m pytest tests/ -v
+  ```
+- اگر تست فِیل شد، دیباگ کن و کد یا تست را اصلاح کن
+- هرگز بدون پاس شدن تست‌ها به مرحله بعد نرو
+
+### 3. آپدیت مستندات (Update Docs)
+- اگر تغییر شامل موارد زیر است، مستندات را آپدیت کن:
+  - endpoint جدید → `backend/README.md`
+  - تغییر معماری → `backend/ARCHITECTURE.md`
+  - تصمیم مهم → `docs/ADR-YYYYMMDD-*.md`
+  - متغیر محیطی جدید → `backend/README.md`
+
+### 4. کامیت تغییرات (Commit)
+- از Conventional Commits استفاده کن:
+  - `feat(scope): description` - فیچر جدید
+  - `fix(scope): description` - رفع باگ
+  - `test(scope): description` - اضافه کردن تست
+  - `docs(scope): description` - آپدیت مستندات
+  - `refactor(scope): description` - بازنویسی کد
+  - `chore(scope): description` - کارهای جانبی
+
+### 5. دیپلوی روی سرور (Deploy)
+- پس از کامیت، تغییرات را روی سرور اعمال کن
+
+## اطلاعات سرور Production
+
+```
+Server IP: 54.38.152.52
+SSH User: root
+SSH Port: 22
+Password: 3225tht13Q?GA=
+```
+
+### دستورات دیپلوی:
+
+```bash
+# اتصال به سرور
+ssh root@54.38.152.52
+
+# مسیر پروژه روی سرور (اگر متفاوت است، آپدیت کن)
+cd /root/Sheetaro
+
+# گرفتن آخرین تغییرات
+git pull origin main
+
+# ری‌استارت سرویس‌ها با داکر
+docker-compose down
+docker-compose up -d --build
+
+# بررسی وضعیت
+docker-compose ps
+docker-compose logs -f --tail=50
+```
+
+### دستور سریع دیپلوی (از لوکال):
+```bash
+ssh root@54.38.152.52 "cd /root/Sheetaro && git pull && docker-compose down && docker-compose up -d --build"
+```
+
+## چک‌لیست قبل از هر PR/Merge
+
+- [ ] تست‌ها نوشته شده‌اند
+- [ ] همه تست‌ها پاس می‌شوند
+- [ ] مستندات آپدیت شده‌اند
+- [ ] کامیت با فرمت صحیح انجام شده
+- [ ] دیپلوی روی سرور انجام شده
+- [ ] سرویس‌ها سالم هستند (health check)
+
+## هشدار مهم
+
+⚠️ هرگز بدون طی کردن این مراحل، کد را merge یا deploy نکن!
+⚠️ اگر تست فِیل شد، کد را push نکن!

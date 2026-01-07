@@ -20,14 +20,13 @@ def get_main_menu_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
         ReplyKeyboardMarkup for main menu
     """
     keyboard = [
-        ["ثبت سفارش جدید"],
-        ["سفارشات من"],
-        ["پروفایل", "رهگیری سفارش"],
-        ["راهنما", "پشتیبانی"],
+        ["🛒 ثبت سفارش", "📦 سفارشات من"],
+        ["👤 پروفایل", "🔍 رهگیری سفارش"],
+        ["📞 پشتیبانی", "ℹ️ راهنما"]
     ]
     
     if is_admin:
-        keyboard.append(["پنل مدیریت"])
+        keyboard.append(["🔧 پنل مدیریت"])
     
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -35,11 +34,11 @@ def get_main_menu_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
 def get_admin_menu_keyboard() -> ReplyKeyboardMarkup:
     """Get the admin panel menu keyboard."""
     keyboard = [
-        ["پرداخت های در انتظار تایید"],
-        ["مدیریت کاتالوگ"],
-        ["تنظیمات کارت بانکی"],
-        ["مدیریت مدیران"],
-        ["بازگشت به منو"],
+        ["💳 پرداخت‌های در انتظار تأیید"],
+        ["📂 مدیریت کاتالوگ"],
+        ["⚙️ تنظیمات کارت بانکی"],
+        ["👥 مدیریت مدیران"],
+        ["🔙 بازگشت به منو"]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 

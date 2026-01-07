@@ -3,7 +3,7 @@
 from telegram import ReplyKeyboardMarkup
 from telegram.ext import ContextTypes
 
-from keyboards.main_menu import get_main_menu_keyboard
+from keyboards.manager import get_main_menu_keyboard
 from utils.api_client import api_client
 
 

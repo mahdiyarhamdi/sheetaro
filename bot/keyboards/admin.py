@@ -1,18 +1,9 @@
-"""Admin management keyboards."""
+"""Admin management inline keyboards.
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
+Note: get_admin_menu_keyboard (ReplyKeyboard) is in keyboards/manager.py
+"""
 
-
-def get_admin_menu_keyboard() -> ReplyKeyboardMarkup:
-    """Get keyboard for admin main menu."""
-    keyboard = [
-        ["💳 پرداخت‌های در انتظار تأیید"],
-        ["📂 مدیریت کاتالوگ"],
-        ["⚙️ تنظیمات کارت بانکی"],
-        ["👥 مدیریت مدیران"],
-        ["🔙 بازگشت به منو"]
-    ]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 
 def get_pending_payments_keyboard(payments: list) -> InlineKeyboardMarkup:

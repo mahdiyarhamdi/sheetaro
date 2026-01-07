@@ -11,7 +11,7 @@ from telegram.ext import (
 )
 
 from utils.api_client import api_client
-from keyboards.main_menu import get_main_menu_keyboard
+from keyboards.manager import get_main_menu_keyboard
 
 logger = logging.getLogger(__name__)
 

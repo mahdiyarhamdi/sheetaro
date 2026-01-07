@@ -15,8 +15,8 @@ from utils.notifications import (
     notify_customer_payment_approved,
     notify_customer_payment_rejected,
 )
+from keyboards.manager import get_admin_menu_keyboard
 from keyboards.admin import (
-    get_admin_menu_keyboard,
     get_pending_payments_keyboard,
     get_payment_review_keyboard,
     get_reject_confirm_keyboard,

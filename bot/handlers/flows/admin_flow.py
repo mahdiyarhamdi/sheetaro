@@ -44,7 +44,7 @@ async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     set_flow(context, FLOW_ADMIN, 'admin_menu')
     
     await update.message.reply_text(
-        "پنل مدیریت\n\nیکی را انتخاب کنید:",
+        "🔧 پنل مدیریت\n\nیکی را انتخاب کنید:",
         reply_markup=get_admin_menu_keyboard()
     )
 
