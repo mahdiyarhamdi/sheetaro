@@ -33,17 +33,17 @@ class BreadcrumbPath(Enum):
     
     # Payment paths
     PAYMENTS_PENDING = ("🔧 پنل مدیریت", "💳 پرداخت‌ها")
-    PAYMENT_REVIEW = ("🔧 پنل مدیریت", "💳 پرداخت‌ها", "بررسی پرداخت")
+    PAYMENT_REVIEW = ("🔧 پنل مدیریت", "💳 پرداخت‌ها", "بررسی")
     
     # Admin management paths
     ADMIN_MANAGEMENT = ("🔧 پنل مدیریت", "👥 مدیران")
-    ADMIN_INFO = ("🔧 پنل مدیریت", "👥 مدیران", "اطلاعات مدیر")
-    ADMIN_ADD = ("🔧 پنل مدیریت", "👥 مدیران", "افزودن مدیر")
+    ADMIN_INFO = ("🔧 پنل مدیریت", "👥 مدیران")  # + admin name
+    ADMIN_ADD = ("🔧 پنل مدیریت", "👥 مدیران", "➕ افزودن")
     
     # Settings paths
     SETTINGS = ("🔧 پنل مدیریت", "⚙️ تنظیمات کارت")
     SETTINGS_CARD_NUMBER = ("🔧 پنل مدیریت", "⚙️ تنظیمات کارت", "شماره کارت")
-    SETTINGS_CARD_HOLDER = ("🔧 پنل مدیریت", "⚙️ تنظیمات کارت", "نام صاحب کارت")
+    SETTINGS_CARD_HOLDER = ("🔧 پنل مدیریت", "⚙️ تنظیمات کارت", "نام صاحب")
     
     # Catalog paths
     CATALOG_MENU = ("🔧 پنل مدیریت", "📂 مدیریت کاتالوگ")
