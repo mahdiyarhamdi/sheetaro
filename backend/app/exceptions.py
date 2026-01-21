@@ -5,7 +5,65 @@ across the application.
 """
 
 from typing import Optional, Dict, Any
+from fastapi import HTTPException, status
 
+
+# ==================== HTTP Exceptions (for API responses) ====================
+
+class BadRequestException(HTTPException):
+    """Bad request error (400)."""
+    
+    def __init__(self, detail: str = "Bad request"):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+class UnauthorizedException(HTTPException):
+    """Unauthorized error (401)."""
+    
+    def __init__(self, detail: str = "Could not validate credentials"):
+        super().__init__(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=detail,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+class ForbiddenException(HTTPException):
+    """Forbidden error (403)."""
+    
+    def __init__(self, detail: str = "Operation forbidden"):
+        super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+
+class NotFoundException(HTTPException):
+    """Not found error (404)."""
+    
+    def __init__(self, detail: str = "Resource not found"):
+        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+
+
+class ConflictException(HTTPException):
+    """Conflict error (409)."""
+    
+    def __init__(self, detail: str = "Conflict"):
+        super().__init__(status_code=status.HTTP_409_CONFLICT, detail=detail)
+
+
+class UnprocessableEntityException(HTTPException):
+    """Unprocessable entity error (422)."""
+    
+    def __init__(self, detail: str = "Unprocessable entity"):
+        super().__init__(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail)
+
+
+class TooManyRequestsException(HTTPException):
+    """Too many requests error (429)."""
+    
+    def __init__(self, detail: str = "Too many requests"):
+        super().__init__(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=detail)
+
+
+# ==================== Application Exceptions ====================
 
 class SheetaroException(Exception):
     """Base exception for all Sheetaro application errors."""

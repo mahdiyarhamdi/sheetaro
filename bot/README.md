@@ -33,6 +33,7 @@ docker-compose up bot
 - 📦 Track orders
 - 👤 Edit profile (phone, address)
 - 💳 Upload payment receipts
+- 🔗 Link web account with `/linkweb` command
 
 ### Admin Features
 - 🔧 Admin Panel (only for admins)
@@ -105,12 +106,20 @@ bot/
 │   ├── admin_settings.py  # Admin settings (payment card)
 │   ├── admin_catalog.py   # Admin catalog management
 │   ├── text_router.py     # Central text input router
+│   ├── web_link.py        # Web account linking via OTP
 │   └── flows/             # Flow-specific text handlers
 │       ├── catalog_flow.py
 │       ├── admin_flow.py
 │       ├── order_flow.py
 │       ├── product_flow.py
 │       └── profile_flow.py
+├── tests/                  # Test files
+│   ├── conftest.py        # Test fixtures
+│   ├── test_flow_manager.py
+│   ├── test_api_client.py
+│   ├── test_handlers.py
+│   ├── test_keyboards.py
+│   └── test_web_link.py
 ├── keyboards/              # Telegram keyboards
 │   ├── manager.py         # Main keyboard manager (SINGLE SOURCE OF TRUTH)
 │   ├── products.py        # Product selection keyboards
@@ -289,6 +298,44 @@ Communicates with backend API using `httpx`:
 |---------|-------------|
 | `/start` | Register and show main menu |
 | `/makeadmin912` | Become an admin (secret code) |
+| `/linkweb` | Link Telegram account to web application via OTP |
+
+## Testing
+
+```bash
+# Install test dependencies
+pip install pytest pytest-asyncio pytest-mock
+
+# Run all tests
+python -m pytest tests/ -v
+
+# Run specific test file
+python -m pytest tests/test_web_link.py -v
+
+# Run with coverage
+python -m pytest tests/ -v --cov=. --cov-report=term-missing
+```
+
+### Test Coverage
+
+| File | Description |
+|------|-------------|
+| `tests/test_flow_manager.py` | Flow state management tests |
+| `tests/test_api_client.py` | API client method tests |
+| `tests/test_handlers.py` | Handler function tests |
+| `tests/test_keyboards.py` | Keyboard generation tests |
+| `tests/test_web_link.py` | Web-Telegram linking OTP flow tests |
+
+### Web Link Testing
+
+The `/linkweb` command flow tests include:
+- Unregistered user rejection
+- Already linked user handling
+- Valid OTP acceptance
+- Invalid OTP format rejection
+- Expired OTP handling
+- Cancel button functionality
+- Complete successful flow
 
 ## Callback Query Handling
 
@@ -305,4 +352,4 @@ This ensures callbacks work regardless of conversation state.
 
 ---
 
-**Last Updated**: 2026-01-07
+**Last Updated**: 2026-01-21

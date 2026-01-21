@@ -11,7 +11,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
 from app.core.rate_limit import limiter, rate_limit_exceeded_handler
-from app.api.routers import health, users, products, orders, payments, validation, invoices, subscriptions, files
+from app.api.routers import health, users, products, orders, payments, validation, invoices, subscriptions, files, auth
 from app.api.routers import settings as settings_router
 from app.api.routers.categories import (
     router as categories_router,
@@ -215,6 +215,12 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
 app.include_router(health.router, tags=["Health"])
 
 # API v1 routers
+app.include_router(
+    auth.router,
+    prefix="/api/v1",
+    tags=["Authentication"]
+)
+
 app.include_router(
     users.router,
     prefix="/api/v1",

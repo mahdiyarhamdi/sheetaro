@@ -83,6 +83,25 @@ services:
       - sheetaro_network
     restart: unless-stopped
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3005}
+    container_name: sheetaro_frontend
+    env_file:
+      - .env
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3005}
+    ports:
+      - "3000:3000"
+    networks:
+      - sheetaro_network
+    restart: unless-stopped
+
 volumes:
   postgres_data:
 

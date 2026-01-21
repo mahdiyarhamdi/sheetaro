@@ -1005,6 +1005,41 @@ class APIClient:
         except httpx.HTTPError as e:
             logger.error(f"Error getting order designs: {e}")
             return None
+    
+    # ==================== Web-Telegram Link APIs ====================
+    
+    async def verify_telegram_link(self, otp: str, telegram_id: int) -> Optional[Dict[str, Any]]:
+        """Verify OTP and link web account to Telegram.
+        
+        This is called when a Telegram user enters an OTP code
+        that was generated from the web app.
+        
+        Args:
+            otp: The 6-digit OTP code from web app
+            telegram_id: The Telegram user ID to link
+            
+        Returns:
+            Dict with success status and message, or None on error
+        """
+        client = await self._get_client()
+        try:
+            response = await client.post(
+                "/api/v1/auth/telegram-verify",
+                json={"otp": otp},
+                headers={"X-Telegram-ID": str(telegram_id)}
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            # Return error response body if available
+            try:
+                error_data = e.response.json()
+                return {"success": False, "message": error_data.get("detail", "خطا در تأیید کد")}
+            except:
+                return {"success": False, "message": "خطا در تأیید کد"}
+        except httpx.HTTPError as e:
+            logger.error(f"Error verifying telegram link: {e}")
+            return None
 
 
 # Singleton instance for easy import

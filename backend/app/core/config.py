@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     
     # Security
     SECRET_KEY: str = "change-this-in-production-to-a-secure-random-key"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30  # 30 days
+    
+    # OTP settings for web-telegram linking
+    OTP_EXPIRE_MINUTES: int = 5
+    OTP_LENGTH: int = 6
     
     model_config = SettingsConfigDict(
         env_file=".env",

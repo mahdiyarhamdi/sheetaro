@@ -1,4 +1,6 @@
 """Shared validation utilities."""
+from __future__ import annotations
+
 import re
 
 
@@ -26,6 +28,7 @@ def validate_iranian_phone(value: str | None) -> str | None:
         return value
     
     raise ValueError('شماره تماس باید به فرمت 09xxxxxxxxx یا +98xxxxxxxxxx باشد')
+
 
 
 

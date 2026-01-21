@@ -1,5 +1,14 @@
 """Test fixtures and configuration."""
 
+import os
+
+# Set environment variables BEFORE any app imports
+# This is critical to avoid pydantic validation errors
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://sheetaro:sheetaro@localhost:5432/sheetaro_test")
+os.environ.setdefault("REDIS_URL", "redis://localhost:6379/1")
+os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing-only")
+os.environ.setdefault("DEBUG", "true")
+
 import asyncio
 import pytest
 import pytest_asyncio
@@ -510,4 +519,64 @@ def sample_template_data():
         "placeholder_height": 200,
         "sort_order": 1,
     }
+
+
+# ==================== Web Auth Fixtures ====================
+
+@pytest.fixture
+def sample_web_user_data():
+    """Sample web user registration data."""
+    return {
+        "phone": "09121234567",
+        "password": "test123456",
+        "full_name": "Test User"
+    }
+
+
+@pytest.fixture
+def sample_login_data():
+    """Sample login data."""
+    return {
+        "phone": "09121234567",
+        "password": "test123456"
+    }
+
+
+@pytest_asyncio.fixture
+async def authenticated_user(client, db_session, sample_web_user_data):
+    """Create and return authenticated user with tokens."""
+    response = await client.post("/api/v1/auth/register", json=sample_web_user_data)
+    return response.json()
+
+
+@pytest_asyncio.fixture
+async def auth_headers(authenticated_user):
+    """Get authorization headers for authenticated requests."""
+    return {"Authorization": f"Bearer {authenticated_user['access_token']}"}
+
+
+async def create_test_web_user(db_session: AsyncSession, data: dict = None):
+    """Create a test web user and return its data."""
+    from app.models.user import User
+    from app.core.security import get_password_hash
+    
+    user_data = data or {
+        "phone_number": "09121234567",
+        "password_hash": get_password_hash("test123456"),
+        "first_name": "Test",
+        "last_name": "User",
+        "full_name": "Test User",
+        "role": UserRole.CUSTOMER,
+        "phone_verified": False,
+        "web_linked": False,
+    }
+    
+    if isinstance(user_data.get("role"), str):
+        user_data["role"] = UserRole(user_data["role"])
+    
+    user = User(**user_data)
+    db_session.add(user)
+    await db_session.flush()
+    await db_session.refresh(user)
+    return user
 

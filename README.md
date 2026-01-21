@@ -5,14 +5,17 @@
 ## ویژگی‌ها
 
 - ✅ ربات تلگرام با UX/CX عالی
+- ✅ **وب اپلیکیشن Next.js**: ثبت‌نام، سفارش، پرداخت
 - ✅ FastAPI Backend با Swagger
 - ✅ **سیستم کاتالوگ داینامیک**: دسته‌بندی، ویژگی، پلن طراحی
 - ✅ **پلن عمومی**: قالب‌های آماده با جایگذاری خودکار لوگو
 - ✅ **پلن نیمه‌خصوصی**: پرسشنامه طراحی
 - ✅ پرداخت کارت به کارت با تأیید ادمین
+- ✅ **اتصال حساب تلگرام به وب** با کد OTP
 - ✅ PostgreSQL + Redis
 - ✅ معماری لایه‌ای و scalable
 - ✅ Docker Compose برای اجرای آسان
+- ✅ **CI/CD با GitHub Actions**: تست خودکار
 
 ## مستندات
 
@@ -78,6 +81,7 @@ Sheetaro/
 │   │   ├── repositories/ # Database operations
 │   │   └── utils/       # Utilities (logging, etc.)
 │   ├── alembic/         # Database migrations
+│   ├── tests/           # Backend tests (unit, integration, e2e)
 │   └── Dockerfile
 ├── bot/                 # Telegram Bot
 │   ├── handlers/        # Command & message handlers
@@ -85,8 +89,19 @@ Sheetaro/
 │   │   └── text_router.py # Central text input router
 │   ├── keyboards/       # Keyboard layouts
 │   ├── utils/           # API client, flow_manager & utilities
+│   ├── tests/           # Bot tests
 │   ├── bot.py           # Bot entry point
 │   └── Dockerfile
+├── frontend/            # Next.js Web Application
+│   ├── src/
+│   │   ├── app/         # Next.js App Router pages
+│   │   ├── components/  # Reusable components
+│   │   ├── hooks/       # Custom React hooks
+│   │   ├── lib/         # API client & utilities
+│   │   └── __tests__/   # Frontend tests (Vitest)
+│   ├── e2e/             # E2E tests (Playwright)
+│   └── Dockerfile
+├── .github/workflows/   # GitHub Actions CI/CD
 └── docker-compose.yml
 ```
 
@@ -265,19 +280,48 @@ API ها با استفاده از slowapi و Redis محدود شده‌اند:
 
 ## تست‌ها
 
+### Backend Tests
+
 ```bash
 # اجرای تست‌های backend
-docker-compose exec backend pytest
+docker-compose exec backend python -m pytest tests/ -v
 
 # تست‌های واحد
-docker-compose exec backend pytest tests/unit
+docker-compose exec backend python -m pytest tests/unit -v
 
 # تست‌های یکپارچه
-docker-compose exec backend pytest tests/integration
+docker-compose exec backend python -m pytest tests/integration -v
 
 # با coverage
-docker-compose exec backend pytest --cov=app
+docker-compose exec backend python -m pytest tests/ --cov=app --cov-report=term-missing
 ```
+
+### Frontend Tests
+
+```bash
+# تست‌های واحد (Vitest)
+cd frontend && npm test
+
+# تست‌های E2E (Playwright)
+cd frontend && npx playwright test
+```
+
+### Bot Tests
+
+```bash
+# اجرای تست‌های bot
+cd bot && python -m pytest tests/ -v
+```
+
+### CI/CD
+
+تست‌ها به صورت خودکار در GitHub Actions اجرا می‌شوند:
+- Backend Unit & Integration Tests
+- Frontend Unit Tests (Vitest)
+- E2E Tests (Playwright)
+- Bot Tests
+
+فایل workflow: [.github/workflows/test.yml](.github/workflows/test.yml)
 
 چک‌لیست تست دستی: [docs/BOT_TEST_CHECKLIST.md](docs/BOT_TEST_CHECKLIST.md)
 
@@ -287,5 +331,5 @@ docker-compose exec backend pytest --cov=app
 
 ---
 
-**Last Updated**: 2026-01-04
+**Last Updated**: 2026-01-21
 

@@ -35,11 +35,23 @@ docker-compose up --build
 | `SMTP_HOST` | SMTP server host | No | `mailhog` |
 | `SMTP_PORT` | SMTP server port | No | `1025` |
 | `EMAIL_FROM` | Sender email address | No | - |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | JWT access token expiry | No | `1440` (24h) |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | JWT refresh token expiry | No | `30` |
+| `OTP_EXPIRE_MINUTES` | OTP code expiry for Telegram linking | No | `5` |
+| `OTP_LENGTH` | OTP code length | No | `6` |
 
 ## API Endpoints
 
 ### Health Check
 - `GET /health` - Health check endpoint
+
+### Authentication (`/api/v1/auth`) - Web Authentication
+- `POST /auth/register` - Register new web user (phone + password)
+- `POST /auth/login` - Login with phone + password
+- `POST /auth/refresh` - Refresh JWT access token
+- `GET /auth/me` - Get current authenticated user
+- `POST /auth/telegram-link` - Generate OTP for Telegram account linking
+- `POST /auth/telegram-verify` - Verify OTP and link Telegram account
 
 ### Users (`/api/v1/users`)
 - `POST /users` - Create/update user
@@ -214,20 +226,44 @@ When uploading a template, specify where the user's logo will be placed:
 
 ```bash
 # Run all tests
-pytest
+python -m pytest tests/ -v
 
-# Run unit tests
-pytest tests/unit
+# Run unit tests only
+python -m pytest tests/unit/ -v
 
-# Run integration tests
-pytest tests/integration
+# Run integration tests only
+python -m pytest tests/integration/ -v
 
-# Run E2E tests
-pytest tests/e2e
+# Run E2E tests only
+python -m pytest tests/e2e/ -v
 
-# Run with coverage
-pytest --cov=app
+# Run with coverage report
+python -m pytest tests/ -v --cov=app --cov-report=html --cov-report=term-missing
+
+# Run specific test file
+python -m pytest tests/unit/test_auth_service.py -v
+
+# Run tests matching pattern
+python -m pytest tests/ -v -k "auth"
 ```
+
+### Test Categories
+
+| Category | Path | Description |
+|----------|------|-------------|
+| Unit Tests | `tests/unit/` | Service layer tests (AuthService, OrderService, etc.) |
+| Integration Tests | `tests/integration/` | API endpoint tests with database |
+| E2E Tests | `tests/e2e/` | Full flow tests (order creation, payment, etc.) |
+
+### Test Fixtures
+
+Main fixtures are defined in `tests/conftest.py`:
+- `client` - Async HTTP client for API testing
+- `db_session` - Database session with auto-rollback
+- `sample_user_data` - Sample Telegram user data
+- `sample_web_user_data` - Sample web user registration data
+- `authenticated_user` - Registered and authenticated user
+- `auth_headers` - Authorization headers for authenticated requests
 
 ## Project Structure
 
@@ -316,14 +352,36 @@ When rate limit is exceeded, the API returns `429 Too Many Requests` with a `Ret
 
 ## Authentication
 
-Most endpoints require authentication via `user_id` query parameter. Role-based access control:
+The API supports two authentication methods:
+
+### 1. JWT Token Authentication (Web)
+For web application users:
+```bash
+# Login and get tokens
+curl -X POST /api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"phone": "09121234567", "password": "yourpassword"}'
+
+# Use access token in requests
+curl -H "Authorization: Bearer <access_token>" /api/v1/auth/me
+
+# Refresh expired access token
+curl -X POST /api/v1/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refresh_token": "<refresh_token>"}'
+```
+
+### 2. User ID Authentication (Telegram Bot)
+For Telegram bot integration, `user_id` query parameter is used.
+
+### Role-Based Access Control
 
 - **Public** - No auth required (health check, product listing)
-- **Authenticated** - Valid user_id required
-- **Admin** - Admin role required (product CRUD, settings)
+- **Authenticated** - Valid user required (orders, payments)
+- **Admin** - Admin role required (product CRUD, settings, payment approval)
 - **Staff** - Any staff role (admin, designer, validator, print_shop)
 
 ---
 
-**Last Updated**: 2026-01-04
+**Last Updated**: 2026-01-21
 
