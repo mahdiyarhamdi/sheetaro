@@ -4,7 +4,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui";
 import {
   Menu,
   X,
@@ -15,28 +14,61 @@ import {
   Package,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-import { isAuthenticated, isAdmin, logout, getUser } from "@/lib/auth";
 
 interface HeaderProps {
   onMenuToggle?: () => void;
   isSidebarOpen?: boolean;
 }
 
+// Direct localStorage access (only on client)
+function getAuthFromStorage() {
+  if (typeof window === "undefined") return { isLoggedIn: false, user: null };
+  
+  const token = localStorage.getItem("access_token");
+  const userStr = localStorage.getItem("user");
+  
+  if (!token) return { isLoggedIn: false, user: null };
+  
+  try {
+    const user = userStr ? JSON.parse(userStr) : null;
+    return { isLoggedIn: true, user };
+  } catch {
+    return { isLoggedIn: true, user: null };
+  }
+}
+
 export function Header({ onMenuToggle, isSidebarOpen }: HeaderProps) {
   const pathname = usePathname();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isUserAdmin, setIsUserAdmin] = useState(false);
-  const [userName, setUserName] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
+  
+  // Auth state - start with null to indicate "checking"
+  const [authState, setAuthState] = useState<{
+    checked: boolean;
+    isLoggedIn: boolean;
+    user: any;
+  }>({ checked: false, isLoggedIn: false, user: null });
 
+  // Check auth on mount and when storage changes
   useEffect(() => {
-    setIsLoggedIn(isAuthenticated());
-    setIsUserAdmin(isAdmin());
-    const user = getUser();
-    if (user) {
-      setUserName(user.full_name || "کاربر");
-    }
+    const checkAuth = () => {
+      const { isLoggedIn, user } = getAuthFromStorage();
+      setAuthState({ checked: true, isLoggedIn, user });
+    };
+    
+    // Check immediately
+    checkAuth();
+    
+    // Listen for storage changes (cross-tab sync)
+    window.addEventListener("storage", checkAuth);
+    
+    // Also check periodically for same-tab changes
+    const interval = setInterval(checkAuth, 500);
+    
+    return () => {
+      window.removeEventListener("storage", checkAuth);
+      clearInterval(interval);
+    };
   }, []);
 
   // Close menu on click outside
@@ -56,8 +88,16 @@ export function Header({ onMenuToggle, isSidebarOpen }: HeaderProps) {
   ];
 
   const handleLogout = () => {
-    logout();
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+    localStorage.removeItem("user");
+    setAuthState({ checked: true, isLoggedIn: false, user: null });
+    window.location.href = "/login";
   };
+
+  const { checked, isLoggedIn, user } = authState;
+  const isUserAdmin = user?.is_admin ?? false;
+  const userName = user?.full_name || user?.first_name || "کاربر";
 
   return (
     <header className="sticky top-0 z-40 bg-surface border-b border-border">
@@ -93,7 +133,7 @@ export function Header({ onMenuToggle, isSidebarOpen }: HeaderProps) {
             </Link>
           </div>
 
-          {/* Center - Navigation (Desktop) */}
+          {/* Center - Navigation (Desktop) - Only show when logged in */}
           {isLoggedIn && (
             <nav className="hidden md:flex items-center gap-1">
               {navItems.map((item) => (
@@ -130,7 +170,14 @@ export function Header({ onMenuToggle, isSidebarOpen }: HeaderProps) {
 
           {/* Left side - User menu or auth buttons */}
           <div className="flex items-center gap-2">
-            {isLoggedIn ? (
+            {!checked ? (
+              // Loading state - show skeleton while checking auth
+              <div className="flex items-center gap-2 animate-pulse">
+                <div className="w-8 h-8 rounded-full bg-accent" />
+                <div className="hidden sm:block w-16 h-4 rounded bg-accent" />
+              </div>
+            ) : isLoggedIn ? (
+              // Logged in - show user menu
               <div className="relative" ref={menuRef}>
                 <button
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
@@ -175,16 +222,19 @@ export function Header({ onMenuToggle, isSidebarOpen }: HeaderProps) {
                 )}
               </div>
             ) : (
+              // Not logged in - show auth buttons
               <>
-                <Link href="/login">
-                  <Button variant="ghost" size="sm">
-                    ورود
-                  </Button>
+                <Link 
+                  href="/login"
+                  className="inline-flex items-center justify-center font-medium rounded-lg transition-all h-9 px-3 text-sm bg-transparent text-foreground hover:bg-accent"
+                >
+                  ورود
                 </Link>
-                <Link href="/register">
-                  <Button variant="primary" size="sm">
-                    ثبت‌نام
-                  </Button>
+                <Link 
+                  href="/register"
+                  className="inline-flex items-center justify-center font-medium rounded-lg transition-all h-9 px-3 text-sm bg-primary text-white hover:bg-primary-800"
+                >
+                  ثبت‌نام
                 </Link>
               </>
             )}
@@ -194,4 +244,3 @@ export function Header({ onMenuToggle, isSidebarOpen }: HeaderProps) {
     </header>
   );
 }
-

@@ -122,7 +122,8 @@ backend/
 │   │       ├── invoices.py     # Invoice generation
 │   │       ├── subscriptions.py # Subscription management
 │   │       ├── files.py        # File upload
-│   │       └── settings.py     # System settings (payment card)
+│   │       ├── settings.py     # System settings (payment card)
+│   │       └── admin.py        # Admin panel APIs (stats, users, orders, payments)
 │   ├── core/
 │   │   ├── config.py           # Settings (pydantic-settings)
 │   │   ├── database.py         # DB engine, session factory, UnitOfWork
@@ -431,6 +432,37 @@ Once admin, they can:
 - Approve/reject payments
 
 Admin telegram IDs are stored in database (not environment variables).
+
+### Admin Panel (Web Frontend)
+
+The web admin panel provides a comprehensive dashboard for managing the platform:
+
+| Page | Path | Features |
+|------|------|----------|
+| Dashboard | `/admin` | KPIs, order/revenue charts, status summary |
+| Catalog | `/admin/catalog` | Categories, products, design plans management |
+| Users | `/admin/users` | Search, filter, role assignment, ban/unban |
+| Orders | `/admin/orders` | List, status update, filtering |
+| Payments | `/admin/payments` | Receipt review, approve/reject |
+| Reports | `/admin/reports` | Analytics, charts, statistics |
+| Settings | `/admin/settings` | Payment card, commission, pricing |
+
+### Admin APIs (`/api/v1/admin/`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/stats` | GET | Dashboard KPIs (orders, payments, revenue, users) |
+| `/stats/orders` | GET | Order statistics with daily breakdown |
+| `/stats/revenue` | GET | Revenue stats (monthly comparison, daily) |
+| `/stats/users` | GET | User stats (by role, daily signups) |
+| `/users` | GET | List users with filters |
+| `/users/{id}/role` | PATCH | Update user role |
+| `/users/{id}/ban` | POST | Ban/unban user |
+| `/orders` | GET | List all orders |
+| `/orders/{id}/status` | PATCH | Force status update |
+| `/orders/{id}/assign` | POST | Assign to staff |
+| `/payments` | GET | List all payments |
+| `/payments/{id}/verify` | POST | Verify/reject payment |
 
 ---
 
@@ -848,6 +880,6 @@ The Telegram bot uses a **unified flow management** architecture:
 
 ---
 
-**Last Updated**: 2026-01-04
+**Last Updated**: 2026-01-31
 
 

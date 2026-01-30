@@ -1,9 +1,10 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui";
-import { Footer } from "@/components/layout";
+import { Header, Footer } from "@/components/layout";
 import {
   CheckCircle,
   Zap,
@@ -15,7 +16,20 @@ import {
   Send,
 } from "lucide-react";
 
+// Check if user is logged in
+function useIsLoggedIn() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  
+  useEffect(() => {
+    const token = localStorage.getItem("access_token");
+    setIsLoggedIn(!!token);
+  }, []);
+  
+  return isLoggedIn;
+}
+
 export default function HomePage() {
+  const isLoggedIn = useIsLoggedIn();
   const features = [
     {
       icon: Palette,
@@ -64,32 +78,8 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-surface/80 backdrop-blur-md border-b border-border">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between h-16">
-            <Link href="/" className="flex items-center gap-2">
-              <Image
-                src="/images/logo.png"
-                alt="Sheetaro"
-                width={40}
-                height={40}
-                className="rounded-lg"
-              />
-              <span className="text-xl font-bold text-primary">شیتارو</span>
-            </Link>
-
-            <div className="flex items-center gap-3">
-              <Link href="/login">
-                <Button variant="ghost">ورود</Button>
-              </Link>
-              <Link href="/register">
-                <Button variant="primary">ثبت‌نام رایگان</Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </header>
+      {/* Header - uses shared component with auth state */}
+      <Header />
 
       <main className="flex-1">
         {/* Hero Section */}
@@ -107,20 +97,28 @@ export default function HomePage() {
                   سریع، آسان و با قیمت مناسب.
                 </p>
                 <div className="flex flex-col sm:flex-row items-center gap-4 justify-center lg:justify-start">
-                  <Link href="/register">
+                  <Link href={isLoggedIn ? "/new-order" : "/register"}>
                     <Button
                       variant="primary"
                       size="lg"
                       rightIcon={<ArrowLeft className="w-5 h-5" />}
                     >
-                      شروع کنید
+                      {isLoggedIn ? "سفارش جدید" : "شروع کنید"}
                     </Button>
                   </Link>
-                  <Link href="/pricing">
-                    <Button variant="outline" size="lg">
-                      مشاهده تعرفه‌ها
-                    </Button>
-                  </Link>
+                  {isLoggedIn ? (
+                    <Link href="/orders">
+                      <Button variant="outline" size="lg">
+                        سفارشات من
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Link href="/pricing">
+                      <Button variant="outline" size="lg">
+                        مشاهده تعرفه‌ها
+                      </Button>
+                    </Link>
+                  )}
                 </div>
 
                 {/* Stats */}
@@ -231,20 +229,21 @@ export default function HomePage() {
         <section className="py-16 lg:py-24 bg-primary">
           <div className="container mx-auto px-4 text-center">
             <h2 className="text-2xl lg:text-3xl font-bold text-white mb-4">
-              آماده شروع هستید؟
+              {isLoggedIn ? "سفارش جدید ثبت کنید" : "آماده شروع هستید؟"}
             </h2>
             <p className="text-primary-100 mb-8 max-w-lg mx-auto">
-              همین حالا ثبت‌نام کنید و اولین سفارش خود را ثبت کنید. تیم ما آماده
-              کمک به شماست.
+              {isLoggedIn 
+                ? "طرح‌های اختصاصی برای کسب‌وکار شما آماده است. همین حالا سفارش دهید."
+                : "همین حالا ثبت‌نام کنید و اولین سفارش خود را ثبت کنید. تیم ما آماده کمک به شماست."}
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link href="/register">
+              <Link href={isLoggedIn ? "/new-order" : "/register"}>
                 <Button
                   variant="secondary"
                   size="lg"
                   className="bg-white text-primary hover:bg-primary-50"
                 >
-                  ثبت‌نام رایگان
+                  {isLoggedIn ? "سفارش جدید" : "ثبت‌نام رایگان"}
                 </Button>
               </Link>
               <a

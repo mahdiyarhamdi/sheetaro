@@ -1,0 +1,413 @@
+import axios, { AxiosError, AxiosInstance } from "axios";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3005";
+
+/**
+ * Creates an axios instance with default configuration
+ */
+function createApiClient(): AxiosInstance {
+  const client = axios.create({
+    baseURL: `${API_URL}/api/v1`,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    withCredentials: true,
+  });
+
+  // Request interceptor to add auth token
+  client.interceptors.request.use(
+    (config) => {
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return config;
+    },
+    (error) => Promise.reject(error)
+  );
+
+  // Response interceptor for error handling and token refresh
+  client.interceptors.response.use(
+    (response) => response,
+    async (error: AxiosError) => {
+      const originalRequest = error.config;
+
+      // Handle 401 and try to refresh token
+      if (error.response?.status === 401 && originalRequest) {
+        try {
+          const refreshToken = localStorage.getItem("refresh_token");
+          if (refreshToken) {
+            const response = await axios.post(`${API_URL}/api/v1/auth/refresh`, {
+              refresh_token: refreshToken,
+            });
+
+            const { access_token, refresh_token: newRefreshToken } = response.data;
+            localStorage.setItem("access_token", access_token);
+            localStorage.setItem("refresh_token", newRefreshToken);
+
+            originalRequest.headers.Authorization = `Bearer ${access_token}`;
+            return client(originalRequest);
+          }
+        } catch {
+          // Refresh failed, clear tokens and redirect to login
+          localStorage.removeItem("access_token");
+          localStorage.removeItem("refresh_token");
+          if (typeof window !== "undefined") {
+            window.location.href = "/login";
+          }
+        }
+      }
+
+      return Promise.reject(error);
+    }
+  );
+
+  return client;
+}
+
+export const api = createApiClient();
+
+// ============ Auth API ============
+
+export interface LoginRequest {
+  phone: string;
+  password: string;
+}
+
+export interface RegisterRequest {
+  phone: string;
+  password: string;
+  full_name: string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  refresh_token: string;
+  user: User;
+}
+
+export interface User {
+  id: string;
+  phone_number: string;
+  full_name: string;
+  first_name?: string;
+  last_name?: string;
+  telegram_id?: number | null;
+  is_admin: boolean;
+  phone_verified: boolean;
+  web_linked: boolean;
+  created_at: string;
+}
+
+export const authApi = {
+  register: (data: RegisterRequest) =>
+    api.post<AuthResponse>("/auth/register", data),
+
+  login: (data: LoginRequest) =>
+    api.post<AuthResponse>("/auth/login", data),
+
+  refresh: (refreshToken: string) =>
+    api.post<AuthResponse>("/auth/refresh", { refresh_token: refreshToken }),
+
+  // Generate OTP for Telegram linking
+  generateTelegramLink: () =>
+    api.post<{ otp: string; expires_at: string }>("/auth/telegram-link"),
+
+  // Verify OTP and link Telegram account
+  verifyTelegramLink: (otp: string) =>
+    api.post<{ success: boolean; telegram_id: number }>("/auth/telegram-verify", { otp }),
+
+  // Get current user
+  me: () => api.get<User>("/auth/me"),
+};
+
+// ============ Orders API ============
+
+export interface Order {
+  id: string;
+  user_id: string;
+  category_id: string;
+  plan_id: string;
+  status: string;
+  total_price: number;
+  attributes: Record<string, unknown>;
+  questionnaire_answers?: Record<string, unknown>;
+  design_file_url?: string;
+  created_at: string;
+  updated_at: string;
+  category?: Category;
+  plan?: DesignPlan;
+}
+
+export interface OrdersListResponse {
+  items: Order[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export const ordersApi = {
+  list: (params?: { page?: number; page_size?: number; status?: string }) =>
+    api.get<OrdersListResponse>("/orders", { params }),
+
+  get: (id: string) => api.get<Order>(`/orders/${id}`),
+
+  create: (data: CreateOrderRequest) =>
+    api.post<Order>("/orders", data),
+
+  updateStatus: (id: string, status: string) =>
+    api.patch<Order>(`/orders/${id}/status`, { status }),
+};
+
+export interface CreateOrderRequest {
+  category_id: string;
+  plan_id: string;
+  attributes: Record<string, unknown>;
+  questionnaire_answers?: Record<string, unknown>;
+  template_id?: string;
+}
+
+// ============ Categories API ============
+
+export interface Category {
+  id: string;
+  name_fa: string;
+  slug: string;
+  icon?: string;
+  base_price: number;
+  is_active: boolean;
+}
+
+export interface Attribute {
+  id: string;
+  category_id: string;
+  name_fa: string;
+  slug: string;
+  input_type: string;
+  options?: AttributeOption[];
+}
+
+export interface AttributeOption {
+  id: string;
+  label_fa: string;
+  value: string;
+  extra_price: number;
+}
+
+export const catalogApi = {
+  // Categories
+  getCategories: () => api.get<{ items: Category[] }>("/categories"),
+  getCategory: (id: string) => api.get<Category>(`/categories/${id}`),
+
+  // Attributes
+  getCategoryAttributes: (categoryId: string) =>
+    api.get<{ items: Attribute[] }>(`/categories/${categoryId}/attributes`),
+
+  // Plans
+  getCategoryPlans: (categoryId: string) =>
+    api.get<{ items: DesignPlan[] }>(`/categories/${categoryId}/plans`),
+};
+
+// ============ Plans API ============
+
+export interface DesignPlan {
+  id: string;
+  category_id: string;
+  name_fa: string;
+  slug: string;
+  plan_type: "public" | "semi_private" | "private";
+  price: number;
+  is_active: boolean;
+  templates?: Template[];
+  questionnaire?: Questionnaire;
+}
+
+export interface Template {
+  id: string;
+  plan_id: string;
+  name_fa: string;
+  preview_url: string;
+  placeholder_data?: Record<string, unknown>;
+  is_active: boolean;
+}
+
+export interface Questionnaire {
+  id: string;
+  plan_id: string;
+  sections: QuestionnaireSection[];
+}
+
+export interface QuestionnaireSection {
+  id: string;
+  title_fa: string;
+  description_fa?: string;
+  order_index: number;
+  questions: Question[];
+}
+
+export interface Question {
+  id: string;
+  text_fa: string;
+  input_type: string;
+  is_required: boolean;
+  options?: string[];
+  order_index: number;
+}
+
+export const plansApi = {
+  getPlan: (id: string) => api.get<DesignPlan>(`/plans/${id}`),
+  getPlanTemplates: (planId: string) =>
+    api.get<{ items: Template[] }>(`/plans/${planId}/templates`),
+  getPlanQuestionnaire: (planId: string) =>
+    api.get<Questionnaire>(`/plans/${planId}/questionnaire`),
+};
+
+// ============ Payments API ============
+
+export interface Payment {
+  id: string;
+  order_id: string;
+  amount: number;
+  status: string;
+  receipt_url?: string;
+  admin_note?: string;
+  created_at: string;
+  updated_at: string;
+  order?: Order;
+}
+
+export const paymentsApi = {
+  initiate: (orderId: string) =>
+    api.post<Payment>("/payments/initiate", { order_id: orderId }),
+
+  uploadReceipt: (paymentId: string, file: File) => {
+    const formData = new FormData();
+    formData.append("receipt", file);
+    return api.post<Payment>(`/payments/${paymentId}/upload-receipt`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+
+  // Admin endpoints
+  getPending: (params?: { page?: number; page_size?: number }) =>
+    api.get<{ items: Payment[]; total: number }>("/payments/pending", { params }),
+
+  approve: (paymentId: string) =>
+    api.post<Payment>(`/payments/${paymentId}/approve`),
+
+  reject: (paymentId: string, reason: string) =>
+    api.post<Payment>(`/payments/${paymentId}/reject`, { reason }),
+};
+
+// ============ Files API ============
+
+export const filesApi = {
+  upload: (file: File, type: string = "design") => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("type", type);
+    return api.post<{ url: string; file_id: string }>("/files/upload", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+};
+
+// ============ Admin API ============
+
+export interface AdminStats {
+  total_orders: number;
+  pending_payments: number;
+  total_revenue: number;
+  new_users_today: number;
+  active_users: number;
+  orders_today: number;
+  orders_this_week: number;
+  pending_orders: number;
+}
+
+export interface OrderStats {
+  total: number;
+  by_status: Record<string, number>;
+  by_day: Array<{ date: string; count: number }>;
+}
+
+export interface RevenueStats {
+  total_revenue: number;
+  this_month: number;
+  last_month: number;
+  by_day: Array<{ date: string; amount: number }>;
+}
+
+export const adminApi = {
+  // Dashboard stats
+  getStats: () => api.get<AdminStats>("/admin/stats"),
+  getOrderStats: () => api.get<OrderStats>("/admin/stats/orders"),
+  getRevenueStats: () => api.get<RevenueStats>("/admin/stats/revenue"),
+  getUserStats: () => api.get<{ by_role: Record<string, number>; daily_signups: Array<{ date: string; count: number }> }>("/admin/stats/users"),
+
+  // Categories management (uses existing categories API)
+  getCategories: () => api.get<Category[]>("/api/v1/categories"),
+  createCategory: (data: { name: string; description?: string; icon?: string }) =>
+    api.post<Category>("/api/v1/categories", data),
+  updateCategory: (id: string, data: Partial<Category>) =>
+    api.patch<Category>(`/api/v1/categories/${id}`, data),
+  deleteCategory: (id: string) => api.delete(`/api/v1/categories/${id}`),
+  getCategoryDetails: (id: string) => api.get<Category>(`/api/v1/categories/${id}/details`),
+
+  // Products management
+  getProducts: (params?: { type?: string; active_only?: boolean; page?: number; page_size?: number }) =>
+    api.get<{ items: any[]; total: number; page: number; page_size: number }>("/products", { params }),
+  createProduct: (data: any) => api.post<any>("/products", data),
+  updateProduct: (id: string, data: any) => api.patch<any>(`/products/${id}`, data),
+  deleteProduct: (id: string) => api.delete(`/products/${id}`),
+
+  // Plans management (uses existing plans API)
+  getPlans: (categoryId?: string) => 
+    categoryId 
+      ? api.get<any[]>(`/api/v1/categories/${categoryId}/plans`)
+      : api.get<any[]>("/api/v1/plans"),
+  createPlan: (categoryId: string, data: any) => api.post<any>(`/api/v1/categories/${categoryId}/plans`, data),
+  updatePlan: (id: string, data: any) => api.patch<any>(`/api/v1/plans/${id}`, data),
+  deletePlan: (id: string) => api.delete(`/api/v1/plans/${id}`),
+
+  // Attributes management
+  getAttributes: (categoryId: string) => api.get<any[]>(`/api/v1/categories/${categoryId}/attributes`),
+  createAttribute: (categoryId: string, data: any) => api.post<any>(`/api/v1/categories/${categoryId}/attributes`, data),
+  updateAttribute: (id: string, data: any) => api.patch<any>(`/api/v1/attributes/${id}`, data),
+  deleteAttribute: (id: string) => api.delete(`/api/v1/attributes/${id}`),
+
+  // Users management
+  getUsers: (params?: { page?: number; page_size?: number; search?: string; role?: string; is_active?: boolean }) =>
+    api.get<{ items: User[]; total: number; page: number; page_size: number }>("/admin/users", { params }),
+  getUser: (id: string) => api.get<User>(`/admin/users/${id}`),
+  updateUserRole: (id: string, role: string) => api.patch<User>(`/admin/users/${id}/role`, { role }),
+  banUser: (id: string, is_active: boolean, reason?: string) => 
+    api.post<User>(`/admin/users/${id}/ban`, { is_active, reason }),
+
+  // Orders management
+  getOrders: (params?: { status?: string; user_id?: string; page?: number; page_size?: number }) =>
+    api.get<{ items: any[]; total: number; page: number; page_size: number }>("/admin/orders", { params }),
+  updateOrderStatus: (id: string, status: string) =>
+    api.patch<any>(`/admin/orders/${id}/status`, null, { params: { new_status: status } }),
+  assignOrder: (id: string, assignments: { designer_id?: string; validator_id?: string; printshop_id?: string }) =>
+    api.post<any>(`/admin/orders/${id}/assign`, null, { params: assignments }),
+
+  // Payments management
+  getPayments: (params?: { status?: string; page?: number; page_size?: number }) =>
+    api.get<{ items: any[]; total: number; page: number; page_size: number }>("/admin/payments", { params }),
+  verifyPayment: (id: string, approved: boolean, reason?: string) =>
+    api.post<any>(`/admin/payments/${id}/verify`, null, { params: { approved, reason } }),
+};
+
+// Error helper
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof AxiosError) {
+    return error.response?.data?.detail || error.message || "خطای سرور";
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return "خطای ناشناخته";
+}
+

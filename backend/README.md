@@ -125,6 +125,21 @@ docker-compose up --build
 - `PUT /settings/payment-card` - Set payment card info (Admin)
 - `PATCH /settings/payment-card` - Update payment card info (Admin)
 
+### Admin (`/api/v1/admin`) - Admin Panel APIs
+- `GET /admin/stats` - Dashboard statistics (orders, payments, revenue, users)
+- `GET /admin/stats/orders` - Order statistics with daily breakdown
+- `GET /admin/stats/revenue` - Revenue statistics (this month, last month, daily)
+- `GET /admin/stats/users` - User statistics (by role, daily signups)
+- `GET /admin/users` - List users with filters (search, role, active status)
+- `GET /admin/users/{id}` - Get user details
+- `PATCH /admin/users/{id}/role` - Update user role
+- `POST /admin/users/{id}/ban` - Ban/unban user
+- `GET /admin/orders` - List all orders with filters
+- `PATCH /admin/orders/{id}/status` - Force update order status
+- `POST /admin/orders/{id}/assign` - Assign order to designer/validator/printshop
+- `GET /admin/payments` - List all payments with filters
+- `POST /admin/payments/{id}/verify` - Verify or reject payment
+
 ### Categories (`/api/v1/categories`) - Dynamic Product Catalog
 - `GET /categories` - List all categories
 - `GET /categories/{id}` - Get category by ID
@@ -383,5 +398,5 @@ For Telegram bot integration, `user_id` query parameter is used.
 
 ---
 
-**Last Updated**: 2026-01-21
+**Last Updated**: 2026-01-31
 
