@@ -2,11 +2,17 @@
 
 from typing import Optional, Dict, Any
 from uuid import UUID
+from datetime import datetime, timezone
+
 from fastapi import Header, HTTPException, status, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from jose import jwt, JWTError
 
 from app.core.database import get_db
+from app.core.config import settings
 from app.models.enums import UserRole
+from app.models.user import User
 
 
 class AuthenticatedUser:
@@ -264,6 +270,110 @@ async def get_current_admin_user(x_admin_id: Optional[str] = Header(None)) -> Di
     return {"id": x_admin_id, "role": "ADMIN"}
 
 
+# ============== JWT Token-based Authentication ==============
+
+def get_token_from_header(authorization: str = Header(None)) -> str:
+    """Extract token from Authorization header."""
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="توکن احراز هویت ارسال نشده است",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    parts = authorization.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="فرمت توکن نامعتبر است",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    return parts[1]
+
+
+async def get_current_user_from_token(
+    token: str = Depends(get_token_from_header),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """
+    Get current user from JWT access token.
+    
+    Validates the token and returns the User model.
+    Raises 401 if token is invalid or user not found.
+    """
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        
+        if payload.get("type") != "access":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="توکن نامعتبر است",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="توکن نامعتبر است",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Check expiration
+        exp = payload.get("exp")
+        if exp and datetime.fromtimestamp(exp, tz=timezone.utc) < datetime.now(timezone.utc):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="توکن منقضی شده است",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="توکن نامعتبر است",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Get user from database
+    result = await db.execute(
+        select(User).where(User.id == UUID(user_id))
+    )
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="کاربر یافت نشد",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="حساب کاربری غیرفعال شده است",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    return user
+
+
+async def require_admin_token(
+    current_user: User = Depends(get_current_user_from_token),
+) -> User:
+    """
+    Require admin role using JWT token authentication.
+    Raises 403 if user is not admin.
+    """
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="دسترسی ادمین لازم است",
+        )
+    return current_user
+
+
 # Re-export get_db from database module
 __all__ = [
     "get_db",
@@ -278,5 +388,9 @@ __all__ = [
     "require_admin_by_query",
     "require_print_shop_by_query",
     "get_current_admin_user",
+    # JWT token-based auth
+    "get_token_from_header",
+    "get_current_user_from_token",
+    "require_admin_token",
 ]
 

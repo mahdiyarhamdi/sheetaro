@@ -47,8 +47,8 @@ describe("Login Page", () => {
     expect(screen.getByLabelText(/رمز عبور/i)).toBeInTheDocument();
     expect(screen.getByPlaceholderText("رمز عبور خود را وارد کنید")).toBeInTheDocument();
     
-    // Submit button
-    expect(screen.getByRole("button", { name: /ورود/i })).toBeInTheDocument();
+    // Submit button (exact text to avoid Telegram button)
+    expect(screen.getByRole("button", { name: /^ورود$/i })).toBeInTheDocument();
   });
 
   it("renders page title and description", () => {
@@ -83,7 +83,7 @@ describe("Login Page", () => {
     
     const phoneInput = screen.getByPlaceholderText("09123456789");
     const passwordInput = screen.getByPlaceholderText("رمز عبور خود را وارد کنید");
-    const submitButton = screen.getByRole("button", { name: /ورود/i });
+    const submitButton = screen.getByRole("button", { name: /^ورود$/i });
     
     // Enter invalid phone
     await user.type(phoneInput, "12345");
@@ -103,7 +103,7 @@ describe("Login Page", () => {
     const { user } = render(<LoginPage />);
     
     const passwordInput = screen.getByPlaceholderText("رمز عبور خود را وارد کنید");
-    const submitButton = screen.getByRole("button", { name: /ورود/i });
+    const submitButton = screen.getByRole("button", { name: /^ورود$/i });
     
     await user.type(passwordInput, "password123");
     await user.click(submitButton);
@@ -117,7 +117,7 @@ describe("Login Page", () => {
     const { user } = render(<LoginPage />);
     
     const phoneInput = screen.getByPlaceholderText("09123456789");
-    const submitButton = screen.getByRole("button", { name: /ورود/i });
+    const submitButton = screen.getByRole("button", { name: /^ورود$/i });
     
     await user.type(phoneInput, "09121234567");
     await user.click(submitButton);
@@ -134,7 +134,7 @@ describe("Login Page", () => {
     
     const phoneInput = screen.getByPlaceholderText("09123456789");
     const passwordInput = screen.getByPlaceholderText("رمز عبور خود را وارد کنید");
-    const submitButton = screen.getByRole("button", { name: /ورود/i });
+    const submitButton = screen.getByRole("button", { name: /^ورود$/i });
     
     await user.type(phoneInput, "09121234567");
     await user.type(passwordInput, "password123");
@@ -158,7 +158,7 @@ describe("Login Page", () => {
     
     render(<LoginPage />);
     
-    const submitButton = screen.getByRole("button", { name: /ورود/i });
+    const submitButton = screen.getByRole("button", { name: /^ورود$/i });
     expect(submitButton).toBeDisabled();
   });
 

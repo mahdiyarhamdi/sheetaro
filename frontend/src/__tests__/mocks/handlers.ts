@@ -4,12 +4,12 @@
 
 import { http, HttpResponse } from "msw";
 
-const API_URL = "http://localhost:3001/api/v1";
+const API_URL = "http://localhost:3005/api/v1";
 
 // Mock user data
 export const mockUser = {
   id: "123e4567-e89b-12d3-a456-426614174000",
-  phone: "09121234567",
+  phone_number: "09121234567",
   full_name: "Test User",
   first_name: "Test",
   last_name: "User",
@@ -18,12 +18,19 @@ export const mockUser = {
   phone_verified: false,
   web_linked: false,
   created_at: "2024-01-01T00:00:00Z",
+  role: "CUSTOMER",
+  is_active: true,
 };
 
 export const mockAdminUser = {
   ...mockUser,
-  id: "admin-123",
+  id: "admin-123e4567-e89b-12d3-a456-426614174001",
+  phone_number: "09120000000",
+  full_name: "Admin User",
+  first_name: "Admin",
+  last_name: "User",
   is_admin: true,
+  role: "ADMIN",
 };
 
 export const mockTokens = {
@@ -325,13 +332,323 @@ export const handlers = [
     });
   }),
 
-  // Admin endpoints
-  http.get(`${API_URL}/admin/stats`, () => {
+  // ==================== Admin Endpoints ====================
+
+  // Admin Dashboard Stats
+  http.get(`${API_URL}/admin/stats`, ({ request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
     return HttpResponse.json({
       total_orders: 150,
       pending_payments: 5,
       total_revenue: 15000000,
       new_users_today: 3,
+      active_users: 120,
+      orders_today: 8,
+      orders_this_week: 42,
+      pending_orders: 12,
+    });
+  }),
+
+  // Admin Order Stats
+  http.get(`${API_URL}/admin/stats/orders`, ({ request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    return HttpResponse.json({
+      total: 150,
+      by_status: {
+        PENDING: 12,
+        DESIGNING: 8,
+        READY_FOR_PRINT: 5,
+        PRINTING: 3,
+        SHIPPED: 10,
+        DELIVERED: 110,
+        CANCELLED: 2,
+      },
+      by_day: [
+        { date: "2024-01-01", count: 5 },
+        { date: "2024-01-02", count: 8 },
+        { date: "2024-01-03", count: 6 },
+        { date: "2024-01-04", count: 10 },
+        { date: "2024-01-05", count: 7 },
+        { date: "2024-01-06", count: 4 },
+        { date: "2024-01-07", count: 8 },
+      ],
+    });
+  }),
+
+  // Admin Revenue Stats
+  http.get(`${API_URL}/admin/stats/revenue`, ({ request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    return HttpResponse.json({
+      total_revenue: 15000000,
+      this_month: 4500000,
+      last_month: 3800000,
+      by_day: [
+        { date: "2024-01-01", amount: 500000 },
+        { date: "2024-01-02", amount: 750000 },
+        { date: "2024-01-03", amount: 600000 },
+        { date: "2024-01-04", amount: 900000 },
+        { date: "2024-01-05", amount: 650000 },
+        { date: "2024-01-06", amount: 400000 },
+        { date: "2024-01-07", amount: 700000 },
+      ],
+    });
+  }),
+
+  // Admin User Stats
+  http.get(`${API_URL}/admin/stats/users`, ({ request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    return HttpResponse.json({
+      by_role: {
+        CUSTOMER: 100,
+        DESIGNER: 5,
+        VALIDATOR: 3,
+        PRINT_SHOP: 2,
+        ADMIN: 2,
+      },
+      daily_signups: [
+        { date: "2024-01-01", count: 2 },
+        { date: "2024-01-02", count: 5 },
+        { date: "2024-01-03", count: 3 },
+        { date: "2024-01-04", count: 7 },
+        { date: "2024-01-05", count: 4 },
+        { date: "2024-01-06", count: 2 },
+        { date: "2024-01-07", count: 3 },
+      ],
+    });
+  }),
+
+  // Admin Users List
+  http.get(`${API_URL}/admin/users`, ({ request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    const url = new URL(request.url);
+    const search = url.searchParams.get("search");
+    const role = url.searchParams.get("role");
+    const page = parseInt(url.searchParams.get("page") || "1");
+    const pageSize = parseInt(url.searchParams.get("page_size") || "20");
+    
+    let users = [mockUser, mockAdminUser];
+    
+    if (role) {
+      users = users.filter(u => u.role === role);
+    }
+    
+    if (search) {
+      users = users.filter(u => 
+        u.full_name.toLowerCase().includes(search.toLowerCase()) ||
+        u.phone_number.includes(search)
+      );
+    }
+    
+    return HttpResponse.json({
+      items: users,
+      total: users.length,
+      page,
+      page_size: pageSize,
+    });
+  }),
+
+  // Admin Get User
+  http.get(`${API_URL}/admin/users/:id`, ({ params, request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    if (params.id === mockUser.id) {
+      return HttpResponse.json(mockUser);
+    }
+    if (params.id === mockAdminUser.id) {
+      return HttpResponse.json(mockAdminUser);
+    }
+    
+    return HttpResponse.json({ detail: "کاربر یافت نشد" }, { status: 404 });
+  }),
+
+  // Admin Update User Role
+  http.patch(`${API_URL}/admin/users/:id/role`, async ({ params, request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    const body = (await request.json()) as { role: string };
+    
+    return HttpResponse.json({
+      ...mockUser,
+      id: params.id,
+      role: body.role,
+    });
+  }),
+
+  // Admin Ban/Unban User
+  http.post(`${API_URL}/admin/users/:id/ban`, async ({ params, request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    // Cannot ban self
+    if (params.id === mockAdminUser.id) {
+      return HttpResponse.json(
+        { detail: "نمی‌توانید خودتان را مسدود کنید" },
+        { status: 400 }
+      );
+    }
+    
+    const body = (await request.json()) as { is_active: boolean; reason?: string };
+    
+    return HttpResponse.json({
+      ...mockUser,
+      id: params.id,
+      is_active: body.is_active,
+    });
+  }),
+
+  // Admin Orders List
+  http.get(`${API_URL}/admin/orders`, ({ request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    const url = new URL(request.url);
+    const status = url.searchParams.get("status");
+    const page = parseInt(url.searchParams.get("page") || "1");
+    const pageSize = parseInt(url.searchParams.get("page_size") || "20");
+    
+    let orders = mockOrders;
+    if (status) {
+      orders = orders.filter(o => o.status === status);
+    }
+    
+    return HttpResponse.json({
+      items: orders,
+      total: orders.length,
+      page,
+      page_size: pageSize,
+    });
+  }),
+
+  // Admin Update Order Status
+  http.patch(`${API_URL}/admin/orders/:id/status`, ({ params, request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    const url = new URL(request.url);
+    const newStatus = url.searchParams.get("new_status");
+    
+    const order = mockOrders.find(o => o.id === params.id);
+    if (!order) {
+      return HttpResponse.json({ detail: "سفارش یافت نشد" }, { status: 404 });
+    }
+    
+    return HttpResponse.json({
+      success: true,
+      order_id: params.id,
+      old_status: order.status,
+      new_status: newStatus,
+    });
+  }),
+
+  // Admin Assign Order
+  http.post(`${API_URL}/admin/orders/:id/assign`, ({ params, request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    const url = new URL(request.url);
+    const designerId = url.searchParams.get("designer_id");
+    const validatorId = url.searchParams.get("validator_id");
+    const printshopId = url.searchParams.get("printshop_id");
+    
+    const order = mockOrders.find(o => o.id === params.id);
+    if (!order) {
+      return HttpResponse.json({ detail: "سفارش یافت نشد" }, { status: 404 });
+    }
+    
+    return HttpResponse.json({
+      success: true,
+      order_id: params.id,
+      assigned_designer_id: designerId,
+      assigned_validator_id: validatorId,
+      assigned_printshop_id: printshopId,
+    });
+  }),
+
+  // Admin Payments List
+  http.get(`${API_URL}/admin/payments`, ({ request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    const url = new URL(request.url);
+    const status = url.searchParams.get("status");
+    const page = parseInt(url.searchParams.get("page") || "1");
+    const pageSize = parseInt(url.searchParams.get("page_size") || "20");
+    
+    let payments = mockPayments;
+    if (status) {
+      payments = payments.filter(p => p.status === status);
+    }
+    
+    return HttpResponse.json({
+      items: payments,
+      total: payments.length,
+      page,
+      page_size: pageSize,
+    });
+  }),
+
+  // Admin Verify Payment
+  http.post(`${API_URL}/admin/payments/:id/verify`, ({ params, request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    const url = new URL(request.url);
+    const approved = url.searchParams.get("approved") === "true";
+    
+    const payment = mockPayments.find(p => p.id === params.id);
+    if (!payment) {
+      return HttpResponse.json({ detail: "پرداخت یافت نشد" }, { status: 404 });
+    }
+    
+    if (payment.status === "SUCCESS" || payment.status === "FAILED") {
+      return HttpResponse.json(
+        { detail: "این پرداخت قبلاً بررسی شده است" },
+        { status: 400 }
+      );
+    }
+    
+    return HttpResponse.json({
+      success: true,
+      payment_id: params.id,
+      status: approved ? "SUCCESS" : "FAILED",
     });
   }),
 ];

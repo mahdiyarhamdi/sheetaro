@@ -171,7 +171,7 @@ export default function ProfilePage() {
                 <div>
                   <p className="text-sm text-muted">شماره موبایل</p>
                   <p className="font-medium" dir="ltr">
-                    {user?.phone || "-"}
+                    {user?.phone_number || "-"}
                   </p>
                 </div>
                 <Badge variant="success" size="sm" className="mr-auto">
@@ -187,7 +187,7 @@ export default function ProfilePage() {
                   <p className="text-sm text-muted">تلگرام</p>
                   <p className="font-medium">
                     {user?.telegram_id
-                      ? `@${user.username || toPersianNumber(user.telegram_id)}`
+                      ? toPersianNumber(user.telegram_id)
                       : "متصل نشده"}
                   </p>
                 </div>

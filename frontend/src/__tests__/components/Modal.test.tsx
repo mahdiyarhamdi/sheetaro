@@ -135,16 +135,16 @@ describe("Modal Component", () => {
 
   it("renders with different sizes", () => {
     const { rerender } = render(<Modal {...defaultProps} size="sm" />);
-    expect(screen.getByRole("dialog").querySelector(".max-w-sm")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveClass("max-w-sm");
 
     rerender(<Modal {...defaultProps} size="md" />);
-    expect(screen.getByRole("dialog").querySelector(".max-w-md")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveClass("max-w-md");
 
     rerender(<Modal {...defaultProps} size="lg" />);
-    expect(screen.getByRole("dialog").querySelector(".max-w-lg")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveClass("max-w-lg");
 
     rerender(<Modal {...defaultProps} size="xl" />);
-    expect(screen.getByRole("dialog").querySelector(".max-w-xl")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveClass("max-w-xl");
   });
 
   // ==================== Body Scroll Prevention Tests ====================

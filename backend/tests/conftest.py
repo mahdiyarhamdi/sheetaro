@@ -23,6 +23,7 @@ import re
 
 from app.core.database import Base
 from app.core.config import settings
+from app.core.security import get_password_hash
 from app.main import app
 from app.api.deps import get_db
 from app.models.enums import UserRole, ProductType, MaterialType, DesignPlan
@@ -579,4 +580,178 @@ async def create_test_web_user(db_session: AsyncSession, data: dict = None):
     await db_session.flush()
     await db_session.refresh(user)
     return user
+
+
+# ==================== Admin Testing Fixtures ====================
+
+async def create_test_admin_user(db_session: AsyncSession, data: dict = None):
+    """Create a test admin user for admin API tests."""
+    from app.models.user import User
+    from app.core.security import get_password_hash
+    
+    user_data = data or {
+        "phone_number": "09120000000",
+        "password_hash": get_password_hash("admin123456"),
+        "first_name": "Admin",
+        "last_name": "User",
+        "full_name": "Admin User",
+        "role": UserRole.ADMIN,
+        "phone_verified": True,
+        "web_linked": False,
+        "is_active": True,
+    }
+    
+    if isinstance(user_data.get("role"), str):
+        user_data["role"] = UserRole(user_data["role"])
+    
+    user = User(**user_data)
+    db_session.add(user)
+    await db_session.flush()
+    await db_session.refresh(user)
+    return user
+
+
+async def create_test_order(db_session: AsyncSession, user, product, data: dict = None):
+    """Create a test order for admin API tests."""
+    from app.models.order import Order
+    from app.models.enums import DesignPlan, OrderStatus
+    
+    order_data = {
+        "user_id": user.id,
+        "product_id": product.id,
+        "design_plan": DesignPlan.PUBLIC,
+        "status": OrderStatus.PENDING,
+        "quantity": 100,
+        "total_price": Decimal("50000"),
+        "design_price": Decimal("0"),
+        "validation_price": Decimal("0"),
+        "fix_price": Decimal("0"),
+        "print_price": Decimal("50000"),
+        "validation_requested": False,
+    }
+    
+    if data:
+        order_data.update(data)
+    
+    if isinstance(order_data.get("design_plan"), str):
+        order_data["design_plan"] = DesignPlan(order_data["design_plan"])
+    if isinstance(order_data.get("status"), str):
+        order_data["status"] = OrderStatus(order_data["status"])
+    
+    order = Order(**order_data)
+    db_session.add(order)
+    await db_session.flush()
+    await db_session.refresh(order)
+    return order
+
+
+async def create_test_payment(db_session: AsyncSession, order, user, data: dict = None):
+    """Create a test payment for admin API tests."""
+    from app.models.payment import Payment
+    from app.models.enums import PaymentType, PaymentStatus
+    
+    payment_data = {
+        "order_id": order.id,
+        "user_id": user.id,
+        "type": PaymentType.PRINT,
+        "amount": Decimal("50000"),
+        "status": PaymentStatus.PENDING,
+    }
+    
+    if data:
+        payment_data.update(data)
+    
+    if isinstance(payment_data.get("type"), str):
+        payment_data["type"] = PaymentType(payment_data["type"])
+    if isinstance(payment_data.get("status"), str):
+        payment_data["status"] = PaymentStatus(payment_data["status"])
+    
+    payment = Payment(**payment_data)
+    db_session.add(payment)
+    await db_session.flush()
+    await db_session.refresh(payment)
+    return payment
+
+
+def create_admin_token(user_id: str) -> str:
+    """Create a JWT access token for admin testing."""
+    from datetime import datetime, timedelta, timezone
+    from jose import jwt
+    from app.core.config import settings
+    
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(minutes=30)
+    
+    to_encode = {
+        "sub": user_id,
+        "type": "access",
+        "exp": expire,
+        "iat": now,
+    }
+    
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
+
+
+@pytest_asyncio.fixture
+async def admin_user(db_session):
+    """Create an admin user for testing."""
+    return await create_test_admin_user(db_session)
+
+
+@pytest_asyncio.fixture
+async def admin_token(admin_user):
+    """Get access token for admin user."""
+    return create_admin_token(str(admin_user.id))
+
+
+@pytest_asyncio.fixture
+async def admin_headers(admin_token):
+    """Get authorization headers for admin requests."""
+    return {"Authorization": f"Bearer {admin_token}"}
+
+
+@pytest_asyncio.fixture
+async def regular_web_user(db_session):
+    """Create a regular (non-admin) web user for testing."""
+    return await create_test_web_user(db_session, {
+        "phone_number": "09121111111",
+        "password_hash": get_password_hash("user123456"),
+        "first_name": "Regular",
+        "last_name": "User",
+        "full_name": "Regular User",
+        "role": UserRole.CUSTOMER,
+        "phone_verified": True,
+        "web_linked": False,
+        "is_active": True,
+    })
+
+
+@pytest_asyncio.fixture
+async def regular_user_token(regular_web_user):
+    """Get access token for regular user."""
+    return create_admin_token(str(regular_web_user.id))
+
+
+@pytest_asyncio.fixture
+async def regular_user_headers(regular_user_token):
+    """Get authorization headers for regular user requests."""
+    return {"Authorization": f"Bearer {regular_user_token}"}
+
+
+@pytest_asyncio.fixture
+async def test_product(db_session):
+    """Create a test product for order tests."""
+    return await create_test_product(db_session)
+
+
+@pytest_asyncio.fixture
+async def test_order(db_session, regular_web_user, test_product):
+    """Create a test order for admin tests."""
+    return await create_test_order(db_session, regular_web_user, test_product)
+
+
+@pytest_asyncio.fixture
+async def test_payment(db_session, test_order, regular_web_user):
+    """Create a test payment for admin tests."""
+    return await create_test_payment(db_session, test_order, regular_web_user)
 

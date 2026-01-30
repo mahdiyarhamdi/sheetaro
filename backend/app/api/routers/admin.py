@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from pydantic import BaseModel
 
-from app.api.deps import get_db, get_current_user_from_token, require_admin
+from app.api.deps import get_db, get_current_user_from_token, require_admin_token as require_admin
 from app.models.user import User
 from app.models.order import Order
 from app.models.payment import Payment

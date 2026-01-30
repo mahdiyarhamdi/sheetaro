@@ -11,9 +11,9 @@ from app.utils.validators import validate_iranian_phone
 
 class UserBase(BaseModel):
     """Base user schema."""
-    telegram_id: int = Field(..., description="Telegram user ID")
+    telegram_id: int | None = Field(None, description="Telegram user ID")
     username: str | None = Field(None, max_length=255, description="Telegram username")
-    first_name: str = Field(..., max_length=255, description="First name")
+    first_name: str | None = Field(None, max_length=255, description="First name")
     last_name: str | None = Field(None, max_length=255, description="Last name")
     phone_number: str | None = Field(None, max_length=20, description="Phone number")
     city: str | None = Field(None, max_length=100, description="City")

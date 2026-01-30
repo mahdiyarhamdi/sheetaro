@@ -52,8 +52,8 @@ describe("Register Page", () => {
     expect(screen.getByLabelText(/تکرار رمز عبور/i)).toBeInTheDocument();
     expect(screen.getByPlaceholderText("رمز عبور را تکرار کنید")).toBeInTheDocument();
     
-    // Submit button
-    expect(screen.getByRole("button", { name: /ثبت‌نام/i })).toBeInTheDocument();
+    // Submit button (exact text to avoid Telegram button)
+    expect(screen.getByRole("button", { name: /^ثبت‌نام$/i })).toBeInTheDocument();
   });
 
   it("renders page title and description", () => {
@@ -78,8 +78,12 @@ describe("Register Page", () => {
   it("renders terms and privacy links", () => {
     render(<RegisterPage />);
     
-    expect(screen.getByRole("link", { name: /قوانین و مقررات/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /حریم خصوصی/i })).toBeInTheDocument();
+    // There might be multiple links (page + footer), so we check if at least one exists
+    const termsLinks = screen.getAllByRole("link", { name: /قوانین و مقررات/i });
+    const privacyLinks = screen.getAllByRole("link", { name: /حریم خصوصی/i });
+    
+    expect(termsLinks.length).toBeGreaterThan(0);
+    expect(privacyLinks.length).toBeGreaterThan(0);
   });
 
   // ==================== Validation Tests ====================
@@ -87,7 +91,7 @@ describe("Register Page", () => {
   it("validates all required fields", async () => {
     const { user } = render(<RegisterPage />);
     
-    const submitButton = screen.getByRole("button", { name: /ثبت‌نام/i });
+    const submitButton = screen.getByRole("button", { name: /^ثبت‌نام$/i });
     await user.click(submitButton);
     
     // Should show all validation errors
@@ -105,7 +109,7 @@ describe("Register Page", () => {
     const phoneInput = screen.getByPlaceholderText("09123456789");
     const passwordInput = screen.getByPlaceholderText("حداقل ۶ کاراکتر");
     const confirmInput = screen.getByPlaceholderText("رمز عبور را تکرار کنید");
-    const submitButton = screen.getByRole("button", { name: /ثبت‌نام/i });
+    const submitButton = screen.getByRole("button", { name: /^ثبت‌نام$/i });
     
     await user.type(nameInput, "Test User");
     await user.type(phoneInput, "12345");
@@ -125,7 +129,7 @@ describe("Register Page", () => {
     const phoneInput = screen.getByPlaceholderText("09123456789");
     const passwordInput = screen.getByPlaceholderText("حداقل ۶ کاراکتر");
     const confirmInput = screen.getByPlaceholderText("رمز عبور را تکرار کنید");
-    const submitButton = screen.getByRole("button", { name: /ثبت‌نام/i });
+    const submitButton = screen.getByRole("button", { name: /^ثبت‌نام$/i });
     
     await user.type(nameInput, "Test User");
     await user.type(phoneInput, "09121234567");
@@ -145,7 +149,7 @@ describe("Register Page", () => {
     const phoneInput = screen.getByPlaceholderText("09123456789");
     const passwordInput = screen.getByPlaceholderText("حداقل ۶ کاراکتر");
     const confirmInput = screen.getByPlaceholderText("رمز عبور را تکرار کنید");
-    const submitButton = screen.getByRole("button", { name: /ثبت‌نام/i });
+    const submitButton = screen.getByRole("button", { name: /^ثبت‌نام$/i });
     
     await user.type(nameInput, "Test User");
     await user.type(phoneInput, "09121234567");
@@ -169,7 +173,7 @@ describe("Register Page", () => {
     const phoneInput = screen.getByPlaceholderText("09123456789");
     const passwordInput = screen.getByPlaceholderText("حداقل ۶ کاراکتر");
     const confirmInput = screen.getByPlaceholderText("رمز عبور را تکرار کنید");
-    const submitButton = screen.getByRole("button", { name: /ثبت‌نام/i });
+    const submitButton = screen.getByRole("button", { name: /^ثبت‌نام$/i });
     
     await user.type(nameInput, "Test User");
     await user.type(phoneInput, "09121234567");
@@ -196,7 +200,7 @@ describe("Register Page", () => {
     
     render(<RegisterPage />);
     
-    const submitButton = screen.getByRole("button", { name: /ثبت‌نام/i });
+    const submitButton = screen.getByRole("button", { name: /^ثبت‌نام$/i });
     expect(submitButton).toBeDisabled();
   });
 
@@ -242,15 +246,17 @@ describe("Register Page", () => {
   it("has correct terms link", () => {
     render(<RegisterPage />);
     
-    const termsLink = screen.getByRole("link", { name: /قوانین و مقررات/i });
-    expect(termsLink).toHaveAttribute("href", "/terms");
+    const termsLinks = screen.getAllByRole("link", { name: /قوانین و مقررات/i });
+    // At least one should have href="/terms"
+    expect(termsLinks.some(link => link.getAttribute("href") === "/terms")).toBe(true);
   });
 
   it("has correct privacy link", () => {
     render(<RegisterPage />);
     
-    const privacyLink = screen.getByRole("link", { name: /حریم خصوصی/i });
-    expect(privacyLink).toHaveAttribute("href", "/privacy");
+    const privacyLinks = screen.getAllByRole("link", { name: /حریم خصوصی/i });
+    // At least one should have href="/privacy"
+    expect(privacyLinks.some(link => link.getAttribute("href") === "/privacy")).toBe(true);
   });
 
   // ==================== Accessibility Tests ====================
