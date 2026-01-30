@@ -14,6 +14,8 @@ import {
   Button,
   PageLoading,
   Input,
+  Modal,
+  Textarea,
 } from "@/components/ui";
 import {
   Plus,
@@ -34,6 +36,13 @@ import { toPersianNumber, formatPrice } from "@/lib/utils";
 
 type TabType = "categories" | "products" | "plans";
 
+interface CategoryFormData {
+  slug: string;
+  name_fa: string;
+  description_fa: string;
+  is_active: boolean;
+}
+
 export default function CatalogManagementPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -41,6 +50,59 @@ export default function CatalogManagementPage() {
   const [isChecked, setIsChecked] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("categories");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  // Modal states
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<any>(null);
+  const [categoryForm, setCategoryForm] = useState<CategoryFormData>({
+    slug: "",
+    name_fa: "",
+    description_fa: "",
+    is_active: true,
+  });
+
+  // Generate slug from Persian name
+  const generateSlug = (name: string) => {
+    return name
+      .toLowerCase()
+      .replace(/[آا]/g, "a")
+      .replace(/[ب]/g, "b")
+      .replace(/[پ]/g, "p")
+      .replace(/[ت]/g, "t")
+      .replace(/[ث]/g, "s")
+      .replace(/[ج]/g, "j")
+      .replace(/[چ]/g, "ch")
+      .replace(/[ح]/g, "h")
+      .replace(/[خ]/g, "kh")
+      .replace(/[د]/g, "d")
+      .replace(/[ذ]/g, "z")
+      .replace(/[ر]/g, "r")
+      .replace(/[ز]/g, "z")
+      .replace(/[ژ]/g, "zh")
+      .replace(/[س]/g, "s")
+      .replace(/[ش]/g, "sh")
+      .replace(/[ص]/g, "s")
+      .replace(/[ض]/g, "z")
+      .replace(/[ط]/g, "t")
+      .replace(/[ظ]/g, "z")
+      .replace(/[ع]/g, "a")
+      .replace(/[غ]/g, "gh")
+      .replace(/[ف]/g, "f")
+      .replace(/[ق]/g, "gh")
+      .replace(/[ک]/g, "k")
+      .replace(/[گ]/g, "g")
+      .replace(/[ل]/g, "l")
+      .replace(/[م]/g, "m")
+      .replace(/[ن]/g, "n")
+      .replace(/[و]/g, "v")
+      .replace(/[ه]/g, "h")
+      .replace(/[ی]/g, "y")
+      .replace(/[ئ]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+  };
 
   // Wait for initial auth check
   useEffect(() => {
@@ -86,6 +148,33 @@ export default function CatalogManagementPage() {
     enabled: isAdmin && activeTab === "plans" && !!selectedCategory,
   });
 
+  // Create category mutation
+  const createCategoryMutation = useMutation({
+    mutationFn: (data: CategoryFormData) => adminApi.createCategory(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adminCategories"] });
+      toast.success("دسته‌بندی ایجاد شد");
+      closeCategoryModal();
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+
+  // Update category mutation
+  const updateCategoryMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: CategoryFormData }) =>
+      adminApi.updateCategory(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adminCategories"] });
+      toast.success("دسته‌بندی به‌روزرسانی شد");
+      closeCategoryModal();
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+
   // Delete category mutation
   const deleteCategoryMutation = useMutation({
     mutationFn: (id: string) => adminApi.deleteCategory(id),
@@ -97,6 +186,55 @@ export default function CatalogManagementPage() {
       toast.error(getErrorMessage(error));
     },
   });
+
+  // Category modal helpers
+  const openCreateCategoryModal = () => {
+    setEditingCategory(null);
+    setCategoryForm({ slug: "", name_fa: "", description_fa: "", is_active: true });
+    setShowCategoryModal(true);
+  };
+
+  const openEditCategoryModal = (category: any) => {
+    setEditingCategory(category);
+    setCategoryForm({
+      slug: category.slug || "",
+      name_fa: category.name_fa || category.name || "",
+      description_fa: category.description_fa || category.description || "",
+      is_active: category.is_active,
+    });
+    setShowCategoryModal(true);
+  };
+
+  const closeCategoryModal = () => {
+    setShowCategoryModal(false);
+    setEditingCategory(null);
+    setCategoryForm({ slug: "", name_fa: "", description_fa: "", is_active: true });
+  };
+
+  const handleNameChange = (name: string) => {
+    setCategoryForm({
+      ...categoryForm,
+      name_fa: name,
+      slug: editingCategory ? categoryForm.slug : generateSlug(name),
+    });
+  };
+
+  const handleCategorySubmit = () => {
+    if (!categoryForm.name_fa.trim()) {
+      toast.error("نام دسته‌بندی الزامی است");
+      return;
+    }
+    if (!categoryForm.slug.trim()) {
+      toast.error("شناسه (slug) الزامی است");
+      return;
+    }
+
+    if (editingCategory) {
+      updateCategoryMutation.mutate({ id: editingCategory.id, data: categoryForm });
+    } else {
+      createCategoryMutation.mutate(categoryForm);
+    }
+  };
 
   // Delete product mutation
   const deleteProductMutation = useMutation({
@@ -175,6 +313,7 @@ export default function CatalogManagementPage() {
               variant="primary"
               size="sm"
               leftIcon={<Plus className="w-4 h-4" />}
+              onClick={openCreateCategoryModal}
             >
               دسته‌بندی جدید
             </Button>
@@ -194,6 +333,7 @@ export default function CatalogManagementPage() {
                   variant="outline"
                   className="mt-4"
                   leftIcon={<Plus className="w-4 h-4" />}
+                  onClick={openCreateCategoryModal}
                 >
                   ایجاد اولین دسته‌بندی
                 </Button>
@@ -210,8 +350,8 @@ export default function CatalogManagementPage() {
                         <FolderOpen className="w-6 h-6 text-primary" />
                       </div>
                       <div>
-                        <p className="font-medium text-foreground">{category.name}</p>
-                        <p className="text-sm text-muted">{category.description || "بدون توضیح"}</p>
+                        <p className="font-medium text-foreground">{category.name_fa || category.name}</p>
+                        <p className="text-sm text-muted">{category.description_fa || category.description || "بدون توضیح"}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -222,7 +362,10 @@ export default function CatalogManagementPage() {
                       }`}>
                         {category.is_active ? "فعال" : "غیرفعال"}
                       </span>
-                      <button className="p-2 rounded-lg hover:bg-accent transition-colors text-muted hover:text-foreground">
+                      <button 
+                        onClick={() => openEditCategoryModal(category)}
+                        className="p-2 rounded-lg hover:bg-accent transition-colors text-muted hover:text-foreground"
+                      >
                         <Pencil className="w-4 h-4" />
                       </button>
                       <button 
@@ -344,7 +487,7 @@ export default function CatalogManagementPage() {
                       }`}
                     >
                       <FolderOpen className="w-4 h-4" />
-                      {category.name}
+                      {category.name_fa || category.name}
                       <ChevronLeft className="w-4 h-4 mr-auto" />
                     </button>
                   ))}
@@ -361,7 +504,7 @@ export default function CatalogManagementPage() {
                 پلن‌های طراحی
                 {selectedCategory && (
                   <span className="text-sm font-normal text-muted">
-                    ({categories?.find((c: any) => c.id === selectedCategory)?.name})
+                    ({categories?.find((c: any) => c.id === selectedCategory)?.name_fa || categories?.find((c: any) => c.id === selectedCategory)?.name})
                   </span>
                 )}
               </CardTitle>
@@ -449,6 +592,68 @@ export default function CatalogManagementPage() {
           </Card>
         </div>
       )}
+
+      {/* Category Create/Edit Modal */}
+      <Modal
+        isOpen={showCategoryModal}
+        onClose={closeCategoryModal}
+        title={editingCategory ? "ویرایش دسته‌بندی" : "ایجاد دسته‌بندی جدید"}
+        size="md"
+      >
+        <div className="space-y-4">
+          <Input
+            label="نام دسته‌بندی (فارسی)"
+            placeholder="مثال: کارت ویزیت"
+            value={categoryForm.name_fa}
+            onChange={(e) => handleNameChange(e.target.value)}
+          />
+
+          <Input
+            label="شناسه (Slug)"
+            placeholder="مثال: business-card"
+            value={categoryForm.slug}
+            onChange={(e) => setCategoryForm({ ...categoryForm, slug: e.target.value })}
+            dir="ltr"
+            hint="این شناسه در URL استفاده می‌شود (فقط حروف انگلیسی و خط تیره)"
+          />
+
+          <div className="w-full">
+            <label className="block text-sm font-medium text-foreground mb-1.5">
+              توضیحات (اختیاری)
+            </label>
+            <textarea
+              className="w-full min-h-[100px] px-3 py-2 rounded-lg border border-border bg-surface text-foreground placeholder:text-muted resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+              placeholder="توضیح مختصر درباره این دسته‌بندی..."
+              value={categoryForm.description_fa}
+              onChange={(e) => setCategoryForm({ ...categoryForm, description_fa: e.target.value })}
+            />
+          </div>
+
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={categoryForm.is_active}
+              onChange={(e) => setCategoryForm({ ...categoryForm, is_active: e.target.checked })}
+              className="w-5 h-5 rounded border-border text-primary focus:ring-primary"
+            />
+            <span className="text-sm text-foreground">فعال باشد</span>
+          </label>
+
+          <div className="flex items-center gap-3 pt-4 border-t border-border">
+            <Button
+              variant="primary"
+              className="flex-1"
+              onClick={handleCategorySubmit}
+              isLoading={createCategoryMutation.isPending || updateCategoryMutation.isPending}
+            >
+              {editingCategory ? "به‌روزرسانی" : "ایجاد"}
+            </Button>
+            <Button variant="outline" onClick={closeCategoryModal}>
+              انصراف
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

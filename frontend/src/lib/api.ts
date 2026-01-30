@@ -347,13 +347,13 @@ export const adminApi = {
   getUserStats: () => api.get<{ by_role: Record<string, number>; daily_signups: Array<{ date: string; count: number }> }>("/admin/stats/users"),
 
   // Categories management (uses existing categories API)
-  getCategories: () => api.get<Category[]>("/api/v1/categories"),
-  createCategory: (data: { name: string; description?: string; icon?: string }) =>
-    api.post<Category>("/api/v1/categories", data),
+  getCategories: () => api.get<Category[]>("/categories"),
+  createCategory: (data: { slug: string; name_fa: string; description_fa?: string; icon?: string; is_active?: boolean }) =>
+    api.post<Category>("/categories", data),
   updateCategory: (id: string, data: Partial<Category>) =>
-    api.patch<Category>(`/api/v1/categories/${id}`, data),
-  deleteCategory: (id: string) => api.delete(`/api/v1/categories/${id}`),
-  getCategoryDetails: (id: string) => api.get<Category>(`/api/v1/categories/${id}/details`),
+    api.patch<Category>(`/categories/${id}`, data),
+  deleteCategory: (id: string) => api.delete(`/categories/${id}`),
+  getCategoryDetails: (id: string) => api.get<Category>(`/categories/${id}/details`),
 
   // Products management
   getProducts: (params?: { type?: string; active_only?: boolean; page?: number; page_size?: number }) =>
@@ -365,17 +365,17 @@ export const adminApi = {
   // Plans management (uses existing plans API)
   getPlans: (categoryId?: string) => 
     categoryId 
-      ? api.get<any[]>(`/api/v1/categories/${categoryId}/plans`)
-      : api.get<any[]>("/api/v1/plans"),
-  createPlan: (categoryId: string, data: any) => api.post<any>(`/api/v1/categories/${categoryId}/plans`, data),
-  updatePlan: (id: string, data: any) => api.patch<any>(`/api/v1/plans/${id}`, data),
-  deletePlan: (id: string) => api.delete(`/api/v1/plans/${id}`),
+      ? api.get<any[]>(`/categories/${categoryId}/plans`)
+      : api.get<any[]>("/plans"),
+  createPlan: (categoryId: string, data: any) => api.post<any>(`/categories/${categoryId}/plans`, data),
+  updatePlan: (id: string, data: any) => api.patch<any>(`/plans/${id}`, data),
+  deletePlan: (id: string) => api.delete(`/plans/${id}`),
 
   // Attributes management
-  getAttributes: (categoryId: string) => api.get<any[]>(`/api/v1/categories/${categoryId}/attributes`),
-  createAttribute: (categoryId: string, data: any) => api.post<any>(`/api/v1/categories/${categoryId}/attributes`, data),
-  updateAttribute: (id: string, data: any) => api.patch<any>(`/api/v1/attributes/${id}`, data),
-  deleteAttribute: (id: string) => api.delete(`/api/v1/attributes/${id}`),
+  getAttributes: (categoryId: string) => api.get<any[]>(`/categories/${categoryId}/attributes`),
+  createAttribute: (categoryId: string, data: any) => api.post<any>(`/categories/${categoryId}/attributes`, data),
+  updateAttribute: (id: string, data: any) => api.patch<any>(`/attributes/${id}`, data),
+  deleteAttribute: (id: string) => api.delete(`/attributes/${id}`),
 
   // Users management
   getUsers: (params?: { page?: number; page_size?: number; search?: string; role?: string; is_active?: boolean }) =>
@@ -403,7 +403,32 @@ export const adminApi = {
 // Error helper
 export function getErrorMessage(error: unknown): string {
   if (error instanceof AxiosError) {
-    return error.response?.data?.detail || error.message || "خطای سرور";
+    const detail = error.response?.data?.detail;
+
+    // Handle string detail
+    if (typeof detail === "string") {
+      return detail;
+    }
+
+    // Handle Pydantic validation errors (array of objects with type, loc, msg, input)
+    if (Array.isArray(detail)) {
+      return detail
+        .map((err) => {
+          if (typeof err === "object" && err !== null && "msg" in err && "loc" in err) {
+            const field = Array.isArray(err.loc) ? err.loc[err.loc.length - 1] : "field";
+            return `${field}: ${err.msg}`;
+          }
+          return String(err);
+        })
+        .join("، ");
+    }
+
+    // Handle object detail
+    if (typeof detail === "object" && detail !== null) {
+      return JSON.stringify(detail);
+    }
+
+    return error.message || "خطای سرور";
   }
   if (error instanceof Error) {
     return error.message;
