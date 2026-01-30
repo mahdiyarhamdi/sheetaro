@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "vitest run",
+    "test": "RUN_SMOKE_TESTS=true vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:contracts": "vitest run src/__tests__/contracts/",
