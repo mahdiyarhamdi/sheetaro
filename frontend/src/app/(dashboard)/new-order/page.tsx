@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { useCategories, useCategoryAttributes, useCategoryPlans, usePlanTemplates, usePlanQuestionnaire } from "@/hooks/useCatalog";
+import { useCategories, useCategoryAttributes, useCategoryPlans, usePlanTemplates, usePlanQuestionnaire, useTemplatePlaceholders, useTemplatePreview } from "@/hooks/useCatalog";
 import { useOrders } from "@/hooks/useOrders";
+import { filesApi } from "@/lib/api";
 import {
   Card,
   CardHeader,
@@ -29,12 +30,27 @@ import {
   CreditCard,
   Upload,
   Image as ImageIcon,
-  ChevronDown,
+  Type,
+  LayoutTemplate,
+  ShieldCheck,
+  AlertTriangle,
 } from "lucide-react";
 import { cn, formatPrice, toPersianNumber } from "@/lib/utils";
 import toast from "react-hot-toast";
 
-type OrderStep = "category" | "attributes" | "plan" | "design" | "summary";
+// Step types for different plan flows
+type BaseStep = "category" | "attributes" | "plan";
+type PublicPlanStep = "template" | "placeholders" | "validation";
+type SemiPrivateStep = "questionnaire" | "validation";
+type PrivateStep = "upload" | "validation";
+type FinalStep = "summary";
+
+type OrderStep = BaseStep | PublicPlanStep | SemiPrivateStep | PrivateStep | FinalStep;
+
+interface PlaceholderValue {
+  type: "IMAGE" | "TEXT";
+  value: string;
+}
 
 interface OrderData {
   category_id: string;
@@ -43,15 +59,21 @@ interface OrderData {
   template_id?: string;
   questionnaire_answers?: Record<string, string>;
   design_file?: File;
+  placeholder_values: Record<string, PlaceholderValue>;
+  wants_validation: boolean;
 }
 
-const steps: { id: OrderStep; label: string; icon: React.ElementType }[] = [
-  { id: "category", label: "انتخاب محصول", icon: Package },
-  { id: "attributes", label: "ویژگی‌ها", icon: Palette },
-  { id: "plan", label: "نوع طراحی", icon: FileText },
-  { id: "design", label: "طراحی", icon: ImageIcon },
-  { id: "summary", label: "تأیید نهایی", icon: CreditCard },
-];
+const VALIDATION_PRICE = 50000; // 50,000 Toman
+
+// API base URL for constructing full image URLs
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3005";
+
+// Helper to construct full image URL from relative path
+const getFullImageUrl = (url?: string): string | undefined => {
+  if (!url) return undefined;
+  if (url.startsWith('http')) return url;
+  return `${API_BASE_URL}/api/v1${url}`;
+};
 
 export default function NewOrderPage() {
   const router = useRouter();
@@ -60,7 +82,10 @@ export default function NewOrderPage() {
     category_id: "",
     attributes: {},
     plan_id: "",
+    placeholder_values: {},
+    wants_validation: false,
   });
+  const [uploadingImage, setUploadingImage] = useState<string | null>(null);
 
   // Fetch data
   const { data: categories, isLoading: isLoadingCategories } = useCategories();
@@ -68,23 +93,90 @@ export default function NewOrderPage() {
   const { data: plans, isLoading: isLoadingPlans } = useCategoryPlans(orderData.category_id);
   const { data: templates, isLoading: isLoadingTemplates } = usePlanTemplates(orderData.plan_id);
   const { data: questionnaire, isLoading: isLoadingQuestionnaire } = usePlanQuestionnaire(orderData.plan_id);
+  const { data: placeholders, isLoading: isLoadingPlaceholders } = useTemplatePlaceholders(orderData.template_id || "");
   
+  const previewMutation = useTemplatePreview();
   const { createOrder, isCreatingOrder } = useOrders();
 
   const selectedCategory = categories?.find((c) => c.id === orderData.category_id);
   const selectedPlan = plans?.find((p) => p.id === orderData.plan_id);
   const selectedTemplate = templates?.find((t) => t.id === orderData.template_id);
 
+  // Generate preview when placeholder values change
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  
+  useEffect(() => {
+    if (orderData.template_id && placeholders && Object.keys(orderData.placeholder_values).length > 0) {
+      const placeholderData = placeholders.map(p => ({
+        placeholder_id: p.id,
+        image_url: orderData.placeholder_values[p.id]?.type === "IMAGE" ? orderData.placeholder_values[p.id]?.value : undefined,
+        text_value: orderData.placeholder_values[p.id]?.type === "TEXT" ? orderData.placeholder_values[p.id]?.value : undefined,
+      }));
+      
+      previewMutation.mutate(
+        { templateId: orderData.template_id, placeholders: placeholderData },
+        {
+          onSuccess: (data) => {
+            setPreviewUrl(data.preview_url);
+          },
+        }
+      );
+    }
+  }, [orderData.template_id, orderData.placeholder_values, placeholders]);
+
+  // Dynamic steps based on plan type
+  const getStepsForPlanType = () => {
+    const baseSteps = [
+      { id: "category" as OrderStep, label: "انتخاب محصول", icon: Package },
+      { id: "attributes" as OrderStep, label: "ویژگی‌ها", icon: Palette },
+      { id: "plan" as OrderStep, label: "نوع طراحی", icon: FileText },
+    ];
+
+    if (!selectedPlan) {
+      return [
+        ...baseSteps,
+        { id: "summary" as OrderStep, label: "تأیید نهایی", icon: CreditCard },
+      ];
+    }
+
+    let planSpecificSteps: { id: OrderStep; label: string; icon: React.ElementType }[] = [];
+
+    if (selectedPlan.has_templates) {
+      planSpecificSteps = [
+        { id: "template", label: "انتخاب قالب", icon: LayoutTemplate },
+        { id: "placeholders", label: "محتوای طرح", icon: Type },
+        { id: "validation", label: "اعتبارسنجی", icon: ShieldCheck },
+      ];
+    } else if (selectedPlan.has_questionnaire) {
+      planSpecificSteps = [
+        { id: "questionnaire", label: "اطلاعات طراحی", icon: FileText },
+        { id: "validation", label: "اعتبارسنجی", icon: ShieldCheck },
+      ];
+    } else if (selectedPlan.has_file_upload) {
+      planSpecificSteps = [
+        { id: "upload", label: "آپلود طرح", icon: Upload },
+        { id: "validation", label: "اعتبارسنجی", icon: ShieldCheck },
+      ];
+    }
+
+    return [
+      ...baseSteps,
+      ...planSpecificSteps,
+      { id: "summary" as OrderStep, label: "تأیید نهایی", icon: CreditCard },
+    ];
+  };
+
+  const steps = getStepsForPlanType();
+  const currentStepIndex = steps.findIndex((s) => s.id === currentStep);
+
   // Calculate total price
   const totalPrice = useMemo(() => {
     let price = selectedCategory?.base_price || 0;
     
-    // Add plan price
     if (selectedPlan) {
       price += selectedPlan.price;
     }
     
-    // Add attribute options prices
     if (attributes) {
       attributes.forEach((attr) => {
         const selectedValue = orderData.attributes[attr.id];
@@ -97,37 +189,40 @@ export default function NewOrderPage() {
       });
     }
     
+    if (orderData.wants_validation) {
+      price += VALIDATION_PRICE;
+    }
+    
     return price;
-  }, [selectedCategory, selectedPlan, attributes, orderData.attributes]);
-
-  const currentStepIndex = steps.findIndex((s) => s.id === currentStep);
+  }, [selectedCategory, selectedPlan, attributes, orderData.attributes, orderData.wants_validation]);
 
   const canProceed = () => {
     switch (currentStep) {
       case "category":
         return !!orderData.category_id;
       case "attributes":
-        if (!attributes) return true;
-        // Check if all required attributes are filled
+        if (!attributes || attributes.length === 0) return true;
         return attributes.every((attr) => !!orderData.attributes[attr.id]);
       case "plan":
         return !!orderData.plan_id;
-      case "design":
-        if (selectedPlan?.plan_type === "public") {
+      case "template":
           return !!orderData.template_id;
-        }
-        if (selectedPlan?.plan_type === "private") {
-          return !!orderData.design_file;
-        }
-        // Semi-private: questionnaire answers
+      case "placeholders":
+        if (!placeholders) return true;
+        const requiredPlaceholders = placeholders.filter(p => p.is_required);
+        return requiredPlaceholders.every(p => !!orderData.placeholder_values[p.id]?.value);
+      case "questionnaire":
         if (questionnaire?.sections) {
           const allQuestions = questionnaire.sections.flatMap((s) => s.questions);
-          const requiredAnswered = allQuestions
+          return allQuestions
             .filter((q) => q.is_required)
             .every((q) => !!orderData.questionnaire_answers?.[q.id]);
-          return requiredAnswered;
         }
         return true;
+      case "upload":
+        return !!orderData.design_file;
+      case "validation":
+        return true; // Always can proceed from validation step
       case "summary":
         return true;
       default:
@@ -146,6 +241,26 @@ export default function NewOrderPage() {
     const prevIndex = currentStepIndex - 1;
     if (prevIndex >= 0) {
       setCurrentStep(steps[prevIndex].id);
+    }
+  };
+
+  const handleImageUpload = async (placeholderId: string, file: File) => {
+    setUploadingImage(placeholderId);
+    try {
+      const response = await filesApi.upload(file, "template");
+      const imageUrl = response.data.url;
+      setOrderData({
+        ...orderData,
+        placeholder_values: {
+          ...orderData.placeholder_values,
+          [placeholderId]: { type: "IMAGE", value: imageUrl },
+        },
+      });
+      toast.success("تصویر با موفقیت آپلود شد");
+    } catch (error) {
+      toast.error("خطا در آپلود تصویر");
+    } finally {
+      setUploadingImage(null);
     }
   };
 
@@ -182,7 +297,14 @@ export default function NewOrderPage() {
                       "cursor-pointer transition-all hover:border-primary/30",
                       orderData.category_id === category.id && "border-primary border-2 bg-primary-50"
                     )}
-                    onClick={() => setOrderData({ ...orderData, category_id: category.id, plan_id: "", attributes: {} })}
+                    onClick={() => setOrderData({ 
+                      ...orderData, 
+                      category_id: category.id, 
+                      plan_id: "", 
+                      attributes: {},
+                      template_id: undefined,
+                      placeholder_values: {},
+                    })}
                   >
                     <CardContent className="pt-4 text-center">
                       <div className="text-4xl mb-3">{category.icon || "📦"}</div>
@@ -288,16 +410,22 @@ export default function NewOrderPage() {
                       "cursor-pointer transition-all hover:border-primary/30",
                       orderData.plan_id === plan.id && "border-primary border-2 bg-primary-50"
                     )}
-                    onClick={() => setOrderData({ ...orderData, plan_id: plan.id, template_id: undefined, questionnaire_answers: {} })}
+                    onClick={() => setOrderData({ 
+                      ...orderData, 
+                      plan_id: plan.id, 
+                      template_id: undefined, 
+                      questionnaire_answers: {},
+                      placeholder_values: {},
+                    })}
                   >
                     <CardContent className="py-4">
                       <div className="flex items-center justify-between">
                         <div>
                           <h3 className="font-semibold text-foreground">{plan.name_fa}</h3>
                           <p className="text-sm text-muted mt-1">
-                            {plan.plan_type === "public" && "انتخاب از قالب‌های آماده"}
-                            {plan.plan_type === "semi_private" && "طراحی بر اساس اطلاعات شما"}
-                            {plan.plan_type === "private" && "آپلود طرح اختصاصی شما"}
+                            {plan.has_templates && "انتخاب از قالب‌های آماده"}
+                            {plan.has_questionnaire && "طراحی بر اساس اطلاعات شما"}
+                            {plan.has_file_upload && "آپلود طرح اختصاصی شما"}
                           </p>
                         </div>
                         <div className="text-left">
@@ -324,10 +452,7 @@ export default function NewOrderPage() {
           </div>
         );
 
-      case "design":
-        if (!selectedPlan) return null;
-
-        if (selectedPlan.plan_type === "public") {
+      case "template":
           return (
             <div className="space-y-4">
               <p className="text-muted">یک قالب را انتخاب کنید:</p>
@@ -344,12 +469,16 @@ export default function NewOrderPage() {
                         "cursor-pointer transition-all hover:border-primary/30 overflow-hidden",
                         orderData.template_id === template.id && "border-primary border-2"
                       )}
-                      onClick={() => setOrderData({ ...orderData, template_id: template.id })}
+                    onClick={() => setOrderData({ 
+                      ...orderData, 
+                      template_id: template.id,
+                      placeholder_values: {},
+                    })}
                     >
                       <div className="aspect-square relative bg-accent">
                         {template.preview_url ? (
                           <Image
-                            src={template.preview_url}
+                          src={getFullImageUrl(template.preview_url) || ""}
                             alt={template.name_fa}
                             fill
                             className="object-cover"
@@ -382,9 +511,144 @@ export default function NewOrderPage() {
               )}
             </div>
           );
-        }
 
-        if (selectedPlan.plan_type === "semi_private") {
+      case "placeholders":
+        return (
+          <div className="space-y-6">
+            <p className="text-muted">محتوای طرح خود را وارد کنید:</p>
+            
+            {isLoadingPlaceholders ? (
+              <PageLoading />
+            ) : placeholders && placeholders.length > 0 ? (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Preview Section */}
+                <div className="order-2 lg:order-1">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">پیش‌نمایش</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="aspect-square relative bg-accent rounded-lg overflow-hidden">
+                        {previewUrl ? (
+                          <Image
+                            src={getFullImageUrl(previewUrl) || ""}
+                            alt="پیش‌نمایش"
+                            fill
+                            className="object-contain"
+                          />
+                        ) : selectedTemplate?.preview_url ? (
+                          <Image
+                            src={getFullImageUrl(selectedTemplate.preview_url) || ""}
+                            alt={selectedTemplate.name_fa}
+                            fill
+                            className="object-contain"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <div className="text-center text-muted">
+                              <ImageIcon className="w-12 h-12 mx-auto mb-2" />
+                              <p className="text-sm">پیش‌نمایش پس از تکمیل فیلدها</p>
+                            </div>
+                          </div>
+                        )}
+                        {previewMutation.isPending && (
+                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                            <div className="text-white text-sm">در حال ساخت پیش‌نمایش...</div>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Form Section */}
+                <div className="order-1 lg:order-2 space-y-4">
+                  {placeholders
+                    .sort((a, b) => a.sort_order - b.sort_order)
+                    .map((placeholder) => (
+                    <div key={placeholder.id} className="space-y-2">
+                      <label className="block text-sm font-medium text-foreground">
+                        {placeholder.label_fa}
+                        {placeholder.is_required && (
+                          <span className="text-danger mr-1">*</span>
+                        )}
+                      </label>
+                      
+                      {placeholder.type === "IMAGE" ? (
+                        <div
+                          className={cn(
+                            "border-2 border-dashed rounded-lg p-4 text-center transition-colors",
+                            orderData.placeholder_values[placeholder.id]?.value
+                              ? "border-success bg-success-light"
+                              : "border-border hover:border-primary/30"
+                          )}
+                        >
+                          <input
+                            type="file"
+                            id={`placeholder-${placeholder.id}`}
+                            className="hidden"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                handleImageUpload(placeholder.id, file);
+                              }
+                            }}
+                          />
+                          <label htmlFor={`placeholder-${placeholder.id}`} className="cursor-pointer block">
+                            {uploadingImage === placeholder.id ? (
+                              <div className="py-2">
+                                <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full mx-auto"></div>
+                                <p className="text-sm text-muted mt-2">در حال آپلود...</p>
+                              </div>
+                            ) : orderData.placeholder_values[placeholder.id]?.value ? (
+                              <div className="relative">
+                                <Image
+                                  src={getFullImageUrl(orderData.placeholder_values[placeholder.id].value) || ""}
+                                  alt={placeholder.label_fa}
+                                  width={100}
+                                  height={100}
+                                  className="mx-auto rounded object-cover"
+                                />
+                                <p className="text-xs text-muted mt-2">برای تغییر کلیک کنید</p>
+                              </div>
+                            ) : (
+                              <>
+                                <Upload className="w-8 h-8 mx-auto text-muted" />
+                                <p className="text-sm text-muted mt-2">آپلود تصویر</p>
+                              </>
+                            )}
+                          </label>
+                        </div>
+                      ) : (
+                        <Input
+                          value={orderData.placeholder_values[placeholder.id]?.value || ""}
+                          onChange={(e) =>
+                            setOrderData({
+                              ...orderData,
+                              placeholder_values: {
+                                ...orderData.placeholder_values,
+                                [placeholder.id]: { type: "TEXT", value: e.target.value },
+                              },
+                            })
+                          }
+                          placeholder={placeholder.default_value || `${placeholder.label_fa} را وارد کنید`}
+                          maxLength={placeholder.max_length || undefined}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-center text-muted py-8">
+                این قالب نیازی به ورود اطلاعات ندارد
+              </p>
+            )}
+          </div>
+        );
+
+      case "questionnaire":
           return (
             <div className="space-y-6">
               <p className="text-muted">اطلاعات طراحی را وارد کنید:</p>
@@ -465,9 +729,8 @@ export default function NewOrderPage() {
               )}
             </div>
           );
-        }
 
-        // Private plan - file upload
+      case "upload":
         return (
           <div className="space-y-4">
             <p className="text-muted">فایل طراحی خود را آپلود کنید:</p>
@@ -515,6 +778,88 @@ export default function NewOrderPage() {
           </div>
         );
 
+      case "validation":
+        return (
+          <div className="space-y-6">
+            <p className="text-muted">آیا می‌خواهید طرح شما توسط تیم ما اعتبارسنجی شود؟</p>
+            
+            <div className="space-y-4">
+              {/* Yes Option */}
+              <Card
+                variant={orderData.wants_validation ? "bordered" : "default"}
+                className={cn(
+                  "cursor-pointer transition-all hover:border-primary/30",
+                  orderData.wants_validation && "border-primary border-2 bg-primary-50"
+                )}
+                onClick={() => setOrderData({ ...orderData, wants_validation: true })}
+              >
+                <CardContent className="py-4">
+                  <div className="flex items-start gap-4">
+                    <div className={cn(
+                      "w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5",
+                      orderData.wants_validation ? "border-primary bg-primary" : "border-border"
+                    )}>
+                      {orderData.wants_validation && <Check className="w-4 h-4 text-white" />}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-semibold text-foreground">بله، اعتبارسنجی شود</h3>
+                        <Badge variant="primary">+{formatPrice(VALIDATION_PRICE)}</Badge>
+                      </div>
+                      <ul className="mt-2 space-y-1 text-sm text-muted">
+                        <li className="flex items-center gap-2">
+                          <Check className="w-4 h-4 text-success" />
+                          بررسی توسط تیم متخصص
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <Check className="w-4 h-4 text-success" />
+                          اطمینان از کیفیت چاپ
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <Check className="w-4 h-4 text-success" />
+                          رفع مشکلات احتمالی قبل از چاپ
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* No Option */}
+              <Card
+                variant={!orderData.wants_validation ? "bordered" : "default"}
+                className={cn(
+                  "cursor-pointer transition-all hover:border-primary/30",
+                  !orderData.wants_validation && "border-warning border-2 bg-warning-light"
+                )}
+                onClick={() => setOrderData({ ...orderData, wants_validation: false })}
+              >
+                <CardContent className="py-4">
+                  <div className="flex items-start gap-4">
+                    <div className={cn(
+                      "w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5",
+                      !orderData.wants_validation ? "border-warning bg-warning" : "border-border"
+                    )}>
+                      {!orderData.wants_validation && <Check className="w-4 h-4 text-white" />}
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-foreground">خیر، نیازی نیست</h3>
+                      <div className="mt-3 p-3 bg-warning/10 rounded-lg border border-warning/20">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+                          <p className="text-sm text-foreground">
+                            <strong>توجه:</strong> در صورت عدم اعتبارسنجی، مسئولیت کیفیت چاپ و هرگونه مشکل احتمالی به عهده شماست.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        );
+
       case "summary":
         return (
           <div className="space-y-6">
@@ -558,6 +903,14 @@ export default function NewOrderPage() {
                   </div>
                 )}
 
+                <div className="flex items-center justify-between py-2 border-b border-border">
+                  <span className="text-muted">اعتبارسنجی</span>
+                  <span className={cn("font-medium", orderData.wants_validation ? "text-success" : "text-warning")}>
+                    {orderData.wants_validation ? "بله" : "خیر"}
+                    {orderData.wants_validation && ` (+${formatPrice(VALIDATION_PRICE)})`}
+                  </span>
+                </div>
+
                 <div className="flex items-center justify-between py-2 text-lg">
                   <span className="font-semibold">مبلغ کل</span>
                   <span className="font-bold text-primary">{formatPrice(totalPrice)}</span>
@@ -581,9 +934,9 @@ export default function NewOrderPage() {
       </div>
 
       {/* Progress steps */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between overflow-x-auto pb-2">
         {steps.map((step, index) => (
-          <div key={step.id} className="flex items-center">
+          <div key={step.id} className="flex items-center flex-shrink-0">
             <div
               className={cn(
                 "w-10 h-10 rounded-full flex items-center justify-center transition-colors",
@@ -601,10 +954,9 @@ export default function NewOrderPage() {
             {index < steps.length - 1 && (
               <div
                 className={cn(
-                  "w-full h-1 mx-2",
+                  "w-8 sm:w-12 h-1 mx-1 sm:mx-2",
                   index < currentStepIndex ? "bg-primary" : "bg-accent"
                 )}
-                style={{ width: "40px" }}
               />
             )}
           </div>
@@ -617,7 +969,7 @@ export default function NewOrderPage() {
           مرحله {toPersianNumber(currentStepIndex + 1)} از {toPersianNumber(steps.length)}
         </Badge>
         <h2 className="text-xl font-semibold text-foreground mt-2">
-          {steps[currentStepIndex].label}
+          {steps[currentStepIndex]?.label}
         </h2>
       </div>
 
@@ -666,4 +1018,3 @@ export default function NewOrderPage() {
     </div>
   );
 }
-

@@ -1,14 +1,14 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { catalogApi, plansApi, Category, Attribute, DesignPlan, Template, Questionnaire } from "@/lib/api";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { catalogApi, plansApi, adminApi, Category, Attribute, DesignPlan, Template, Questionnaire, TemplatePlaceholder, PlaceholderPreviewData } from "@/lib/api";
 
 export function useCategories() {
   return useQuery({
     queryKey: ["categories"],
     queryFn: async () => {
       const response = await catalogApi.getCategories();
-      return response.data.items;
+      return response.data;
     },
   });
 }
@@ -29,7 +29,7 @@ export function useCategoryAttributes(categoryId: string) {
     queryKey: ["categoryAttributes", categoryId],
     queryFn: async () => {
       const response = await catalogApi.getCategoryAttributes(categoryId);
-      return response.data.items;
+      return response.data;
     },
     enabled: !!categoryId,
   });
@@ -40,7 +40,7 @@ export function useCategoryPlans(categoryId: string) {
     queryKey: ["categoryPlans", categoryId],
     queryFn: async () => {
       const response = await catalogApi.getCategoryPlans(categoryId);
-      return response.data.items;
+      return response.data;
     },
     enabled: !!categoryId,
   });
@@ -62,7 +62,7 @@ export function usePlanTemplates(planId: string) {
     queryKey: ["planTemplates", planId],
     queryFn: async () => {
       const response = await plansApi.getPlanTemplates(planId);
-      return response.data.items;
+      return response.data;
     },
     enabled: !!planId,
   });
@@ -79,3 +79,22 @@ export function usePlanQuestionnaire(planId: string) {
   });
 }
 
+export function useTemplatePlaceholders(templateId: string) {
+  return useQuery({
+    queryKey: ["templatePlaceholders", templateId],
+    queryFn: async () => {
+      const response = await adminApi.getTemplatePlaceholders(templateId);
+      return response.data;
+    },
+    enabled: !!templateId,
+  });
+}
+
+export function useTemplatePreview() {
+  return useMutation({
+    mutationFn: async ({ templateId, placeholders }: { templateId: string; placeholders: PlaceholderPreviewData[] }) => {
+      const response = await adminApi.generateTemplatePreview(templateId, { placeholders });
+      return response.data;
+    },
+  });
+}

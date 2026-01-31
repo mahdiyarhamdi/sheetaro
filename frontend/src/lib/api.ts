@@ -197,16 +197,16 @@ export interface AttributeOption {
 
 export const catalogApi = {
   // Categories
-  getCategories: () => api.get<{ items: Category[] }>("/categories"),
+  getCategories: () => api.get<Category[]>("/categories"),
   getCategory: (id: string) => api.get<Category>(`/categories/${id}`),
 
   // Attributes
   getCategoryAttributes: (categoryId: string) =>
-    api.get<{ items: Attribute[] }>(`/categories/${categoryId}/attributes`),
+    api.get<Attribute[]>(`/categories/${categoryId}/attributes`),
 
   // Plans
   getCategoryPlans: (categoryId: string) =>
-    api.get<{ items: DesignPlan[] }>(`/categories/${categoryId}/plans`),
+    api.get<DesignPlan[]>(`/categories/${categoryId}/plans`),
 };
 
 // ============ Plans API ============
@@ -216,7 +216,10 @@ export interface DesignPlan {
   category_id: string;
   name_fa: string;
   slug: string;
-  plan_type: "public" | "semi_private" | "private";
+  // Backend uses flags instead of plan_type
+  has_templates: boolean;
+  has_questionnaire: boolean;
+  has_file_upload: boolean;
   price: number;
   is_active: boolean;
   templates?: Template[];
@@ -375,7 +378,7 @@ export interface Question {
 export const plansApi = {
   getPlan: (id: string) => api.get<DesignPlan>(`/plans/${id}`),
   getPlanTemplates: (planId: string) =>
-    api.get<{ items: Template[] }>(`/plans/${planId}/templates`),
+    api.get<Template[]>(`/plans/${planId}/templates`),
   getPlanQuestionnaire: (planId: string) =>
     api.get<Questionnaire>(`/plans/${planId}/questionnaire`),
 };
