@@ -449,12 +449,12 @@ class TemplateService:
         text_width = text_bbox[2] - text_bbox[0]
         text_height = text_bbox[3] - text_bbox[1]
         
-        # Horizontal alignment
-        if placeholder.text_align and placeholder.text_align.value == "center":
+        # Horizontal alignment (text_align is now a string: 'left', 'center', 'right')
+        if placeholder.text_align == "center":
             x = placeholder.x + (placeholder.width - text_width) // 2
-        elif placeholder.text_align and placeholder.text_align.value == "right":
+        elif placeholder.text_align == "right":
             x = placeholder.x + placeholder.width - text_width
-        else:  # left
+        else:  # left or default
             x = placeholder.x
         
         # Vertical center
