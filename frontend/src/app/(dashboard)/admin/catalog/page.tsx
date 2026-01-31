@@ -1533,7 +1533,7 @@ export default function CatalogManagementPage() {
               rotation: 0,
               font_size: 24,
               font_color: "#000000",
-              text_align: "CENTER",
+              text_align: "center",
               sort_order: templateForm.image_placeholder_count + i,
               is_active: true,
             })
