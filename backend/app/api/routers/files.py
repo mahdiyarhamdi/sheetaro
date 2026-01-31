@@ -217,5 +217,25 @@ async def get_font_file(
     )
 
 
-
+@router.get(
+    "/files/previews/{filename}",
+    summary="Get preview image",
+    description="Download a generated preview image",
+)
+async def get_preview_file(
+    filename: str,
+) -> FileResponse:
+    """Get a generated preview image file."""
+    file_path = UPLOAD_DIR / filename
+    
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found"
+        )
+    
+    return FileResponse(
+        path=str(file_path),
+        filename=filename,
+    )
 

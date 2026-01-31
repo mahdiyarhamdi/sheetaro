@@ -162,8 +162,8 @@ class TemplateService:
             
             # Return URLs
             return {
-                "preview_url": f"{base_url}/uploads/{preview_filename}",
-                "final_url": f"{base_url}/uploads/{final_filename}",
+                "preview_url": f"{base_url}/api/v1/files/previews/{preview_filename}",
+                "final_url": f"{base_url}/api/v1/files/previews/{final_filename}",
             }
             
         except Exception as e:
@@ -344,7 +344,7 @@ class TemplateService:
             preview_path = self.save_image(preview_image, preview_filename)
             
             return {
-                "preview_url": f"{base_url}/uploads/{preview_filename}",
+                "preview_url": f"{base_url}/api/v1/files/previews/{preview_filename}",
                 "image_width": width,
                 "image_height": height,
             }
@@ -596,7 +596,7 @@ class TemplateService:
             preview_path = self.save_image(result_image, preview_filename)
             
             return {
-                "preview_url": f"{base_url}/uploads/{preview_filename}",
+                "preview_url": f"{base_url}/api/v1/files/previews/{preview_filename}",
                 "width": width,
                 "height": height,
             }
