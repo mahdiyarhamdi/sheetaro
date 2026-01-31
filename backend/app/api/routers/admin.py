@@ -13,7 +13,7 @@ from app.api.deps import get_db, get_current_user_from_token, require_admin_toke
 from app.models.user import User
 from app.models.order import Order
 from app.models.payment import Payment
-from app.models.enums import UserRole, OrderStatus, PaymentStatus
+from app.models.enums import UserRole, OrderStatus, PaymentStatus, ValidationStatus
 from app.services.user_service import UserService
 from app.schemas.user import UserOut
 
@@ -614,4 +614,199 @@ async def get_revenue_stats(
         last_month=last_month,
         by_day=list(reversed(by_day)),
     )
+
+
+# ============== Validation Management ==============
+
+class ValidationRequestResponse(BaseModel):
+    """Validation request item."""
+    id: str
+    user_id: str
+    user_name: Optional[str] = None
+    user_phone: Optional[str] = None
+    category_name: Optional[str] = None
+    plan_name: Optional[str] = None
+    template_name: Optional[str] = None
+    validation_status: Optional[str] = None
+    total_price: float
+    validation_price: float
+    created_at: str
+    design_preview_url: Optional[str] = None
+
+
+class ValidationListResponse(BaseModel):
+    """Paginated validation requests."""
+    items: List[ValidationRequestResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class ValidationRejectRequest(BaseModel):
+    """Reject validation with comment."""
+    comment: str
+
+
+@router.get("/validations", response_model=ValidationListResponse)
+async def list_validation_requests(
+    status: Optional[ValidationStatus] = Query(None, description="Filter by validation status"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> ValidationListResponse:
+    """List orders with validation requested. Admin only."""
+    from app.models.category import Category, DesignPlan as DesignPlanModel
+    from app.models.template import Template
+    from sqlalchemy.orm import selectinload
+    
+    query = select(Order).where(Order.validation_requested == True)
+    count_query = select(func.count(Order.id)).where(Order.validation_requested == True)
+    
+    if status:
+        query = query.where(Order.validation_status == status)
+        count_query = count_query.where(Order.validation_status == status)
+    
+    # Get total
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+    
+    # Apply pagination
+    query = query.order_by(Order.created_at.desc())
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    
+    result = await db.execute(query)
+    orders = result.scalars().all()
+    
+    items = []
+    for order in orders:
+        # Get user info
+        user_result = await db.execute(select(User).where(User.id == order.user_id))
+        user = user_result.scalar_one_or_none()
+        
+        # Get category info
+        category_name = None
+        if order.category_id:
+            cat_result = await db.execute(select(Category).where(Category.id == order.category_id))
+            cat = cat_result.scalar_one_or_none()
+            if cat:
+                category_name = cat.name_fa
+        
+        # Get plan info
+        plan_name = None
+        if order.plan_id:
+            plan_result = await db.execute(select(DesignPlanModel).where(DesignPlanModel.id == order.plan_id))
+            plan = plan_result.scalar_one_or_none()
+            if plan:
+                plan_name = plan.name_fa
+        
+        # Get template info
+        template_name = None
+        if order.template_id:
+            tmpl_result = await db.execute(select(Template).where(Template.id == order.template_id))
+            tmpl = tmpl_result.scalar_one_or_none()
+            if tmpl:
+                template_name = tmpl.name_fa
+        
+        items.append(ValidationRequestResponse(
+            id=str(order.id),
+            user_id=str(order.user_id),
+            user_name=user.full_name if user else None,
+            user_phone=user.phone_number if user else None,
+            category_name=category_name,
+            plan_name=plan_name,
+            template_name=template_name,
+            validation_status=order.validation_status.value if order.validation_status else None,
+            total_price=float(order.total_price) if order.total_price else 0,
+            validation_price=float(order.validation_price) if order.validation_price else 0,
+            created_at=order.created_at.isoformat(),
+            design_preview_url=order.design_file_url,
+        ))
+    
+    return ValidationListResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.post("/validations/{order_id}/approve")
+async def approve_validation(
+    order_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> dict:
+    """Approve validation for an order. Admin only."""
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalar_one_or_none()
+    
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="سفارش یافت نشد"
+        )
+    
+    if not order.validation_requested:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="این سفارش درخواست اعتبارسنجی نداشته است"
+        )
+    
+    order.validation_status = ValidationStatus.PASSED
+    order.assigned_validator_id = current_user.id
+    
+    # If order was awaiting validation, move it forward
+    if order.status == OrderStatus.AWAITING_VALIDATION:
+        order.status = OrderStatus.IN_PROGRESS
+    
+    await db.commit()
+    
+    return {
+        "success": True,
+        "order_id": str(order_id),
+        "validation_status": order.validation_status.value,
+        "message": "اعتبارسنجی با موفقیت تأیید شد"
+    }
+
+
+@router.post("/validations/{order_id}/reject")
+async def reject_validation(
+    order_id: UUID,
+    data: ValidationRejectRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> dict:
+    """Reject validation with correction comment. Admin only."""
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalar_one_or_none()
+    
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="سفارش یافت نشد"
+        )
+    
+    if not order.validation_requested:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="این سفارش درخواست اعتبارسنجی نداشته است"
+        )
+    
+    order.validation_status = ValidationStatus.FAILED
+    order.assigned_validator_id = current_user.id
+    order.admin_notes = data.comment  # Store the correction comment
+    
+    # Set status to needs revision
+    order.status = OrderStatus.REVISION_REQUESTED
+    
+    await db.commit()
+    
+    return {
+        "success": True,
+        "order_id": str(order_id),
+        "validation_status": order.validation_status.value,
+        "comment": data.comment,
+        "message": "درخواست اصلاح ثبت شد"
+    }
 

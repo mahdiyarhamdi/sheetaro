@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useCategories, useCategoryAttributes, useCategoryPlans, usePlanTemplates, usePlanQuestionnaire, useTemplatePlaceholders, useTemplatePreview } from "@/hooks/useCatalog";
 import { useOrders } from "@/hooks/useOrders";
+import { useAuth } from "@/hooks/useAuth";
 import { filesApi, PlaceholderImageUploadResponse } from "@/lib/api";
 import {
   Card,
@@ -99,6 +100,7 @@ export default function NewOrderPage() {
   
   const previewMutation = useTemplatePreview();
   const { createOrder, isCreatingOrder } = useOrders();
+  const { user } = useAuth();
 
   const selectedCategory = categories?.find((c) => c.id === orderData.category_id);
   const selectedPlan = plans?.find((p) => p.id === orderData.plan_id);
@@ -173,13 +175,17 @@ export default function NewOrderPage() {
 
   // Calculate total price
   // Calculate unit price (price per item)
-  const unitPrice = useMemo(() => {
-    let price = Number(selectedCategory?.base_price) || 0;
-    
-    if (selectedPlan) {
-      price += Number(selectedPlan.price) || 0;
-    }
-    
+  // Calculate price breakdown
+  const basePrice = useMemo(() => {
+    return Number(selectedCategory?.base_price) || 0;
+  }, [selectedCategory]);
+
+  const planPrice = useMemo(() => {
+    return Number(selectedPlan?.price) || 0;
+  }, [selectedPlan]);
+
+  const attributesPrice = useMemo(() => {
+    let price = 0;
     if (attributes) {
       attributes.forEach((attr) => {
         const selectedValue = orderData.attributes[attr.id];
@@ -191,18 +197,23 @@ export default function NewOrderPage() {
         }
       });
     }
-    
-    if (orderData.wants_validation) {
-      price += VALIDATION_PRICE;
-    }
-    
     return price;
-  }, [selectedCategory, selectedPlan, attributes, orderData.attributes, orderData.wants_validation]);
+  }, [attributes, orderData.attributes]);
+
+  // Calculate unit price (price per item - without validation fee)
+  const unitPrice = useMemo(() => {
+    return basePrice + planPrice + attributesPrice;
+  }, [basePrice, planPrice, attributesPrice]);
 
   // Calculate total price (unit price * quantity)
+  // Calculate total price: (unit price * quantity) + validation fee (if requested)
   const totalPrice = useMemo(() => {
-    return unitPrice * orderData.quantity;
-  }, [unitPrice, orderData.quantity]);
+    let total = unitPrice * orderData.quantity;
+    if (orderData.wants_validation) {
+      total += VALIDATION_PRICE;
+    }
+    return total;
+  }, [unitPrice, orderData.quantity, orderData.wants_validation]);
 
   const canProceed = () => {
     switch (currentStep) {
@@ -273,14 +284,43 @@ export default function NewOrderPage() {
   };
 
   const handleSubmit = () => {
+    if (!user?.id) {
+      toast.error("لطفاً ابتدا وارد شوید");
+      return;
+    }
+
+    // Map plan characteristics to design_plan enum
+    let designPlan: "PUBLIC" | "SEMI_PRIVATE" | "PRIVATE" | "OWN_DESIGN" = "PUBLIC";
+    if (selectedPlan) {
+      if (selectedPlan.has_templates) {
+        designPlan = "PUBLIC";
+      } else if (selectedPlan.has_questionnaire) {
+        designPlan = "SEMI_PRIVATE";
+      } else if (selectedPlan.has_file_upload) {
+        designPlan = "PRIVATE";
+      }
+    }
+
+    // Convert attributes to the backend format
+    const selectedAttributes = Object.entries(orderData.attributes).map(([attrId, optionValue]) => {
+      const attr = attributes?.find(a => a.id === attrId);
+      const option = attr?.options?.find(o => o.value === optionValue);
+      return {
+        attribute_id: attrId,
+        option_id: option?.id || optionValue,
+      };
+    });
+
     createOrder({
-      category_id: orderData.category_id,
-      plan_id: orderData.plan_id,
-      attributes: orderData.attributes,
-      questionnaire_answers: orderData.questionnaire_answers,
-      template_id: orderData.template_id,
-      quantity: orderData.quantity,
-      validation_requested: orderData.wants_validation,
+      data: {
+        category_id: orderData.category_id,
+        design_plan: designPlan,
+        selected_attributes: selectedAttributes,
+        quantity: orderData.quantity,
+        validation_requested: orderData.wants_validation,
+        template_id: orderData.template_id,
+      },
+      userId: user.id,
     }, {
       onSuccess: (data) => {
         router.push(`/orders/${data.data.id}`);
@@ -355,31 +395,34 @@ export default function NewOrderPage() {
                   </label>
                   {attr.options && attr.options.length > 0 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {attr.options.map((option) => (
-                        <button
-                          key={option.id}
-                          type="button"
-                          onClick={() =>
-                            setOrderData({
-                              ...orderData,
-                              attributes: { ...orderData.attributes, [attr.id]: option.value },
-                            })
-                          }
-                          className={cn(
-                            "p-3 rounded-lg border text-sm text-right transition-all",
-                            orderData.attributes[attr.id] === option.value
-                              ? "border-primary bg-primary-50 text-primary"
-                              : "border-border hover:border-primary/30"
-                          )}
-                        >
-                          <span className="block font-medium">{option.label_fa}</span>
-                          {option.extra_price > 0 && (
-                            <span className="text-xs text-muted">
-                              +{formatPrice(option.extra_price)}
-                            </span>
-                          )}
-                        </button>
-                      ))}
+                      {attr.options.map((option) => {
+                        const extraPrice = Number(option.extra_price) || 0;
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() =>
+                              setOrderData({
+                                ...orderData,
+                                attributes: { ...orderData.attributes, [attr.id]: option.value },
+                              })
+                            }
+                            className={cn(
+                              "p-3 rounded-lg border text-sm text-right transition-all",
+                              orderData.attributes[attr.id] === option.value
+                                ? "border-primary bg-primary-50 text-primary"
+                                : "border-border hover:border-primary/30"
+                            )}
+                          >
+                            <span className="block font-medium">{option.label_fa}</span>
+                            {extraPrice > 0 && (
+                              <Badge variant="secondary" className="mt-1 text-xs">
+                                +{formatPrice(extraPrice)}
+                              </Badge>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   ) : (
                     <Input
@@ -958,14 +1001,53 @@ export default function NewOrderPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between py-2 border-b border-border">
-                  <span className="text-muted">قیمت واحد</span>
-                  <span className="font-medium">{formatPrice(unitPrice)}</span>
+                {/* Price Breakdown */}
+                <div className="py-2 border-b border-border space-y-2">
+                  <p className="text-muted font-medium mb-3">ریز قیمت واحد:</p>
+                  
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted">قیمت پایه محصول</span>
+                    <span>{formatPrice(basePrice)}</span>
+                  </div>
+                  
+                  {planPrice > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted">هزینه طراحی ({selectedPlan?.name_fa})</span>
+                      <span>{formatPrice(planPrice)}</span>
+                    </div>
+                  )}
+                  
+                  {attributesPrice > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted">هزینه ویژگی‌ها</span>
+                      <span>{formatPrice(attributesPrice)}</span>
+                    </div>
+                  )}
+                  
+                  <div className="flex items-center justify-between pt-2 border-t border-dashed border-border">
+                    <span className="font-medium">قیمت واحد</span>
+                    <span className="font-medium">{formatPrice(unitPrice)}</span>
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between py-2 text-lg">
-                  <span className="font-semibold">مبلغ کل</span>
-                  <span className="font-bold text-primary">{formatPrice(totalPrice)}</span>
+                {/* Total Calculation */}
+                <div className="py-2 space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted">جمع ({orderData.quantity} عدد)</span>
+                    <span>{formatPrice(unitPrice * orderData.quantity)}</span>
+                  </div>
+                  
+                  {orderData.wants_validation && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted">هزینه اعتبارسنجی</span>
+                      <span>{formatPrice(VALIDATION_PRICE)}</span>
+                    </div>
+                  )}
+                  
+                  <div className="flex items-center justify-between pt-2 border-t border-border text-lg">
+                    <span className="font-semibold">مبلغ کل</span>
+                    <span className="font-bold text-primary">{formatPrice(totalPrice)}</span>
+                  </div>
                 </div>
               </CardContent>
             </Card>

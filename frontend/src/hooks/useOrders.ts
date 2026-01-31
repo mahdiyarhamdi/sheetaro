@@ -51,7 +51,8 @@ export function useOrders(options: UseOrdersOptions = {}) {
 
   // Create order mutation
   const createOrderMutation = useMutation({
-    mutationFn: (data: CreateOrderRequest) => ordersApi.create(data),
+    mutationFn: ({ data, userId }: { data: CreateOrderRequest; userId: string }) => 
+      ordersApi.create(data, userId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       toast.success("سفارش با موفقیت ایجاد شد!");

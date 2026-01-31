@@ -153,21 +153,30 @@ export const ordersApi = {
 
   get: (id: string) => api.get<Order>(`/orders/${id}`),
 
-  create: (data: CreateOrderRequest) =>
-    api.post<Order>("/orders", data),
+  create: (data: CreateOrderRequest, userId: string) =>
+    api.post<Order>(`/orders?user_id=${userId}`, data),
 
   updateStatus: (id: string, status: string) =>
     api.patch<Order>(`/orders/${id}/status`, { status }),
 };
 
+export type DesignPlanType = "PUBLIC" | "SEMI_PRIVATE" | "PRIVATE" | "OWN_DESIGN";
+
+export interface SelectedAttributeItem {
+  attribute_id: string;
+  option_id: string;
+}
+
 export interface CreateOrderRequest {
   category_id: string;
-  plan_id: string;
-  attributes: Record<string, unknown>;
-  questionnaire_answers?: Record<string, unknown>;
-  template_id?: string;
+  design_plan: DesignPlanType;
+  selected_attributes: SelectedAttributeItem[];
   quantity: number;
   validation_requested?: boolean;
+  template_id?: string;
+  design_file_url?: string;
+  shipping_address?: string;
+  customer_notes?: string;
 }
 
 // ============ Categories API ============
