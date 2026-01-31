@@ -463,8 +463,11 @@ class TemplateService:
         result = base_image.copy().convert("RGBA")
         draw = ImageDraw.Draw(result)
         
+        # Check if text contains Persian/Arabic characters
+        needs_persian_support = self._text_contains_persian(text)
+        
         # Get font (use async version to load from database)
-        font = await self._get_font_async(placeholder, font_cache)
+        font = await self._get_font_async(placeholder, font_cache, needs_persian_support)
         
         # Parse color (support hex with optional alpha)
         color = self._parse_color(placeholder.font_color or "#000000")
@@ -544,7 +547,23 @@ class TemplateService:
         font_cache[font_key] = font
         return font
     
-    async def _get_font_async(self, placeholder: TemplatePlaceholder, font_cache: dict) -> ImageFont.FreeTypeFont:
+    def _text_contains_persian(self, text: str) -> bool:
+        """Check if text contains Persian/Arabic characters."""
+        if not text:
+            return False
+        for char in text:
+            # Persian/Arabic Unicode ranges
+            code = ord(char)
+            if (0x0600 <= code <= 0x06FF or  # Arabic
+                0x0750 <= code <= 0x077F or  # Arabic Supplement
+                0xFB50 <= code <= 0xFDFF or  # Arabic Presentation Forms-A
+                0xFE70 <= code <= 0xFEFF):   # Arabic Presentation Forms-B
+                return True
+        return False
+    
+    async def _get_font_async(
+        self, placeholder: TemplatePlaceholder, font_cache: dict, needs_persian_support: bool = True
+    ) -> ImageFont.FreeTypeFont:
         """Get or load font for placeholder from database.
         
         Priority:
@@ -552,8 +571,14 @@ class TemplateService:
         2. Any available Persian font from database with variants
         3. Any TTF file in uploads/fonts directory
         4. Default font (last resort)
+        
+        Args:
+            placeholder: The placeholder configuration
+            font_cache: Cache dict for loaded fonts
+            needs_persian_support: If True, only use fonts that support Persian characters
         """
-        font_key = f"{placeholder.font_family}_{placeholder.font_size}_{placeholder.font_weight}"
+        cache_suffix = "_persian" if needs_persian_support else ""
+        font_key = f"{placeholder.font_family}_{placeholder.font_size}_{placeholder.font_weight}{cache_suffix}"
         
         if font_key in font_cache:
             logger.debug(f"Font cache hit: {font_key}")
@@ -562,13 +587,13 @@ class TemplateService:
         font_size = placeholder.font_size or 24
         font_weight = placeholder.font_weight or 400
         
-        logger.info(f"Loading font for placeholder: family={placeholder.font_family}, size={font_size}, weight={font_weight}")
+        logger.info(f"Loading font for placeholder: family={placeholder.font_family}, size={font_size}, weight={font_weight}, needs_persian={needs_persian_support}")
         
         # Strategy 1: Try specified font from database
         if self.repository and placeholder.font_family:
             logger.debug(f"Strategy 1: Trying font from database: {placeholder.font_family}")
             font = await self._try_load_font_from_db(
-                placeholder.font_family, font_size, font_weight
+                placeholder.font_family, font_size, font_weight, needs_persian_support
             )
             if font:
                 logger.info(f"Strategy 1 SUCCESS: Loaded font from database: {placeholder.font_family}")
@@ -620,7 +645,7 @@ class TemplateService:
         return font
     
     async def _try_load_font_from_db(
-        self, font_name: str, font_size: int, font_weight: int
+        self, font_name: str, font_size: int, font_weight: int, require_persian_support: bool = True
     ) -> Optional[ImageFont.FreeTypeFont]:
         """Try to load a specific font from database by name."""
         if not self.repository:
@@ -632,7 +657,7 @@ class TemplateService:
             font_record = await self.repository.get_font_by_name_fa(font_name)
         
         if font_record and font_record.variants:
-            return self._load_font_variant(font_record.variants, font_size, font_weight)
+            return self._load_font_variant(font_record.variants, font_size, font_weight, require_persian_support)
         
         return None
     
