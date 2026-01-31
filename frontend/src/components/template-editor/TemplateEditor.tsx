@@ -353,14 +353,37 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
             </button>
           </div>
 
-          {/* Save Button */}
+          {/* Save Button - Always enabled to save any position changes */}
           <Button 
             variant="default"
             onClick={async () => {
-              await handleSaveAll();
-              toast.success("تغییرات ذخیره شد");
+              // Save all placeholder positions to server
+              let savedCount = 0;
+              for (const placeholder of localPlaceholders) {
+                try {
+                  await updatePlaceholderMutation.mutateAsync({
+                    id: placeholder.id,
+                    data: {
+                      x: placeholder.x,
+                      y: placeholder.y,
+                      width: placeholder.width,
+                      height: placeholder.height,
+                      rotation: placeholder.rotation,
+                    },
+                  });
+                  savedCount++;
+                } catch (error) {
+                  // Continue with other placeholders
+                }
+              }
+              setHasUnsavedChanges(false);
+              if (savedCount > 0) {
+                toast.success(`${savedCount} جایگاه ذخیره شد`);
+              } else {
+                toast.success("تغییرات ذخیره شد");
+              }
             }}
-            disabled={!hasUnsavedChanges || updatePlaceholderMutation.isPending}
+            disabled={updatePlaceholderMutation.isPending}
           >
             {updatePlaceholderMutation.isPending ? (
               <Loader2 className="w-4 h-4 ml-1 animate-spin" />

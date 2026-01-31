@@ -542,7 +542,14 @@ class TemplateService:
         return font
     
     async def _get_font_async(self, placeholder: TemplatePlaceholder, font_cache: dict) -> ImageFont.FreeTypeFont:
-        """Get or load font for placeholder from database."""
+        """Get or load font for placeholder from database.
+        
+        Priority:
+        1. Font specified in placeholder.font_family (from database)
+        2. Any available Persian font from database with variants
+        3. Any TTF file in uploads/fonts directory
+        4. Default font (last resort)
+        """
         font_key = f"{placeholder.font_family}_{placeholder.font_size}_{placeholder.font_weight}"
         
         if font_key in font_cache:
@@ -551,43 +558,29 @@ class TemplateService:
         font_size = placeholder.font_size or 24
         font_weight = placeholder.font_weight or 400
         
-        # Try to load from database via repository
+        # Strategy 1: Try specified font from database
         if self.repository and placeholder.font_family:
-            # Try by name first, then by name_fa
-            font_record = await self.repository.get_font_by_name(placeholder.font_family)
-            if not font_record:
-                font_record = await self.repository.get_font_by_name_fa(placeholder.font_family)
-            
-            if font_record and font_record.variants:
-                # Find best matching variant (prefer exact weight match)
-                best_variant = None
-                for variant in font_record.variants:
-                    if variant.get("weight") == font_weight:
-                        best_variant = variant
-                        break
-                    # Fallback to first variant
-                    if best_variant is None:
-                        best_variant = variant
-                
-                if best_variant:
-                    file_url = best_variant.get("file_url", "")
-                    # Handle both /files/ and /api/v1/files/ prefixes
-                    if file_url.startswith("/api/v1/files/"):
-                        local_path = os.path.join(self.upload_dir, file_url.replace("/api/v1/files/", ""))
-                    elif file_url.startswith("/files/"):
-                        local_path = os.path.join(self.upload_dir, file_url.lstrip("/files/"))
-                    else:
-                        local_path = None
-                    
-                    if local_path and os.path.exists(local_path):
-                        try:
-                            font = ImageFont.truetype(local_path, font_size)
-                            font_cache[font_key] = font
-                            return font
-                        except Exception:
-                            pass
+            font = await self._try_load_font_from_db(
+                placeholder.font_family, font_size, font_weight
+            )
+            if font:
+                font_cache[font_key] = font
+                return font
         
-        # Fallback to bundled Persian fonts
+        # Strategy 2: If no font_family specified, find ANY font with variants
+        if self.repository:
+            font = await self._find_any_persian_font(font_size, font_weight)
+            if font:
+                font_cache[font_key] = font
+                return font
+        
+        # Strategy 3: Fallback to any TTF in uploads/fonts directory
+        font = self._find_ttf_in_uploads(font_size)
+        if font:
+            font_cache[font_key] = font
+            return font
+        
+        # Strategy 4: Bundled Persian fonts (if exist)
         persian_font_paths = [
             "/app/fonts/Vazirmatn-Regular.ttf",
             "/app/fonts/Vazir.ttf",
@@ -602,7 +595,7 @@ class TemplateService:
                 except Exception:
                     pass
         
-        # Last fallback to default font
+        # Strategy 5: Last fallback to default font (won't render Persian correctly)
         try:
             font = ImageFont.load_default(size=font_size)
         except TypeError:
@@ -610,6 +603,123 @@ class TemplateService:
         
         font_cache[font_key] = font
         return font
+    
+    async def _try_load_font_from_db(
+        self, font_name: str, font_size: int, font_weight: int
+    ) -> Optional[ImageFont.FreeTypeFont]:
+        """Try to load a specific font from database by name."""
+        if not self.repository:
+            return None
+        
+        # Try by name first, then by name_fa
+        font_record = await self.repository.get_font_by_name(font_name)
+        if not font_record:
+            font_record = await self.repository.get_font_by_name_fa(font_name)
+        
+        if font_record and font_record.variants:
+            return self._load_font_variant(font_record.variants, font_size, font_weight)
+        
+        return None
+    
+    async def _find_any_persian_font(
+        self, font_size: int, font_weight: int
+    ) -> Optional[ImageFont.FreeTypeFont]:
+        """Find any available font with variants from database."""
+        if not self.repository:
+            return None
+        
+        # Get all fonts and find one with variants
+        from sqlalchemy import select
+        from app.models.system_font import SystemFont
+        
+        result = await self.repository.db.execute(
+            select(SystemFont).where(SystemFont.variants != None)
+        )
+        fonts = result.scalars().all()
+        
+        for font_record in fonts:
+            if font_record.variants:
+                font = self._load_font_variant(font_record.variants, font_size, font_weight)
+                if font:
+                    return font
+        
+        return None
+    
+    def _load_font_variant(
+        self, variants: list, font_size: int, font_weight: int
+    ) -> Optional[ImageFont.FreeTypeFont]:
+        """Load font from variant list, preferring matching weight."""
+        best_variant = None
+        
+        for variant in variants:
+            if variant.get("weight") == font_weight:
+                best_variant = variant
+                break
+            if best_variant is None:
+                best_variant = variant
+        
+        if best_variant:
+            file_url = best_variant.get("file_url", "")
+            local_path = self._get_font_local_path(file_url)
+            
+            if local_path and os.path.exists(local_path):
+                try:
+                    return ImageFont.truetype(local_path, font_size)
+                except Exception:
+                    pass
+        
+        return None
+    
+    def _get_font_local_path(self, file_url: str) -> Optional[str]:
+        """Convert font file URL to local path."""
+        if not file_url:
+            return None
+        
+        # Handle various URL prefixes
+        if file_url.startswith("/api/v1/files/"):
+            return os.path.join(self.upload_dir, file_url.replace("/api/v1/files/", ""))
+        elif file_url.startswith("/files/"):
+            return os.path.join(self.upload_dir, file_url.replace("/files/", ""))
+        
+        return None
+    
+    def _find_ttf_in_uploads(self, font_size: int) -> Optional[ImageFont.FreeTypeFont]:
+        """Find a TTF font in uploads/fonts directory.
+        
+        Priority: Vazirmatn (best Persian support) > any other TTF
+        """
+        fonts_dir = os.path.join(self.upload_dir, "fonts")
+        
+        if not os.path.exists(fonts_dir):
+            return None
+        
+        # Priority list: fonts known to have good Arabic Presentation Forms support
+        priority_fonts = [
+            "Vazirmatn-Regular.ttf",
+            "Vazirmatn-Bold.ttf",
+            "Vazir-Regular.ttf",
+            "IRANSans.ttf",
+        ]
+        
+        # Try priority fonts first
+        for priority_name in priority_fonts:
+            font_path = os.path.join(fonts_dir, priority_name)
+            if os.path.exists(font_path):
+                try:
+                    return ImageFont.truetype(font_path, font_size)
+                except Exception:
+                    continue
+        
+        # Fallback to any TTF
+        for filename in os.listdir(fonts_dir):
+            if filename.endswith(".ttf"):
+                font_path = os.path.join(fonts_dir, filename)
+                try:
+                    return ImageFont.truetype(font_path, font_size)
+                except Exception:
+                    continue
+        
+        return None
     
     def _parse_color(self, color_str: str) -> Tuple[int, int, int, int]:
         """Parse hex color to RGBA tuple."""
