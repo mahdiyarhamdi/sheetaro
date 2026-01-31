@@ -1506,7 +1506,8 @@ export default function CatalogManagementPage() {
           placeholderPromises.push(
             adminApi.createPlaceholder(newTemplate.id, {
               type: "IMAGE",
-              label: `تصویر ${i + 1}`,
+              name: `image_${i + 1}`,
+              label_fa: `تصویر ${i + 1}`,
               x: 50 + (i * 30),
               y: 50 + (i * 30),
               width: 200,
@@ -1523,7 +1524,8 @@ export default function CatalogManagementPage() {
           placeholderPromises.push(
             adminApi.createPlaceholder(newTemplate.id, {
               type: "TEXT",
-              label: `متن ${i + 1}`,
+              name: `text_${i + 1}`,
+              label_fa: `متن ${i + 1}`,
               x: 50,
               y: 300 + (i * 60),
               width: 300,

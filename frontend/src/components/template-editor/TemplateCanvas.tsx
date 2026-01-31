@@ -153,17 +153,17 @@ export default function TemplateCanvas({
     }
   };
 
-  // Get placeholder color
+  // Get placeholder color - using low opacity for transparency so template shows through
   const getPlaceholderColor = (type: PlaceholderType, isSelected: boolean) => {
     const baseColors = {
       IMAGE: {
-        bg: isSelected ? "bg-blue-500/30" : "bg-blue-500/20",
-        border: isSelected ? "border-blue-500" : "border-blue-400",
+        bg: isSelected ? "bg-blue-500/20" : "bg-blue-500/10",
+        border: isSelected ? "border-blue-500" : "border-blue-400/70",
         text: "text-blue-600",
       },
       TEXT: {
-        bg: isSelected ? "bg-green-500/30" : "bg-green-500/20",
-        border: isSelected ? "border-green-500" : "border-green-400",
+        bg: isSelected ? "bg-green-500/20" : "bg-green-500/10",
+        border: isSelected ? "border-green-500" : "border-green-400/70",
         text: "text-green-600",
       },
     };
