@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { TemplatePlaceholder, adminApi, PlaceholderPreviewData, TemplatePreviewResponse } from "@/lib/api";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import {
   Loader2,
   RefreshCw,
   Upload,
+  X,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -42,6 +43,45 @@ export default function PreviewPanel({
   
   // Preview result
   const [previewResult, setPreviewResult] = useState<TemplatePreviewResponse | null>(null);
+
+  // File input refs for image uploads
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  
+  // Track uploading state per placeholder
+  const [uploadingPlaceholders, setUploadingPlaceholders] = useState<Record<string, boolean>>({});
+
+  // Handle image upload
+  const handleImageUpload = async (placeholderId: string, file: File) => {
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      toast.error("فقط فایل تصویری مجاز است");
+      return;
+    }
+    
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("حداکثر حجم فایل ۵ مگابایت است");
+      return;
+    }
+
+    setUploadingPlaceholders((prev) => ({ ...prev, [placeholderId]: true }));
+    
+    try {
+      const response = await adminApi.uploadTemplateImage(file);
+      const fileUrl = response.data.file_url;
+      handleSampleChange(placeholderId, "image_url", fileUrl);
+      toast.success("تصویر آپلود شد");
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || "خطا در آپلود تصویر");
+    } finally {
+      setUploadingPlaceholders((prev) => ({ ...prev, [placeholderId]: false }));
+    }
+  };
+
+  // Clear uploaded image
+  const handleClearImage = (placeholderId: string) => {
+    handleSampleChange(placeholderId, "image_url", "");
+  };
 
   // Generate preview mutation
   const generatePreviewMutation = useMutation({
@@ -92,8 +132,11 @@ export default function PreviewPanel({
   const handleDownload = () => {
     if (!previewResult?.preview_url) return;
     
+    const fullUrl = getFullImageUrl(previewResult.preview_url);
+    if (!fullUrl) return;
+    
     const link = document.createElement("a");
-    link.href = previewResult.preview_url;
+    link.href = fullUrl;
     link.download = `preview_${templateId}.png`;
     link.click();
   };
@@ -140,26 +183,66 @@ export default function PreviewPanel({
 
               {placeholder.type === "IMAGE" ? (
                 <div className="space-y-2">
+                  {/* Hidden file input */}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    ref={(el) => { fileInputRefs.current[placeholder.id] = el; }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        handleImageUpload(placeholder.id, file);
+                      }
+                      // Reset input to allow re-upload of same file
+                      e.target.value = "";
+                    }}
+                  />
+                  
+                  {/* Upload button and preview */}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                      disabled={uploadingPlaceholders[placeholder.id]}
+                      onClick={() => fileInputRefs.current[placeholder.id]?.click()}
+                    >
+                      {uploadingPlaceholders[placeholder.id] ? (
+                        <Loader2 className="w-3 h-3 ml-1 animate-spin" />
+                      ) : (
+                        <Upload className="w-3 h-3 ml-1" />
+                      )}
+                      {uploadingPlaceholders[placeholder.id] ? "در حال آپلود..." : "آپلود تصویر"}
+                    </Button>
+                    
+                    {/* Image preview with delete button */}
+                    {sampleData[placeholder.id]?.image_url && (
+                      <div className="relative group">
+                        <img
+                          src={getFullImageUrl(sampleData[placeholder.id].image_url)}
+                          alt="Preview"
+                          className="w-12 h-12 object-cover rounded border"
+                          onError={(e) => (e.currentTarget.style.display = "none")}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleClearImage(placeholder.id)}
+                          className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Manual URL input (optional) */}
                   <Input
                     value={sampleData[placeholder.id]?.image_url || ""}
                     onChange={(e) => handleSampleChange(placeholder.id, "image_url", e.target.value)}
-                    placeholder="https://example.com/image.png"
-                    className="text-sm"
+                    placeholder="یا لینک تصویر را وارد کنید..."
+                    className="text-sm text-xs"
                   />
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" className="text-xs">
-                      <Upload className="w-3 h-3 ml-1" />
-                      آپلود تصویر
-                    </Button>
-                    {sampleData[placeholder.id]?.image_url && (
-                      <img
-                        src={sampleData[placeholder.id].image_url}
-                        alt="Preview"
-                        className="w-10 h-10 object-cover rounded border"
-                        onError={(e) => (e.currentTarget.style.display = "none")}
-                      />
-                    )}
-                  </div>
                 </div>
               ) : (
                 <Input
