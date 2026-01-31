@@ -733,10 +733,13 @@ async def generate_template_preview(
     template_service = TemplateService(repository=repo)
     base_url = str(request.base_url).rstrip('/')
     
+    # Convert Pydantic models to dictionaries for the service
+    placeholder_data = [p.model_dump() for p in data.placeholders]
+    
     try:
         result = await template_service.generate_preview(
             template=template,
-            placeholder_data=data.placeholders,
+            placeholder_data=placeholder_data,
             base_url=base_url,
         )
         return TemplatePreviewResponse(**result)
