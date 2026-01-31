@@ -16,6 +16,16 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 
+// API base URL for constructing full image URLs
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3005";
+
+// Helper to construct full image URL from relative path
+const getFullImageUrl = (url?: string): string | undefined => {
+  if (!url) return undefined;
+  if (url.startsWith('http')) return url;
+  return `${API_BASE_URL}/api/v1${url}`;
+};
+
 interface PreviewPanelProps {
   templateId: string;
   placeholders: TemplatePlaceholder[];
@@ -187,7 +197,7 @@ export default function PreviewPanel({
           <div className="space-y-3">
             <div className="relative rounded-lg overflow-hidden border bg-gray-100">
               <img
-                src={previewResult.preview_url}
+                src={getFullImageUrl(previewResult.preview_url)}
                 alt="Generated Preview"
                 className="w-full h-auto"
               />
@@ -213,7 +223,7 @@ export default function PreviewPanel({
             <p className="text-xs text-gray-500">پیش‌نمایش قالب اصلی:</p>
             <div className="rounded-lg overflow-hidden border bg-gray-100">
               <img
-                src={templatePreviewUrl}
+                src={getFullImageUrl(templatePreviewUrl)}
                 alt="Template Preview"
                 className="w-full h-auto opacity-50"
               />
