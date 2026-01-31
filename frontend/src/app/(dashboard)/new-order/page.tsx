@@ -61,6 +61,7 @@ interface OrderData {
   design_file?: File;
   placeholder_values: Record<string, PlaceholderValue>;
   wants_validation: boolean;
+  quantity: number;
 }
 
 const VALIDATION_PRICE = 50000; // 50,000 Toman
@@ -84,6 +85,7 @@ export default function NewOrderPage() {
     plan_id: "",
     placeholder_values: {},
     wants_validation: false,
+    quantity: 1,
   });
   const [uploadingImage, setUploadingImage] = useState<string | null>(null);
 
@@ -170,11 +172,12 @@ export default function NewOrderPage() {
   const currentStepIndex = steps.findIndex((s) => s.id === currentStep);
 
   // Calculate total price
-  const totalPrice = useMemo(() => {
-    let price = selectedCategory?.base_price || 0;
+  // Calculate unit price (price per item)
+  const unitPrice = useMemo(() => {
+    let price = Number(selectedCategory?.base_price) || 0;
     
     if (selectedPlan) {
-      price += selectedPlan.price;
+      price += Number(selectedPlan.price) || 0;
     }
     
     if (attributes) {
@@ -183,7 +186,7 @@ export default function NewOrderPage() {
         if (selectedValue && attr.options) {
           const option = attr.options.find((o) => o.value === selectedValue);
           if (option) {
-            price += option.extra_price;
+            price += Number(option.extra_price) || 0;
           }
         }
       });
@@ -195,6 +198,11 @@ export default function NewOrderPage() {
     
     return price;
   }, [selectedCategory, selectedPlan, attributes, orderData.attributes, orderData.wants_validation]);
+
+  // Calculate total price (unit price * quantity)
+  const totalPrice = useMemo(() => {
+    return unitPrice * orderData.quantity;
+  }, [unitPrice, orderData.quantity]);
 
   const canProceed = () => {
     switch (currentStep) {
@@ -271,6 +279,8 @@ export default function NewOrderPage() {
       attributes: orderData.attributes,
       questionnaire_answers: orderData.questionnaire_answers,
       template_id: orderData.template_id,
+      quantity: orderData.quantity,
+      validation_requested: orderData.wants_validation,
     }, {
       onSuccess: (data) => {
         router.push(`/orders/${data.data.id}`);
@@ -911,6 +921,48 @@ export default function NewOrderPage() {
                   </span>
                 </div>
 
+                <div className="flex items-center justify-between py-2 border-b border-border">
+                  <span className="text-muted">تعداد</span>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      className="w-8 h-8 flex items-center justify-center rounded-md border border-border hover:bg-muted transition-colors"
+                      onClick={() => setOrderData(prev => ({ ...prev, quantity: Math.max(1, prev.quantity - 1) }))}
+                      disabled={orderData.quantity <= 1}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                      </svg>
+                    </button>
+                    <input
+                      type="number"
+                      min="1"
+                      max="1000"
+                      value={orderData.quantity}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value) || 1;
+                        setOrderData(prev => ({ ...prev, quantity: Math.max(1, Math.min(1000, val)) }));
+                      }}
+                      className="w-16 text-center border border-border rounded-md py-1 px-2 bg-background"
+                    />
+                    <button
+                      type="button"
+                      className="w-8 h-8 flex items-center justify-center rounded-md border border-border hover:bg-muted transition-colors"
+                      onClick={() => setOrderData(prev => ({ ...prev, quantity: Math.min(1000, prev.quantity + 1) }))}
+                      disabled={orderData.quantity >= 1000}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between py-2 border-b border-border">
+                  <span className="text-muted">قیمت واحد</span>
+                  <span className="font-medium">{formatPrice(unitPrice)}</span>
+                </div>
+
                 <div className="flex items-center justify-between py-2 text-lg">
                   <span className="font-semibold">مبلغ کل</span>
                   <span className="font-bold text-primary">{formatPrice(totalPrice)}</span>
@@ -987,8 +1039,9 @@ export default function NewOrderPage() {
           </Button>
 
           <div className="flex items-center gap-2">
-            {totalPrice > 0 && (
+            {unitPrice > 0 && (
               <span className="text-sm text-muted hidden sm:block">
+                {orderData.quantity > 1 && `${orderData.quantity} عدد × `}
                 مبلغ: <strong className="text-primary">{formatPrice(totalPrice)}</strong>
               </span>
             )}

@@ -26,7 +26,6 @@ import {
   FolderOpen,
   Tag,
   Layers,
-  Package,
   ChevronLeft,
   ChevronDown,
   ChevronUp,
@@ -63,26 +62,14 @@ const getFullImageUrl = (url?: string): string | undefined => {
   return `${API_BASE_URL}/api/v1${url}`;
 };
 
-type TabType = "categories" | "products" | "plans" | "attributes" | "questionnaire" | "templates";
+type TabType = "categories" | "plans" | "attributes" | "questionnaire" | "templates";
 
 interface CategoryFormData {
   slug: string;
   name_fa: string;
   description_fa: string;
-  is_active: boolean;
-}
-
-interface ProductFormData {
-  type: "LABEL" | "INVOICE";
-  name: string;
-  name_fa: string;
-  size: string;
-  material?: "PAPER" | "VINYL" | "POLYESTER" | "TRANSPARENT";
   base_price: number;
-  min_quantity: number;
-  description: string;
   is_active: boolean;
-  sort_order: number;
 }
 
 interface PlanFormData {
@@ -204,23 +191,8 @@ export default function CatalogManagementPage() {
     slug: "",
     name_fa: "",
     description_fa: "",
-    is_active: true,
-  });
-
-  // Product modal states
-  const [showProductModal, setShowProductModal] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<any>(null);
-  const [productForm, setProductForm] = useState<ProductFormData>({
-    type: "LABEL",
-    name: "",
-    name_fa: "",
-    size: "",
-    material: undefined,
     base_price: 0,
-    min_quantity: 1,
-    description: "",
     is_active: true,
-    sort_order: 0,
   });
 
   // Plan modal states
@@ -410,16 +382,6 @@ export default function CatalogManagementPage() {
     enabled: isAdmin,
   });
 
-  // Fetch products
-  const { data: productsData, isLoading: isLoadingProducts } = useQuery({
-    queryKey: ["adminProducts"],
-    queryFn: async () => {
-      const response = await adminApi.getProducts({ active_only: false });
-      return response.data;
-    },
-    enabled: isAdmin && activeTab === "products",
-  });
-
   // Fetch plans for selected category
   const { data: plans, isLoading: isLoadingPlans } = useQuery({
     queryKey: ["adminPlans", selectedCategory],
@@ -523,7 +485,7 @@ export default function CatalogManagementPage() {
   // Category modal helpers
   const openCreateCategoryModal = () => {
     setEditingCategory(null);
-    setCategoryForm({ slug: "", name_fa: "", description_fa: "", is_active: true });
+    setCategoryForm({ slug: "", name_fa: "", description_fa: "", base_price: 0, is_active: true });
     setShowCategoryModal(true);
   };
 
@@ -533,6 +495,7 @@ export default function CatalogManagementPage() {
       slug: category.slug || "",
       name_fa: category.name_fa || category.name || "",
       description_fa: category.description_fa || category.description || "",
+      base_price: category.base_price || 0,
       is_active: category.is_active,
     });
     setShowCategoryModal(true);
@@ -541,7 +504,7 @@ export default function CatalogManagementPage() {
   const closeCategoryModal = () => {
     setShowCategoryModal(false);
     setEditingCategory(null);
-    setCategoryForm({ slug: "", name_fa: "", description_fa: "", is_active: true });
+    setCategoryForm({ slug: "", name_fa: "", description_fa: "", base_price: 0, is_active: true });
   };
 
   const handleNameChange = (name: string) => {
@@ -566,111 +529,6 @@ export default function CatalogManagementPage() {
       updateCategoryMutation.mutate({ id: editingCategory.id, data: categoryForm });
     } else {
       createCategoryMutation.mutate(categoryForm);
-    }
-  };
-
-  // Delete product mutation
-  const deleteProductMutation = useMutation({
-    mutationFn: (id: string) => adminApi.deleteProduct(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["adminProducts"] });
-      toast.success("محصول حذف شد");
-    },
-    onError: (error) => {
-      toast.error(getErrorMessage(error));
-    },
-  });
-
-  // Create product mutation
-  const createProductMutation = useMutation({
-    mutationFn: (data: ProductFormData) => adminApi.createProduct(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["adminProducts"] });
-      toast.success("محصول ایجاد شد");
-      closeProductModal();
-    },
-    onError: (error) => {
-      toast.error(getErrorMessage(error));
-    },
-  });
-
-  // Update product mutation
-  const updateProductMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: ProductFormData }) =>
-      adminApi.updateProduct(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["adminProducts"] });
-      toast.success("محصول به‌روزرسانی شد");
-      closeProductModal();
-    },
-    onError: (error) => {
-      toast.error(getErrorMessage(error));
-    },
-  });
-
-  // Product modal helpers
-  const openCreateProductModal = () => {
-    setEditingProduct(null);
-    setProductForm({
-      type: "LABEL",
-      name: "",
-      name_fa: "",
-      size: "",
-      material: undefined,
-      base_price: 0,
-      min_quantity: 1,
-      description: "",
-      is_active: true,
-      sort_order: 0,
-    });
-    setShowProductModal(true);
-  };
-
-  const openEditProductModal = (product: any) => {
-    setEditingProduct(product);
-    setProductForm({
-      type: product.type || "LABEL",
-      name: product.name || "",
-      name_fa: product.name_fa || product.name || "",
-      size: product.size || "",
-      material: product.material || undefined,
-      base_price: product.base_price || 0,
-      min_quantity: product.min_quantity || 1,
-      description: product.description || "",
-      is_active: product.is_active ?? true,
-      sort_order: product.sort_order || 0,
-    });
-    setShowProductModal(true);
-  };
-
-  const closeProductModal = () => {
-    setShowProductModal(false);
-    setEditingProduct(null);
-  };
-
-  const handleProductSubmit = () => {
-    if (!productForm.name_fa.trim()) {
-      toast.error("نام محصول الزامی است");
-      return;
-    }
-    if (!productForm.size.trim()) {
-      toast.error("سایز محصول الزامی است");
-      return;
-    }
-    if (productForm.base_price <= 0) {
-      toast.error("قیمت محصول باید بیشتر از صفر باشد");
-      return;
-    }
-
-    const data = {
-      ...productForm,
-      name: productForm.name || generateSlug(productForm.name_fa),
-    };
-
-    if (editingProduct) {
-      updateProductMutation.mutate({ id: editingProduct.id, data });
-    } else {
-      createProductMutation.mutate(data);
     }
   };
 
@@ -1573,7 +1431,6 @@ export default function CatalogManagementPage() {
 
   const tabs = [
     { id: "categories" as TabType, label: "دسته‌بندی‌ها", icon: FolderOpen, count: categories?.length ?? 0 },
-    { id: "products" as TabType, label: "محصولات", icon: Package, count: productsData?.items?.length ?? 0 },
     { id: "plans" as TabType, label: "پلن‌های طراحی", icon: Layers, count: 0 },
     { id: "attributes" as TabType, label: "ویژگی‌ها", icon: Settings, count: attributes?.length ?? 0 },
     { id: "questionnaire" as TabType, label: "پرسشنامه", icon: FileQuestion, count: sections?.length ?? 0 },
@@ -1673,7 +1530,15 @@ export default function CatalogManagementPage() {
                       </div>
                       <div>
                         <p className="font-medium text-foreground">{category.name_fa || category.name}</p>
-                        <p className="text-sm text-muted">{category.description_fa || category.description || "بدون توضیح"}</p>
+                        <div className="flex items-center gap-3 text-sm text-muted mt-1">
+                          <span>{category.description_fa || category.description || "بدون توضیح"}</span>
+                          {category.base_price > 0 && (
+                            <>
+                              <span>•</span>
+                              <span>{formatPrice(category.base_price)} تومان</span>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1692,86 +1557,6 @@ export default function CatalogManagementPage() {
                       </button>
                       <button 
                         onClick={() => deleteCategoryMutation.mutate(category.id)}
-                        className="p-2 rounded-lg hover:bg-danger-light transition-colors text-muted hover:text-danger"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Products Tab */}
-      {activeTab === "products" && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Package className="w-5 h-5" />
-              محصولات
-            </CardTitle>
-            <Button
-              variant="primary"
-              size="sm"
-              leftIcon={<Plus className="w-4 h-4" />}
-              onClick={openCreateProductModal}
-            >
-              محصول جدید
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {isLoadingProducts ? (
-              <div className="space-y-3">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="h-16 bg-accent rounded-lg animate-pulse" />
-                ))}
-              </div>
-            ) : !productsData?.items?.length ? (
-              <div className="text-center py-12 text-muted">
-                <Package className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                <p className="text-lg">محصولی یافت نشد</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {productsData.items.map((product: any) => (
-                  <div
-                    key={product.id}
-                    className="flex items-center justify-between p-4 rounded-xl border border-border hover:bg-accent/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-primary-50 flex items-center justify-center">
-                        <Package className="w-6 h-6 text-primary" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-foreground">{product.name}</p>
-                        <div className="flex items-center gap-3 text-sm text-muted mt-1">
-                          <span>{product.type}</span>
-                          <span>•</span>
-                          <span>{product.size}</span>
-                          <span>•</span>
-                          <span>{formatPrice(product.base_price)}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2 py-1 rounded-full text-xs ${
-                        product.is_active 
-                          ? "bg-success-light text-success" 
-                          : "bg-muted/20 text-muted"
-                      }`}>
-                        {product.is_active ? "فعال" : "غیرفعال"}
-                      </span>
-                      <button 
-                        onClick={() => openEditProductModal(product)}
-                        className="p-2 rounded-lg hover:bg-accent transition-colors text-muted hover:text-foreground"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => deleteProductMutation.mutate(product.id)}
                         className="p-2 rounded-lg hover:bg-danger-light transition-colors text-muted hover:text-danger"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -2654,6 +2439,16 @@ export default function CatalogManagementPage() {
             />
           </div>
 
+          <Input
+            label="قیمت پایه (تومان)"
+            placeholder="مثال: 50000"
+            type="number"
+            value={categoryForm.base_price || ""}
+            onChange={(e) => setCategoryForm({ ...categoryForm, base_price: parseInt(e.target.value) || 0 })}
+            dir="ltr"
+            hint="قیمت پایه هر واحد از این دسته‌بندی (بدون احتساب ویژگی‌ها)"
+          />
+
           <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
@@ -2674,130 +2469,6 @@ export default function CatalogManagementPage() {
               {editingCategory ? "به‌روزرسانی" : "ایجاد"}
             </Button>
             <Button variant="outline" onClick={closeCategoryModal}>
-              انصراف
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Product Create/Edit Modal */}
-      <Modal
-        isOpen={showProductModal}
-        onClose={closeProductModal}
-        title={editingProduct ? "ویرایش محصول" : "ایجاد محصول جدید"}
-        size="md"
-      >
-        <div className="space-y-4">
-          <Input
-            label="نام محصول (فارسی)"
-            placeholder="مثال: کارت ویزیت سلفون مات"
-            value={productForm.name_fa}
-            onChange={(e) => setProductForm({ ...productForm, name_fa: e.target.value })}
-          />
-
-          <Input
-            label="شناسه محصول (انگلیسی)"
-            placeholder="مثال: matte-business-card"
-            value={productForm.name}
-            onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
-            dir="ltr"
-            hint="اختیاری - اگر خالی باشد از نام فارسی ساخته می‌شود"
-          />
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="w-full">
-              <label className="block text-sm font-medium text-foreground mb-1.5">
-                نوع محصول *
-              </label>
-              <select
-                className="w-full px-3 py-2 rounded-lg border border-border bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                value={productForm.type}
-                onChange={(e) => setProductForm({ ...productForm, type: e.target.value as "LABEL" | "INVOICE" })}
-              >
-                <option value="LABEL">لیبل (LABEL)</option>
-                <option value="INVOICE">فاکتور (INVOICE)</option>
-              </select>
-            </div>
-
-            <Input
-              label="سایز محصول *"
-              placeholder="مثال: 5x5cm یا A5"
-              value={productForm.size}
-              onChange={(e) => setProductForm({ ...productForm, size: e.target.value })}
-              dir="ltr"
-            />
-          </div>
-
-          {productForm.type === "LABEL" && (
-            <div className="w-full">
-              <label className="block text-sm font-medium text-foreground mb-1.5">
-                جنس مواد
-              </label>
-              <select
-                className="w-full px-3 py-2 rounded-lg border border-border bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                value={productForm.material || ""}
-                onChange={(e) => setProductForm({ ...productForm, material: e.target.value as any || undefined })}
-              >
-                <option value="">انتخاب کنید...</option>
-                <option value="PAPER">کاغذی (PAPER)</option>
-                <option value="VINYL">وینیل (VINYL)</option>
-                <option value="POLYESTER">پلی‌استر (POLYESTER)</option>
-                <option value="TRANSPARENT">شفاف (TRANSPARENT)</option>
-              </select>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="قیمت پایه (تومان) *"
-              type="number"
-              placeholder="50000"
-              value={productForm.base_price || ""}
-              onChange={(e) => setProductForm({ ...productForm, base_price: parseInt(e.target.value) || 0 })}
-              dir="ltr"
-            />
-            <Input
-              label="حداقل تعداد سفارش"
-              type="number"
-              placeholder="1"
-              value={productForm.min_quantity || ""}
-              onChange={(e) => setProductForm({ ...productForm, min_quantity: parseInt(e.target.value) || 1 })}
-              dir="ltr"
-            />
-          </div>
-
-          <div className="w-full">
-            <label className="block text-sm font-medium text-foreground mb-1.5">
-              توضیحات (اختیاری)
-            </label>
-            <textarea
-              className="w-full min-h-[80px] px-3 py-2 rounded-lg border border-border bg-surface text-foreground placeholder:text-muted resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-              placeholder="توضیح مختصر درباره این محصول..."
-              value={productForm.description}
-              onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
-            />
-          </div>
-
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={productForm.is_active}
-              onChange={(e) => setProductForm({ ...productForm, is_active: e.target.checked })}
-              className="w-5 h-5 rounded border-border text-primary focus:ring-primary"
-            />
-            <span className="text-sm text-foreground">فعال باشد</span>
-          </label>
-
-          <div className="flex items-center gap-3 pt-4 border-t border-border">
-            <Button
-              variant="primary"
-              className="flex-1"
-              onClick={handleProductSubmit}
-              isLoading={createProductMutation.isPending || updateProductMutation.isPending}
-            >
-              {editingProduct ? "به‌روزرسانی" : "ایجاد"}
-            </Button>
-            <Button variant="outline" onClick={closeProductModal}>
               انصراف
             </Button>
           </div>

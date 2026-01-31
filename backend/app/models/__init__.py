@@ -12,7 +12,6 @@ from app.models.enums import (
     SubscriptionPlan,
 )
 from app.models.user import User
-from app.models.product import Product
 from app.models.order import Order
 from app.models.payment import Payment
 from app.models.validation import ValidationReport
@@ -34,7 +33,6 @@ from app.models.system_font import SystemFont
 
 __all__ = [
     "User",
-    "Product",
     "Order",
     "Payment",
     "ValidationReport",

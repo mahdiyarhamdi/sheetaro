@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { TemplatePlaceholder, PlaceholderType } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useDynamicFonts } from "@/hooks/useDynamicFonts";
 import { ImageIcon, Type, Move, RotateCw, Square } from "lucide-react";
 
 interface TemplateCanvasProps {
@@ -32,6 +33,9 @@ export default function TemplateCanvas({
   scale = 1,
   editable = true,
 }: TemplateCanvasProps) {
+  // Load fonts dynamically via @font-face so they render correctly in canvas
+  useDynamicFonts();
+  
   const canvasRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);

@@ -5,6 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import { TemplatePlaceholder, adminApi, PlaceholderPreviewData, TemplatePreviewResponse } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useDynamicFonts } from "@/hooks/useDynamicFonts";
 import {
   ImageIcon,
   Type,
@@ -38,6 +39,9 @@ export default function PreviewPanel({
   placeholders,
   templatePreviewUrl,
 }: PreviewPanelProps) {
+  // Load fonts dynamically via @font-face so they render correctly in preview inputs
+  useDynamicFonts();
+  
   // Sample data for each placeholder
   const [sampleData, setSampleData] = useState<Record<string, { image_url?: string; text_value?: string }>>({});
   

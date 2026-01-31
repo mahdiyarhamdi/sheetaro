@@ -39,6 +39,8 @@ def reshape_persian_text(text: str) -> str:
         return text
 
 
+
+
 class TemplateService:
     """Service for processing template images with logo placement."""
     
@@ -466,17 +468,52 @@ class TemplateService:
         # Check if text contains Persian/Arabic characters
         needs_persian_support = self._text_contains_persian(text)
         
-        # Get font (use async version to load from database)
-        font = await self._get_font_async(placeholder, font_cache, needs_persian_support)
-        
         # Parse color (support hex with optional alpha)
         color = self._parse_color(placeholder.font_color or "#000000")
         
-        # Reshape Persian/Arabic text for correct rendering
-        display_text = reshape_persian_text(text)
+        # Get font (user's selected font)
+        font = await self._get_font_async(placeholder, font_cache, needs_persian_support)
+        
+        # Determine text rendering approach based on raqm availability
+        # If raqm is available (libraqm installed), use it for proper OpenType shaping
+        # Otherwise fall back to arabic_reshaper
+        
+        use_raqm = self._check_raqm_support()
+        
+        if needs_persian_support:
+            if use_raqm:
+                # With raqm, pass original text - raqm handles shaping AND BiDi automatically
+                display_text = text
+                text_direction = "rtl"
+                logger.info(f"Using raqm for Persian text rendering with font: {placeholder.font_family}")
+            else:
+                # Without raqm, we need arabic_reshaper and fonts with presentation forms
+                font_supports_pf = self._check_font_presentation_forms(placeholder)
+                
+                if font_supports_pf:
+                    display_text = reshape_persian_text(text)
+                    text_direction = None
+                else:
+                    # Fallback to font with presentation forms
+                    logger.info(f"Font '{placeholder.font_family}' doesn't support Arabic Presentation Forms, using fallback")
+                    fallback_font = await self._get_persian_fallback_font(placeholder.font_size or 24, font_cache)
+                    if fallback_font:
+                        font = fallback_font
+                    display_text = reshape_persian_text(text)
+                    text_direction = None
+        else:
+            display_text = text
+            text_direction = None
         
         # Calculate text position based on alignment
-        text_bbox = draw.textbbox((0, 0), display_text, font=font)
+        try:
+            if use_raqm and text_direction:
+                text_bbox = draw.textbbox((0, 0), display_text, font=font, direction=text_direction)
+            else:
+                text_bbox = draw.textbbox((0, 0), display_text, font=font)
+        except Exception:
+            text_bbox = draw.textbbox((0, 0), display_text, font=font)
+            
         text_width = text_bbox[2] - text_bbox[0]
         text_height = text_bbox[3] - text_bbox[1]
         
@@ -491,10 +528,97 @@ class TemplateService:
         # Vertical center
         y = placeholder.y + (placeholder.height - text_height) // 2
         
-        # Draw text with reshaped Persian text
-        draw.text((x, y), display_text, fill=color, font=font)
+        # Draw text with raqm if available
+        try:
+            if use_raqm and text_direction:
+                draw.text((x, y), display_text, fill=color, font=font, direction=text_direction)
+            else:
+                draw.text((x, y), display_text, fill=color, font=font)
+        except Exception as e:
+            logger.warning(f"Text rendering with direction failed: {e}, falling back to basic rendering")
+            draw.text((x, y), display_text, fill=color, font=font)
         
         return result
+    
+    def _check_raqm_support(self) -> bool:
+        """Check if Pillow has raqm support for complex text layout."""
+        try:
+            from PIL import features
+            return features.check("raqm")
+        except Exception:
+            return False
+    
+    def _check_font_presentation_forms(self, placeholder: TemplatePlaceholder) -> bool:
+        """Check if the placeholder's font supports Arabic Presentation Forms."""
+        if not placeholder.font_family:
+            return False
+        
+        # Check uploads/fonts directory
+        fonts_dir = os.path.join(self.upload_dir, "fonts")
+        if os.path.exists(fonts_dir):
+            for filename in os.listdir(fonts_dir):
+                if filename.endswith(('.ttf', '.otf')):
+                    font_path = os.path.join(fonts_dir, filename)
+                    if self._font_supports_persian(font_path):
+                        return True
+        
+        return False
+    
+    async def _get_persian_fallback_font(
+        self, font_size: int, font_cache: dict
+    ) -> Optional[ImageFont.FreeTypeFont]:
+        """Get a fallback font that supports Arabic Presentation Forms for Persian text."""
+        cache_key = f"_persian_fallback_{font_size}"
+        
+        if cache_key in font_cache:
+            return font_cache[cache_key]
+        
+        # Priority list of fonts known to support Arabic Presentation Forms
+        fallback_paths = []
+        
+        # Check uploads/fonts for Vazirmatn first
+        fonts_dir = os.path.join(self.upload_dir, "fonts")
+        if os.path.exists(fonts_dir):
+            for filename in os.listdir(fonts_dir):
+                if "vazir" in filename.lower() and filename.endswith(('.ttf', '.otf')):
+                    fallback_paths.append(os.path.join(fonts_dir, filename))
+        
+        # Also check database for fonts with presentation forms
+        if self.repository:
+            from sqlalchemy import select
+            from app.models.system_font import SystemFont
+            
+            result = await self.repository.db.execute(select(SystemFont))
+            fonts = result.scalars().all()
+            
+            for font_record in fonts:
+                if font_record.variants:
+                    for variant in font_record.variants:
+                        file_url = variant.get("file_url", "")
+                        local_path = self._get_font_local_path(file_url)
+                        if local_path and os.path.exists(local_path):
+                            if self._font_supports_persian(local_path):
+                                fallback_paths.insert(0, local_path)  # Prioritize fonts with presentation forms
+        
+        # Bundled fonts
+        fallback_paths.extend([
+            "/app/fonts/Vazirmatn-Regular.ttf",
+            "/app/fonts/Vazir.ttf",
+            "/app/fonts/IRANSans.ttf",
+        ])
+        
+        # Try to load the first available font with presentation forms
+        for path in fallback_paths:
+            if os.path.exists(path) and self._font_supports_persian(path):
+                try:
+                    font = ImageFont.truetype(path, font_size)
+                    logger.info(f"Using Persian fallback font: {path}")
+                    font_cache[cache_key] = font
+                    return font
+                except Exception as e:
+                    logger.warning(f"Failed to load fallback font {path}: {e}")
+        
+        return None
     
     def _get_font(self, placeholder: TemplatePlaceholder, font_cache: dict) -> ImageFont.FreeTypeFont:
         """Get or load font for placeholder (sync version for compatibility)."""
@@ -561,6 +685,187 @@ class TemplateService:
                 return True
         return False
     
+    async def _get_font_async_with_info(
+        self, placeholder: TemplatePlaceholder, font_cache: dict, needs_persian_support: bool = True
+    ) -> Tuple[ImageFont.FreeTypeFont, bool]:
+        """Get or load font and return whether it supports Arabic Presentation Forms.
+        
+        Returns:
+            Tuple of (font, supports_presentation_forms)
+        """
+        cache_suffix = "_persian" if needs_persian_support else ""
+        font_key = f"{placeholder.font_family}_{placeholder.font_size}_{placeholder.font_weight}{cache_suffix}"
+        info_key = f"{font_key}_supports_pf"
+        
+        # Check cache for both font and info
+        if font_key in font_cache and info_key in font_cache:
+            return font_cache[font_key], font_cache[info_key]
+        
+        font_size = placeholder.font_size or 24
+        font_weight = placeholder.font_weight or 400
+        
+        logger.info(f"Loading font with info for placeholder: family={placeholder.font_family}, size={font_size}, weight={font_weight}")
+        
+        # Strategy 1: Try specified font from database
+        if self.repository and placeholder.font_family:
+            logger.debug(f"Strategy 1: Trying font from database: {placeholder.font_family}")
+            font, font_path = await self._try_load_font_from_db_with_path(
+                placeholder.font_family, font_size, font_weight
+            )
+            if font and font_path:
+                supports_pf = self._font_supports_persian(font_path)
+                logger.info(f"Strategy 1 SUCCESS: Loaded font from database: {placeholder.font_family}, supports_pf={supports_pf}")
+                font_cache[font_key] = font
+                font_cache[info_key] = supports_pf
+                return font, supports_pf
+        
+        # Strategy 2: Find any Persian font with variants
+        if self.repository:
+            logger.debug("Strategy 2: Searching for any Persian font in database")
+            font, font_path = await self._find_any_persian_font_with_path(font_size, font_weight)
+            if font and font_path:
+                supports_pf = self._font_supports_persian(font_path)
+                logger.info(f"Strategy 2 SUCCESS: Found Persian font, supports_pf={supports_pf}")
+                font_cache[font_key] = font
+                font_cache[info_key] = supports_pf
+                return font, supports_pf
+        
+        # Strategy 3: Fallback to TTF in uploads/fonts
+        logger.debug("Strategy 3: Searching for TTF in uploads/fonts")
+        font, font_path = self._find_ttf_in_uploads_with_path(font_size)
+        if font and font_path:
+            supports_pf = self._font_supports_persian(font_path)
+            logger.info(f"Strategy 3 SUCCESS: Found font in uploads, supports_pf={supports_pf}")
+            font_cache[font_key] = font
+            font_cache[info_key] = supports_pf
+            return font, supports_pf
+        
+        # Strategy 4: Bundled Persian fonts
+        persian_font_paths = [
+            "/app/fonts/Vazirmatn-Regular.ttf",
+            "/app/fonts/Vazir.ttf",
+            "/app/fonts/IRANSans.ttf",
+        ]
+        for path in persian_font_paths:
+            if os.path.exists(path):
+                try:
+                    font = ImageFont.truetype(path, font_size)
+                    supports_pf = self._font_supports_persian(path)
+                    logger.info(f"Strategy 4 SUCCESS: Loaded bundled font: {path}, supports_pf={supports_pf}")
+                    font_cache[font_key] = font
+                    font_cache[info_key] = supports_pf
+                    return font, supports_pf
+                except Exception as e:
+                    logger.warning(f"Failed to load bundled font {path}: {e}")
+        
+        # Strategy 5: Default font (won't render Persian correctly)
+        logger.warning("Strategy 5: Using default font - Persian text may not render correctly!")
+        try:
+            font = ImageFont.load_default(size=font_size)
+        except TypeError:
+            font = ImageFont.load_default()
+        
+        font_cache[font_key] = font
+        font_cache[info_key] = False  # Default font doesn't support presentation forms
+        return font, False
+    
+    async def _try_load_font_from_db_with_path(
+        self, font_name: str, font_size: int, font_weight: int
+    ) -> Tuple[Optional[ImageFont.FreeTypeFont], Optional[str]]:
+        """Try to load a specific font from database and return both font and path."""
+        if not self.repository:
+            return None, None
+        
+        font_record = await self.repository.get_font_by_name(font_name)
+        if not font_record:
+            font_record = await self.repository.get_font_by_name_fa(font_name)
+        
+        if font_record and font_record.variants:
+            return self._load_font_variant_with_path(font_record.variants, font_size, font_weight)
+        
+        return None, None
+    
+    async def _find_any_persian_font_with_path(
+        self, font_size: int, font_weight: int
+    ) -> Tuple[Optional[ImageFont.FreeTypeFont], Optional[str]]:
+        """Find any available font with variants and return both font and path."""
+        if not self.repository:
+            return None, None
+        
+        from sqlalchemy import select
+        from app.models.system_font import SystemFont
+        
+        result = await self.repository.db.execute(select(SystemFont))
+        fonts = result.scalars().all()
+        
+        for font_record in fonts:
+            if font_record.variants and len(font_record.variants) > 0:
+                font, path = self._load_font_variant_with_path(font_record.variants, font_size, font_weight)
+                if font:
+                    return font, path
+        
+        return None, None
+    
+    def _load_font_variant_with_path(
+        self, variants: list, font_size: int, font_weight: int
+    ) -> Tuple[Optional[ImageFont.FreeTypeFont], Optional[str]]:
+        """Load font from variant list and return both font and path."""
+        best_variant = None
+        
+        for variant in variants:
+            if variant.get("weight") == font_weight:
+                best_variant = variant
+                break
+            if best_variant is None:
+                best_variant = variant
+        
+        if best_variant:
+            file_url = best_variant.get("file_url", "")
+            local_path = self._get_font_local_path(file_url)
+            
+            if local_path and os.path.exists(local_path):
+                try:
+                    font = ImageFont.truetype(local_path, font_size)
+                    return font, local_path
+                except Exception as e:
+                    logger.warning(f"Failed to load font from {local_path}: {e}")
+        
+        return None, None
+    
+    def _find_ttf_in_uploads_with_path(
+        self, font_size: int
+    ) -> Tuple[Optional[ImageFont.FreeTypeFont], Optional[str]]:
+        """Find a TTF font in uploads/fonts directory and return both font and path."""
+        fonts_dir = os.path.join(self.upload_dir, "fonts")
+        
+        if not os.path.exists(fonts_dir):
+            return None, None
+        
+        # Priority list
+        priority_fonts = ["Vazirmatn", "Vazir", "IRANSans", "IRANYekan"]
+        
+        for priority in priority_fonts:
+            for filename in os.listdir(fonts_dir):
+                if priority.lower() in filename.lower() and filename.endswith(('.ttf', '.otf')):
+                    font_path = os.path.join(fonts_dir, filename)
+                    try:
+                        font = ImageFont.truetype(font_path, font_size)
+                        return font, font_path
+                    except Exception:
+                        pass
+        
+        # Try any TTF
+        for filename in os.listdir(fonts_dir):
+            if filename.endswith(('.ttf', '.otf')):
+                font_path = os.path.join(fonts_dir, filename)
+                try:
+                    font = ImageFont.truetype(font_path, font_size)
+                    return font, font_path
+                except Exception:
+                    pass
+        
+        return None, None
+    
     async def _get_font_async(
         self, placeholder: TemplatePlaceholder, font_cache: dict, needs_persian_support: bool = True
     ) -> ImageFont.FreeTypeFont:
@@ -590,10 +895,11 @@ class TemplateService:
         logger.info(f"Loading font for placeholder: family={placeholder.font_family}, size={font_size}, weight={font_weight}, needs_persian={needs_persian_support}")
         
         # Strategy 1: Try specified font from database
+        # When user explicitly selects a font, trust their choice and skip Persian support check
         if self.repository and placeholder.font_family:
             logger.debug(f"Strategy 1: Trying font from database: {placeholder.font_family}")
             font = await self._try_load_font_from_db(
-                placeholder.font_family, font_size, font_weight, needs_persian_support
+                placeholder.font_family, font_size, font_weight, require_persian_support=False  # Trust user's choice
             )
             if font:
                 logger.info(f"Strategy 1 SUCCESS: Loaded font from database: {placeholder.font_family}")

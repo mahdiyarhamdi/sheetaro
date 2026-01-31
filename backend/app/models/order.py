@@ -1,7 +1,7 @@
 """Order model."""
 
 from sqlalchemy import Column, String, Integer, Boolean, DateTime, Numeric, Text, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID, ENUM
+from sqlalchemy.dialects.postgresql import UUID, ENUM, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
@@ -20,8 +20,16 @@ class Order(Base):
     # User relationship
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False, index=True)
     
-    # Product relationship
-    product_id = Column(UUID(as_uuid=True), ForeignKey('products.id'), nullable=False, index=True)
+    # Product ID (legacy - kept for backwards compatibility during migration)
+    # Note: No longer references products table via ForeignKey
+    product_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    
+    # Category relationship (new - replaces product_id)
+    category_id = Column(UUID(as_uuid=True), ForeignKey('categories.id'), nullable=True, index=True)
+    
+    # Selected attributes with their options and price modifiers
+    # Format: [{"attribute_id": "uuid", "option_id": "uuid", "value": "...", "price_modifier": 5000}, ...]
+    selected_attributes = Column(JSONB, nullable=False, default=[])
     
     # Order details
     design_plan = Column(ENUM(DesignPlan, name='designplan', create_type=False), nullable=False)
@@ -45,6 +53,8 @@ class Order(Base):
     max_revisions = Column(Integer, nullable=True)  # NULL means unlimited (for private plan)
     
     # Pricing
+    base_price = Column(Numeric(12, 0), default=0, nullable=False)  # Category base price at order time
+    attributes_price = Column(Numeric(12, 0), default=0, nullable=False)  # Sum of selected attribute price modifiers
     design_price = Column(Numeric(12, 0), default=0, nullable=False)
     validation_price = Column(Numeric(12, 0), default=0, nullable=False)
     fix_price = Column(Numeric(12, 0), default=0, nullable=False)
@@ -70,7 +80,7 @@ class Order(Base):
     
     # Relationships
     user = relationship("User", foreign_keys=[user_id], backref="orders")
-    product = relationship("Product", backref="orders")
+    category = relationship("Category", backref="orders")
     designer = relationship("User", foreign_keys=[assigned_designer_id])
     validator = relationship("User", foreign_keys=[assigned_validator_id])
     printshop = relationship("User", foreign_keys=[assigned_printshop_id])

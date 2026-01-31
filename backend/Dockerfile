@@ -5,10 +5,22 @@ WORKDIR /app
 # Create fonts directory
 RUN mkdir -p /app/fonts
 
+# Install system dependencies for libraqm (complex text layout for Persian/Arabic)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libraqm-dev \
+    libfribidi-dev \
+    libharfbuzz-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
+
+# Reinstall Pillow with raqm support
+RUN pip uninstall -y Pillow && \
+    pip install --no-cache-dir Pillow~=10.4.0
 
 # Copy application code
 COPY . .

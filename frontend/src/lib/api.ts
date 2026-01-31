@@ -166,6 +166,8 @@ export interface CreateOrderRequest {
   attributes: Record<string, unknown>;
   questionnaire_answers?: Record<string, unknown>;
   template_id?: string;
+  quantity: number;
+  validation_requested?: boolean;
 }
 
 // ============ Categories API ============

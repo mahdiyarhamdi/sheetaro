@@ -26,7 +26,7 @@ from app.core.config import settings
 from app.core.security import get_password_hash
 from app.main import app
 from app.api.deps import get_db
-from app.models.enums import UserRole, ProductType, MaterialType, DesignPlan
+from app.models.enums import UserRole, DesignPlan
 
 # Test database URL (use a separate test database)
 # Only replace the database name at the end of the URL, not the username
@@ -168,23 +168,6 @@ def sample_user_data():
 
 
 @pytest.fixture
-def sample_product_data():
-    """Sample product data for testing."""
-    return {
-        "type": ProductType.LABEL.value,
-        "name": "Test Label",
-        "name_fa": "لیبل تست",
-        "description": "A test label product",
-        "size": "5x5cm",
-        "material": MaterialType.PAPER.value,
-        "base_price": 10000,
-        "min_quantity": 100,
-        "is_active": True,
-        "sort_order": 1,
-    }
-
-
-@pytest.fixture
 def sample_order_data():
     """Sample order data for testing."""
     return {
@@ -268,29 +251,6 @@ async def create_test_user(db_session: AsyncSession, data: dict = None) -> dict:
     await db_session.flush()
     await db_session.refresh(user)
     return user
-
-
-async def create_test_product(db_session: AsyncSession, data: dict = None) -> dict:
-    """Create a test product and return its data."""
-    from app.models.product import Product
-    
-    product_data = data or {
-        "type": ProductType.LABEL,
-        "name": "Test Label",
-        "size": "5x5cm",
-        "base_price": Decimal("10000"),
-    }
-    
-    if isinstance(product_data.get("type"), str):
-        product_data["type"] = ProductType(product_data["type"])
-    if isinstance(product_data.get("material"), str):
-        product_data["material"] = MaterialType(product_data["material"])
-    
-    product = Product(**product_data)
-    db_session.add(product)
-    await db_session.flush()
-    await db_session.refresh(product)
-    return product
 
 
 # ==================== Dynamic Category System Fixtures ====================
@@ -604,17 +564,20 @@ async def create_test_admin_user(db_session: AsyncSession, data: dict = None):
     return user
 
 
-async def create_test_order(db_session: AsyncSession, user, product, data: dict = None):
+async def create_test_order(db_session: AsyncSession, user, category, data: dict = None):
     """Create a test order for admin API tests."""
     from app.models.order import Order
     from app.models.enums import DesignPlan, OrderStatus
     
     order_data = {
         "user_id": user.id,
-        "product_id": product.id,
+        "category_id": category.id,
+        "selected_attributes": [],
         "design_plan": DesignPlan.PUBLIC,
         "status": OrderStatus.PENDING,
         "quantity": 100,
+        "base_price": Decimal("50000"),
+        "attributes_price": Decimal("0"),
         "total_price": Decimal("50000"),
         "design_price": Decimal("0"),
         "validation_price": Decimal("0"),
@@ -732,15 +695,20 @@ async def regular_user_headers(regular_user_token):
 
 
 @pytest_asyncio.fixture
-async def test_product(db_session):
-    """Create a test product for order tests."""
-    return await create_test_product(db_session)
+async def test_category_for_order(db_session):
+    """Create a test category for order tests."""
+    return await create_test_category(db_session, {
+        "slug": "test-order-category",
+        "name_fa": "دسته تست سفارش",
+        "base_price": 50000,
+        "is_active": True,
+    })
 
 
 @pytest_asyncio.fixture
-async def test_order(db_session, regular_web_user, test_product):
+async def test_order(db_session, regular_web_user, test_category_for_order):
     """Create a test order for admin tests."""
-    return await create_test_order(db_session, regular_web_user, test_product)
+    return await create_test_order(db_session, regular_web_user, test_category_for_order)
 
 
 @pytest_asyncio.fixture

@@ -37,7 +37,7 @@ class OrderRepository:
             .where(Order.id == order_id)
             .options(
                 selectinload(Order.user),
-                selectinload(Order.product),
+                selectinload(Order.category),
             )
         )
         return result.scalar_one_or_none()
@@ -84,7 +84,7 @@ class OrderRepository:
         
         offset = (page - 1) * page_size
         query = query.offset(offset).limit(page_size)
-        query = query.options(selectinload(Order.user), selectinload(Order.product))
+        query = query.options(selectinload(Order.user), selectinload(Order.category))
         
         result = await self.db.execute(query)
         orders = list(result.scalars().all())
@@ -108,7 +108,7 @@ class OrderRepository:
         
         offset = (page - 1) * page_size
         query = query.offset(offset).limit(page_size)
-        query = query.options(selectinload(Order.user), selectinload(Order.product))
+        query = query.options(selectinload(Order.user), selectinload(Order.category))
         
         result = await self.db.execute(query)
         orders = list(result.scalars().all())

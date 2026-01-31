@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { TemplatePlaceholder, PlaceholderType, TextAlign, SystemFont, adminApi } from "@/lib/api";
+import { TemplatePlaceholder, PlaceholderType, TextAlign, SystemFont } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useDynamicFonts } from "@/hooks/useDynamicFonts";
 import {
   ImageIcon,
   Type,
@@ -45,14 +45,8 @@ export default function PlaceholderPanel({
   // Local state for form values
   const [formData, setFormData] = useState<Partial<TemplatePlaceholder>>({});
 
-  // Fetch system fonts
-  const { data: fonts } = useQuery({
-    queryKey: ["fonts-active"],
-    queryFn: async () => {
-      const response = await adminApi.getFonts(true);
-      return response.data;
-    },
-  });
+  // Fetch system fonts and load them dynamically via @font-face
+  const { fonts } = useDynamicFonts();
 
   // Sync local state with placeholder prop
   useEffect(() => {

@@ -4,14 +4,23 @@ from pydantic import BaseModel, Field, ConfigDict, field_validator
 from datetime import datetime
 from uuid import UUID
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, List
 
 from app.models.enums import DesignPlan, OrderStatus, ValidationStatus
 
 
+class SelectedAttributeItem(BaseModel):
+    """Schema for a selected attribute with its option."""
+    attribute_id: UUID = Field(..., description="Attribute ID")
+    option_id: Optional[UUID] = Field(None, description="Selected option ID (for SELECT/MULTI_SELECT)")
+    value: Optional[str] = Field(None, description="Value (for TEXT/NUMBER types)")
+    price_modifier: int = Field(default=0, description="Price modifier from this selection")
+
+
 class OrderBase(BaseModel):
     """Base order schema."""
-    product_id: UUID = Field(..., description="Product ID")
+    category_id: UUID = Field(..., description="Category ID")
+    selected_attributes: List[SelectedAttributeItem] = Field(default_factory=list, description="Selected attributes with options")
     design_plan: DesignPlan = Field(..., description="Design plan type")
     quantity: int = Field(..., ge=1, description="Order quantity")
     shipping_address: Optional[str] = Field(None, description="Shipping address")
@@ -57,7 +66,9 @@ class OrderOut(BaseModel):
     """Schema for order output."""
     id: UUID
     user_id: UUID
-    product_id: UUID
+    category_id: Optional[UUID] = None
+    product_id: Optional[UUID] = None  # Legacy field - kept for backwards compatibility
+    selected_attributes: List[SelectedAttributeItem] = Field(default_factory=list)
     design_plan: DesignPlan
     status: OrderStatus
     quantity: int
@@ -69,6 +80,8 @@ class OrderOut(BaseModel):
     assigned_printshop_id: Optional[UUID] = None
     revision_count: int
     max_revisions: Optional[int] = None
+    base_price: Decimal = Decimal(0)  # Category base price at order time
+    attributes_price: Decimal = Decimal(0)  # Sum of selected attribute price modifiers
     design_price: Decimal
     validation_price: Decimal
     fix_price: Decimal

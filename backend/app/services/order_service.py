@@ -15,15 +15,15 @@ Example usage:
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
-from typing import Optional
+from typing import Optional, List
 from decimal import Decimal
 
 from app.repositories.order_repository import OrderRepository
-from app.repositories.product_repository import ProductRepository
+from app.repositories.category_repository import CategoryRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.order import (
     OrderCreate, OrderUpdate, OrderStatusUpdate, OrderAssign,
-    OrderOut, OrderListResponse, PrintShopOrderOut
+    OrderOut, OrderListResponse, PrintShopOrderOut, SelectedAttributeItem
 )
 from app.models.enums import OrderStatus, DesignPlan, UserRole
 from app.utils.logger import log_event
@@ -48,7 +48,7 @@ class OrderService:
     Attributes:
         db: Async database session.
         repository: Order repository for database operations.
-        product_repo: Product repository for product lookups.
+        category_repo: Category repository for category lookups.
         user_repo: User repository for user lookups.
     """
     
@@ -56,31 +56,39 @@ class OrderService:
         """Initialize OrderService with database session."""
         self.db = db
         self.repository = OrderRepository(db)
-        self.product_repo = ProductRepository(db)
+        self.category_repo = CategoryRepository(db)
         self.user_repo = UserRepository(db)
     
     def _calculate_prices(
         self,
-        product_base_price: Decimal,
+        category_base_price: Decimal,
+        selected_attributes: List[SelectedAttributeItem],
         quantity: int,
         design_plan: DesignPlan,
         validation_requested: bool,
     ) -> dict:
-        """Calculate order prices based on product and options.
+        """Calculate order prices based on category and selected attributes.
         
         Args:
-            product_base_price: Base price per unit from product.
+            category_base_price: Base price from category.
+            selected_attributes: List of selected attributes with price modifiers.
             quantity: Number of units ordered.
             design_plan: Selected design plan type.
             validation_requested: Whether validation was requested.
         
         Returns:
-            Dictionary with design_price, validation_price, print_price,
-            total_price, and max_revisions.
+            Dictionary with base_price, attributes_price, design_price, 
+            validation_price, print_price, total_price, and max_revisions.
         """
         design_price = DESIGN_PRICES.get(design_plan, Decimal('0'))
         validation_price = VALIDATION_PRICE if validation_requested else Decimal('0')
-        print_price = product_base_price * quantity
+        
+        # Calculate attributes price from selected options
+        attributes_price = sum(attr.price_modifier for attr in selected_attributes)
+        
+        # Base price + attributes price
+        base_price = category_base_price
+        print_price = (base_price + attributes_price) * quantity
         
         total_price = design_price + validation_price + print_price
         
@@ -93,6 +101,8 @@ class OrderService:
         # Private plan has unlimited (None)
         
         return {
+            'base_price': base_price,
+            'attributes_price': attributes_price,
             'design_price': design_price,
             'validation_price': validation_price,
             'print_price': print_price,
@@ -102,13 +112,13 @@ class OrderService:
     
     async def create_order(self, user_id: UUID, order_data: OrderCreate) -> OrderOut:
         """Create a new order."""
-        # Validate product exists
-        product = await self.product_repo.get_by_id(order_data.product_id)
-        if not product:
-            raise ValueError("Product not found")
+        # Validate category exists
+        category = await self.category_repo.get_category_by_id(order_data.category_id)
+        if not category:
+            raise ValueError("Category not found")
         
-        if not product.is_active:
-            raise ValueError("Product is not available")
+        if not category.is_active:
+            raise ValueError("Category is not available")
         
         # Validate design file for OWN_DESIGN
         if order_data.design_plan == DesignPlan.OWN_DESIGN and not order_data.design_file_url:
@@ -116,7 +126,8 @@ class OrderService:
         
         # Calculate prices
         prices = self._calculate_prices(
-            product_base_price=product.base_price,
+            category_base_price=Decimal(str(category.base_price)),
+            selected_attributes=order_data.selected_attributes,
             quantity=order_data.quantity,
             design_plan=order_data.design_plan,
             validation_requested=order_data.validation_requested,
@@ -138,7 +149,7 @@ class OrderService:
             event_type="order.create",
             order_id=str(order.id),
             user_id=str(user_id),
-            product_id=str(order_data.product_id),
+            category_id=str(order_data.category_id),
             design_plan=order_data.design_plan.value,
             total_price=str(order.total_price),
         )
