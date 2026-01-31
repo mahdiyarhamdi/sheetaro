@@ -128,8 +128,12 @@ frontend/
 
 ### Admin Panel
 - Payment approval/rejection
-- Catalog management
+- Catalog management (categories, products, plans, attributes)
 - User management
+- Font management with file upload (TTF, WOFF, WOFF2)
+- Template management with image upload
+- Dynamic template editor with drag-and-drop placeholder positioning
+- Questionnaire builder for semi-private plans
 
 ## Tech Stack
 

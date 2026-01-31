@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Type,
@@ -12,18 +12,20 @@ import {
   Upload,
   Check,
   X,
+  FileType,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Modal from "@/components/ui/modal";
 import { useAuth } from "@/hooks/useAuth";
-import { adminApi, SystemFont, FontCreateData, FontVariant } from "@/lib/api";
+import { adminApi, SystemFont, FontCreateData, FontVariant, getErrorMessage } from "@/lib/api";
 import toast from "react-hot-toast";
 
 interface FontFormData {
   name: string;
   name_fa: string;
   file_url: string;
+  file?: File | null;
   sample_text: string;
   variants: FontVariant[];
 }
@@ -32,11 +34,18 @@ interface VariantFormData {
   weight: number;
   style: string;
   file_url: string;
+  file_ttf?: File | null;
+  file_woff?: File | null;
+  file_woff2?: File | null;
 }
 
 export default function AdminFontsPage() {
   const { user, isAdmin } = useAuth();
   const queryClient = useQueryClient();
+  const fontFileInputRef = useRef<HTMLInputElement>(null);
+  const variantTtfInputRef = useRef<HTMLInputElement>(null);
+  const variantWoffInputRef = useRef<HTMLInputElement>(null);
+  const variantWoff2InputRef = useRef<HTMLInputElement>(null);
 
   // Modal states
   const [showFontModal, setShowFontModal] = useState(false);
@@ -45,9 +54,11 @@ export default function AdminFontsPage() {
     name: "",
     name_fa: "",
     file_url: "",
+    file: null,
     sample_text: "نمونه متن فارسی - Sample Text 123",
     variants: [],
   });
+  const [isUploadingFont, setIsUploadingFont] = useState(false);
 
   // Variant modal
   const [showVariantModal, setShowVariantModal] = useState(false);
@@ -56,7 +67,9 @@ export default function AdminFontsPage() {
     weight: 400,
     style: "normal",
     file_url: "",
+    file: null,
   });
+  const [isUploadingVariant, setIsUploadingVariant] = useState(false);
 
   // Preview state
   const [previewText, setPreviewText] = useState("نمونه متن فارسی - Sample Text 123");
@@ -140,6 +153,7 @@ export default function AdminFontsPage() {
       name: "",
       name_fa: "",
       file_url: "",
+      file: null,
       sample_text: "نمونه متن فارسی - Sample Text 123",
       variants: [],
     });
@@ -152,6 +166,7 @@ export default function AdminFontsPage() {
       name: font.name,
       name_fa: font.name_fa,
       file_url: font.file_url || "",
+      file: null,
       sample_text: font.sample_text || "نمونه متن فارسی - Sample Text 123",
       variants: font.variants || [],
     });
@@ -161,9 +176,31 @@ export default function AdminFontsPage() {
   const closeFontModal = () => {
     setShowFontModal(false);
     setEditingFont(null);
+    if (fontFileInputRef.current) {
+      fontFileInputRef.current.value = "";
+    }
   };
 
-  const handleFontSubmit = (e: React.FormEvent) => {
+  const handleFontFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type
+      const validExtensions = ['.ttf', '.woff', '.woff2'];
+      const ext = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+      if (!validExtensions.includes(ext)) {
+        toast.error("فرمت فایل مجاز نیست. فقط TTF، WOFF و WOFF2 پشتیبانی می‌شود.");
+        return;
+      }
+      // Validate file size (10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error("حجم فایل بیش از ۱۰ مگابایت است.");
+        return;
+      }
+      setFontForm({ ...fontForm, file });
+    }
+  };
+
+  const handleFontSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!fontForm.name || !fontForm.name_fa) {
@@ -171,18 +208,33 @@ export default function AdminFontsPage() {
       return;
     }
 
-    const data: FontCreateData = {
-      name: fontForm.name,
-      name_fa: fontForm.name_fa,
-      file_url: fontForm.file_url || undefined,
-      sample_text: fontForm.sample_text || undefined,
-      variants: fontForm.variants.length > 0 ? fontForm.variants : undefined,
-    };
+    try {
+      let file_url = fontForm.file_url;
 
-    if (editingFont) {
-      updateFontMutation.mutate({ id: editingFont.id, data });
-    } else {
-      createFontMutation.mutate(data);
+      // Upload file if a new one was selected
+      if (fontForm.file) {
+        setIsUploadingFont(true);
+        const uploadResponse = await adminApi.uploadFontFile(fontForm.file);
+        file_url = uploadResponse.data.file_url;
+        setIsUploadingFont(false);
+      }
+
+      const data: FontCreateData = {
+        name: fontForm.name,
+        name_fa: fontForm.name_fa,
+        file_url: file_url || undefined,
+        sample_text: fontForm.sample_text || undefined,
+        variants: fontForm.variants.length > 0 ? fontForm.variants : undefined,
+      };
+
+      if (editingFont) {
+        updateFontMutation.mutate({ id: editingFont.id, data });
+      } else {
+        createFontMutation.mutate(data);
+      }
+    } catch (error) {
+      setIsUploadingFont(false);
+      toast.error(getErrorMessage(error));
     }
   };
 
@@ -193,6 +245,9 @@ export default function AdminFontsPage() {
       weight: 400,
       style: "normal",
       file_url: "",
+      file_ttf: null,
+      file_woff: null,
+      file_woff2: null,
     });
     setShowVariantModal(true);
   };
@@ -200,19 +255,84 @@ export default function AdminFontsPage() {
   const closeVariantModal = () => {
     setShowVariantModal(false);
     setSelectedFontId(null);
+    if (variantTtfInputRef.current) variantTtfInputRef.current.value = "";
+    if (variantWoffInputRef.current) variantWoffInputRef.current.value = "";
+    if (variantWoff2InputRef.current) variantWoff2InputRef.current.value = "";
   };
 
-  const handleVariantSubmit = (e: React.FormEvent) => {
+  const handleVariantFileChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    format: 'ttf' | 'woff' | 'woff2'
+  ) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const expectedExt = `.${format}`;
+      const ext = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+      if (ext !== expectedExt) {
+        toast.error(`لطفاً فایل با فرمت ${format.toUpperCase()} انتخاب کنید.`);
+        e.target.value = "";
+        return;
+      }
+      // Validate file size (10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error("حجم فایل بیش از ۱۰ مگابایت است.");
+        e.target.value = "";
+        return;
+      }
+      
+      if (format === 'ttf') {
+        setVariantForm({ ...variantForm, file_ttf: file });
+      } else if (format === 'woff') {
+        setVariantForm({ ...variantForm, file_woff: file });
+      } else {
+        setVariantForm({ ...variantForm, file_woff2: file });
+      }
+    }
+  };
+
+  const handleVariantSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!selectedFontId) return;
 
-    addVariantMutation.mutate({
-      fontId: selectedFontId,
-      weight: variantForm.weight,
-      style: variantForm.style,
-      fileUrl: variantForm.file_url || undefined,
-    });
+    // At least one file should be selected
+    if (!variantForm.file_ttf && !variantForm.file_woff && !variantForm.file_woff2) {
+      toast.error("حداقل یک فایل فونت باید انتخاب شود.");
+      return;
+    }
+
+    try {
+      setIsUploadingVariant(true);
+      
+      // Upload all selected files and collect URLs
+      const fileUrls: string[] = [];
+      
+      if (variantForm.file_ttf) {
+        const response = await adminApi.uploadFontFile(variantForm.file_ttf);
+        fileUrls.push(response.data.file_url);
+      }
+      if (variantForm.file_woff) {
+        const response = await adminApi.uploadFontFile(variantForm.file_woff);
+        fileUrls.push(response.data.file_url);
+      }
+      if (variantForm.file_woff2) {
+        const response = await adminApi.uploadFontFile(variantForm.file_woff2);
+        fileUrls.push(response.data.file_url);
+      }
+      
+      setIsUploadingVariant(false);
+
+      // Use first uploaded URL as primary (backend stores one URL per variant)
+      addVariantMutation.mutate({
+        fontId: selectedFontId,
+        weight: variantForm.weight,
+        style: variantForm.style,
+        fileUrl: fileUrls[0] || undefined,
+      });
+    } catch (error) {
+      setIsUploadingVariant(false);
+      toast.error(getErrorMessage(error));
+    }
   };
 
   // Font weight labels
@@ -414,12 +534,52 @@ export default function AdminFontsPage() {
             placeholder="ایران سنس"
             required
           />
-          <Input
-            label="آدرس فایل فونت (اختیاری)"
-            value={fontForm.file_url}
-            onChange={(e) => setFontForm({ ...fontForm, file_url: e.target.value })}
-            placeholder="https://example.com/fonts/IRANSans.ttf"
-          />
+          
+          {/* Font File Upload */}
+          <div>
+            <label className="block text-sm font-medium mb-2">فایل فونت (اختیاری)</label>
+            <div
+              onClick={() => fontFileInputRef.current?.click()}
+              className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4 text-center cursor-pointer hover:border-blue-500 transition-colors"
+            >
+              {fontForm.file ? (
+                <div className="flex items-center justify-center gap-2 text-green-600">
+                  <FileType className="w-5 h-5" />
+                  <span className="text-sm">{fontForm.file.name}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFontForm({ ...fontForm, file: null });
+                      if (fontFileInputRef.current) fontFileInputRef.current.value = "";
+                    }}
+                    className="text-red-500 hover:text-red-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : fontForm.file_url ? (
+                <div className="flex items-center justify-center gap-2 text-blue-600">
+                  <Check className="w-5 h-5" />
+                  <span className="text-sm">فایل آپلود شده</span>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-2 text-gray-500">
+                  <Upload className="w-6 h-6" />
+                  <span className="text-sm">انتخاب فایل فونت</span>
+                  <span className="text-xs">TTF, WOFF, WOFF2 - حداکثر ۱۰MB</span>
+                </div>
+              )}
+            </div>
+            <input
+              ref={fontFileInputRef}
+              type="file"
+              accept=".ttf,.woff,.woff2"
+              onChange={handleFontFileChange}
+              className="hidden"
+            />
+          </div>
+          
           <Input
             label="متن نمونه"
             value={fontForm.sample_text}
@@ -432,12 +592,12 @@ export default function AdminFontsPage() {
             </Button>
             <Button
               type="submit"
-              disabled={createFontMutation.isPending || updateFontMutation.isPending}
+              disabled={isUploadingFont || createFontMutation.isPending || updateFontMutation.isPending}
             >
-              {createFontMutation.isPending || updateFontMutation.isPending ? (
+              {(isUploadingFont || createFontMutation.isPending || updateFontMutation.isPending) ? (
                 <Loader2 className="w-4 h-4 animate-spin ml-2" />
               ) : null}
-              {editingFont ? "به‌روزرسانی" : "ایجاد"}
+              {isUploadingFont ? "آپلود..." : editingFont ? "به‌روزرسانی" : "ایجاد"}
             </Button>
           </div>
         </form>
@@ -477,21 +637,131 @@ export default function AdminFontsPage() {
               <option value="italic">Italic</option>
             </select>
           </div>
-          <Input
-            label="آدرس فایل (اختیاری)"
-            value={variantForm.file_url}
-            onChange={(e) => setVariantForm({ ...variantForm, file_url: e.target.value })}
-            placeholder="https://example.com/fonts/IRANSans-Bold.ttf"
-          />
+          
+          {/* Font Files Upload - Three formats */}
+          <div className="space-y-3">
+            <label className="block text-sm font-medium">فایل‌های فونت (حداقل یکی الزامی)</label>
+            
+            {/* TTF Upload */}
+            <div
+              onClick={() => variantTtfInputRef.current?.click()}
+              className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-3 text-center cursor-pointer hover:border-blue-500 transition-colors"
+            >
+              {variantForm.file_ttf ? (
+                <div className="flex items-center justify-center gap-2 text-green-600">
+                  <FileType className="w-4 h-4" />
+                  <span className="text-sm">{variantForm.file_ttf.name}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setVariantForm({ ...variantForm, file_ttf: null });
+                      if (variantTtfInputRef.current) variantTtfInputRef.current.value = "";
+                    }}
+                    className="text-red-500 hover:text-red-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center gap-2 text-gray-500">
+                  <Upload className="w-4 h-4" />
+                  <span className="text-sm">TTF</span>
+                </div>
+              )}
+            </div>
+            <input
+              ref={variantTtfInputRef}
+              type="file"
+              accept=".ttf"
+              onChange={(e) => handleVariantFileChange(e, 'ttf')}
+              className="hidden"
+            />
+            
+            {/* WOFF Upload */}
+            <div
+              onClick={() => variantWoffInputRef.current?.click()}
+              className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-3 text-center cursor-pointer hover:border-blue-500 transition-colors"
+            >
+              {variantForm.file_woff ? (
+                <div className="flex items-center justify-center gap-2 text-green-600">
+                  <FileType className="w-4 h-4" />
+                  <span className="text-sm">{variantForm.file_woff.name}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setVariantForm({ ...variantForm, file_woff: null });
+                      if (variantWoffInputRef.current) variantWoffInputRef.current.value = "";
+                    }}
+                    className="text-red-500 hover:text-red-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center gap-2 text-gray-500">
+                  <Upload className="w-4 h-4" />
+                  <span className="text-sm">WOFF</span>
+                </div>
+              )}
+            </div>
+            <input
+              ref={variantWoffInputRef}
+              type="file"
+              accept=".woff"
+              onChange={(e) => handleVariantFileChange(e, 'woff')}
+              className="hidden"
+            />
+            
+            {/* WOFF2 Upload */}
+            <div
+              onClick={() => variantWoff2InputRef.current?.click()}
+              className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-3 text-center cursor-pointer hover:border-blue-500 transition-colors"
+            >
+              {variantForm.file_woff2 ? (
+                <div className="flex items-center justify-center gap-2 text-green-600">
+                  <FileType className="w-4 h-4" />
+                  <span className="text-sm">{variantForm.file_woff2.name}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setVariantForm({ ...variantForm, file_woff2: null });
+                      if (variantWoff2InputRef.current) variantWoff2InputRef.current.value = "";
+                    }}
+                    className="text-red-500 hover:text-red-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center gap-2 text-gray-500">
+                  <Upload className="w-4 h-4" />
+                  <span className="text-sm">WOFF2</span>
+                </div>
+              )}
+            </div>
+            <input
+              ref={variantWoff2InputRef}
+              type="file"
+              accept=".woff2"
+              onChange={(e) => handleVariantFileChange(e, 'woff2')}
+              className="hidden"
+            />
+            
+            <p className="text-xs text-gray-500">حداکثر ۱۰ مگابایت برای هر فایل</p>
+          </div>
+          
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="outline" onClick={closeVariantModal}>
               انصراف
             </Button>
-            <Button type="submit" disabled={addVariantMutation.isPending}>
-              {addVariantMutation.isPending ? (
+            <Button type="submit" disabled={isUploadingVariant || addVariantMutation.isPending}>
+              {(isUploadingVariant || addVariantMutation.isPending) ? (
                 <Loader2 className="w-4 h-4 animate-spin ml-2" />
               ) : null}
-              افزودن
+              {isUploadingVariant ? "آپلود..." : "افزودن"}
             </Button>
           </div>
         </form>

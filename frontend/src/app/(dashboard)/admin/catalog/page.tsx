@@ -16,6 +16,7 @@ import {
   Input,
   Modal,
   Textarea,
+  ImageUpload,
 } from "@/components/ui";
 import {
   Plus,
@@ -171,6 +172,11 @@ interface TemplateFormData {
   placeholder_height?: number;
   placeholder_rotation?: number;
   is_active: boolean;
+  // New fields for upload flow
+  image_file?: File | null;
+  image_preview?: string | null;
+  image_placeholder_count: number;
+  text_placeholder_count: number;
 }
 
 export default function CatalogManagementPage() {
@@ -321,7 +327,12 @@ export default function CatalogManagementPage() {
     placeholder_height: undefined,
     placeholder_rotation: undefined,
     is_active: true,
+    image_file: null,
+    image_preview: null,
+    image_placeholder_count: 1,
+    text_placeholder_count: 0,
   });
+  const [isUploadingTemplateImage, setIsUploadingTemplateImage] = useState(false);
 
   // Generate slug from Persian name
   const generateSlug = (name: string) => {
@@ -1399,6 +1410,10 @@ export default function CatalogManagementPage() {
       placeholder_height: undefined,
       placeholder_rotation: undefined,
       is_active: true,
+      image_file: null,
+      image_preview: null,
+      image_placeholder_count: 1,
+      text_placeholder_count: 0,
     });
     setShowTemplateModal(true);
   };
@@ -1418,6 +1433,10 @@ export default function CatalogManagementPage() {
       placeholder_height: template.placeholder_height,
       placeholder_rotation: template.placeholder_rotation,
       is_active: template.is_active ?? true,
+      image_file: null,
+      image_preview: template.file_url || template.preview_url || null,
+      image_placeholder_count: template.placeholders?.filter((p: any) => p.type === "IMAGE")?.length || 1,
+      text_placeholder_count: template.placeholders?.filter((p: any) => p.type === "TEXT")?.length || 0,
     });
     setShowTemplateModal(true);
   };
@@ -1427,16 +1446,114 @@ export default function CatalogManagementPage() {
     setEditingTemplate(null);
   };
 
-  const handleTemplateSubmit = () => {
+  const handleTemplateSubmit = async () => {
     if (!templateForm.name_fa.trim()) {
       toast.error("نام قالب الزامی است");
       return;
     }
 
-    if (editingTemplate) {
-      updateTemplateMutation.mutate({ id: editingTemplate.id, data: templateForm });
-    } else {
-      createTemplateMutation.mutate(templateForm);
+    // For new templates, image is required
+    if (!editingTemplate && !templateForm.image_file && !templateForm.file_url) {
+      toast.error("آپلود تصویر قالب الزامی است");
+      return;
+    }
+
+    try {
+      let file_url = templateForm.file_url;
+      let preview_url = templateForm.preview_url;
+      let image_width = templateForm.image_width;
+      let image_height = templateForm.image_height;
+
+      // Upload image if a new file was selected
+      if (templateForm.image_file) {
+        setIsUploadingTemplateImage(true);
+        const uploadResponse = await adminApi.uploadTemplateImage(templateForm.image_file);
+        const uploadData = uploadResponse.data;
+        file_url = uploadData.file_url;
+        preview_url = uploadData.preview_url;
+        image_width = uploadData.width;
+        image_height = uploadData.height;
+        setIsUploadingTemplateImage(false);
+      }
+
+      const templateData = {
+        name_fa: templateForm.name_fa,
+        description_fa: templateForm.description_fa,
+        file_url,
+        preview_url,
+        image_width,
+        image_height,
+        is_active: templateForm.is_active,
+      };
+
+      if (editingTemplate) {
+        // Just update the template
+        await updateTemplateMutation.mutateAsync({ id: editingTemplate.id, data: templateData });
+      } else {
+        // Create template
+        if (!selectedPlanForTemplates) {
+          toast.error("پلن انتخاب نشده");
+          return;
+        }
+        const response = await adminApi.createTemplate(selectedPlanForTemplates, templateData);
+        const newTemplate = response.data;
+
+        // Create placeholders based on counts
+        const placeholderPromises: Promise<any>[] = [];
+        
+        // Create image placeholders
+        for (let i = 0; i < templateForm.image_placeholder_count; i++) {
+          placeholderPromises.push(
+            adminApi.createPlaceholder(newTemplate.id, {
+              type: "IMAGE",
+              label: `تصویر ${i + 1}`,
+              x: 50 + (i * 30),
+              y: 50 + (i * 30),
+              width: 200,
+              height: 200,
+              rotation: 0,
+              sort_order: i,
+              is_active: true,
+            })
+          );
+        }
+        
+        // Create text placeholders
+        for (let i = 0; i < templateForm.text_placeholder_count; i++) {
+          placeholderPromises.push(
+            adminApi.createPlaceholder(newTemplate.id, {
+              type: "TEXT",
+              label: `متن ${i + 1}`,
+              x: 50,
+              y: 300 + (i * 60),
+              width: 300,
+              height: 40,
+              rotation: 0,
+              font_size: 24,
+              font_color: "#000000",
+              text_align: "CENTER",
+              sort_order: templateForm.image_placeholder_count + i,
+              is_active: true,
+            })
+          );
+        }
+
+        if (placeholderPromises.length > 0) {
+          await Promise.all(placeholderPromises);
+        }
+
+        // Refresh and open editor
+        queryClient.invalidateQueries({ queryKey: ["planTemplates", selectedPlanForTemplates] });
+        toast.success("قالب ایجاد شد - در حال باز کردن ویرایشگر...");
+        closeTemplateModal();
+        
+        // Open the template editor for positioning
+        setTemplateEditorId(newTemplate.id);
+        setShowTemplateEditor(true);
+      }
+    } catch (error) {
+      setIsUploadingTemplateImage(false);
+      toast.error(getErrorMessage(error));
     }
   };
 
@@ -3405,90 +3522,103 @@ export default function CatalogManagementPage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="آدرس تصویر پیش‌نمایش"
-              placeholder="https://..."
-              value={templateForm.preview_url}
-              onChange={(e) => setTemplateForm({ ...templateForm, preview_url: e.target.value })}
-              dir="ltr"
-            />
-            <Input
-              label="آدرس فایل طراحی"
-              placeholder="https://..."
-              value={templateForm.file_url}
-              onChange={(e) => setTemplateForm({ ...templateForm, file_url: e.target.value })}
-              dir="ltr"
-            />
-          </div>
+          {/* Image Upload Section */}
+          <ImageUpload
+            label="تصویر قالب *"
+            hint="تصویر قالب را آپلود کنید"
+            value={templateForm.image_preview}
+            isUploading={isUploadingTemplateImage}
+            onChange={(file, preview) => {
+              setTemplateForm({
+                ...templateForm,
+                image_file: file,
+                image_preview: preview,
+              });
+            }}
+            maxSizeMB={20}
+          />
 
-          {/* Placeholder configuration */}
-          <div className="p-4 rounded-lg bg-accent/30 space-y-3">
-            <p className="text-sm font-medium text-foreground mb-2">تنظیمات جایگاه لوگو:</p>
-            
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                label="عرض تصویر (پیکسل)"
-                type="number"
-                placeholder="1000"
-                value={templateForm.image_width ?? ""}
-                onChange={(e) => setTemplateForm({ ...templateForm, image_width: e.target.value ? parseInt(e.target.value) : undefined })}
-                dir="ltr"
-              />
-              <Input
-                label="ارتفاع تصویر (پیکسل)"
-                type="number"
-                placeholder="1400"
-                value={templateForm.image_height ?? ""}
-                onChange={(e) => setTemplateForm({ ...templateForm, image_height: e.target.value ? parseInt(e.target.value) : undefined })}
-                dir="ltr"
-              />
+          {/* Placeholder Count Configuration - Only for new templates */}
+          {!editingTemplate && (
+            <div className="p-4 rounded-lg bg-accent/30 space-y-4">
+              <p className="text-sm font-medium text-foreground">تعداد جایگاه‌ها:</p>
+              <p className="text-xs text-muted">
+                مشخص کنید چند جایگاه تصویر و متن نیاز دارید. پس از ایجاد قالب، ویرایشگر باز می‌شود تا جایگاه‌ها را روی تصویر تنظیم کنید.
+              </p>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1.5">
+                    تعداد جایگاه تصویر
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setTemplateForm({
+                        ...templateForm,
+                        image_placeholder_count: Math.max(0, templateForm.image_placeholder_count - 1)
+                      })}
+                      className="w-10 h-10 rounded-lg border border-border bg-surface hover:bg-accent flex items-center justify-center"
+                    >
+                      -
+                    </button>
+                    <div className="flex-1 text-center text-lg font-medium">
+                      {toPersianNumber(templateForm.image_placeholder_count)}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setTemplateForm({
+                        ...templateForm,
+                        image_placeholder_count: templateForm.image_placeholder_count + 1
+                      })}
+                      className="w-10 h-10 rounded-lg border border-border bg-surface hover:bg-accent flex items-center justify-center"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted mt-1 flex items-center gap-1">
+                    <Image className="w-3 h-3" />
+                    برای لوگو، تصویر محصول و...
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1.5">
+                    تعداد جایگاه متن
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setTemplateForm({
+                        ...templateForm,
+                        text_placeholder_count: Math.max(0, templateForm.text_placeholder_count - 1)
+                      })}
+                      className="w-10 h-10 rounded-lg border border-border bg-surface hover:bg-accent flex items-center justify-center"
+                    >
+                      -
+                    </button>
+                    <div className="flex-1 text-center text-lg font-medium">
+                      {toPersianNumber(templateForm.text_placeholder_count)}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setTemplateForm({
+                        ...templateForm,
+                        text_placeholder_count: templateForm.text_placeholder_count + 1
+                      })}
+                      className="w-10 h-10 rounded-lg border border-border bg-surface hover:bg-accent flex items-center justify-center"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted mt-1 flex items-center gap-1">
+                    <Type className="w-3 h-3" />
+                    برای عنوان، شماره و...
+                  </p>
+                </div>
+              </div>
             </div>
-            
-            <div className="grid grid-cols-4 gap-3">
-              <Input
-                label="X جایگاه"
-                type="number"
-                placeholder="100"
-                value={templateForm.placeholder_x ?? ""}
-                onChange={(e) => setTemplateForm({ ...templateForm, placeholder_x: e.target.value ? parseInt(e.target.value) : undefined })}
-                dir="ltr"
-              />
-              <Input
-                label="Y جایگاه"
-                type="number"
-                placeholder="100"
-                value={templateForm.placeholder_y ?? ""}
-                onChange={(e) => setTemplateForm({ ...templateForm, placeholder_y: e.target.value ? parseInt(e.target.value) : undefined })}
-                dir="ltr"
-              />
-              <Input
-                label="عرض جایگاه"
-                type="number"
-                placeholder="200"
-                value={templateForm.placeholder_width ?? ""}
-                onChange={(e) => setTemplateForm({ ...templateForm, placeholder_width: e.target.value ? parseInt(e.target.value) : undefined })}
-                dir="ltr"
-              />
-              <Input
-                label="ارتفاع جایگاه"
-                type="number"
-                placeholder="200"
-                value={templateForm.placeholder_height ?? ""}
-                onChange={(e) => setTemplateForm({ ...templateForm, placeholder_height: e.target.value ? parseInt(e.target.value) : undefined })}
-                dir="ltr"
-              />
-            </div>
-            
-            <Input
-              label="چرخش جایگاه (درجه)"
-              type="number"
-              placeholder="0"
-              value={templateForm.placeholder_rotation ?? ""}
-              onChange={(e) => setTemplateForm({ ...templateForm, placeholder_rotation: e.target.value ? parseInt(e.target.value) : undefined })}
-              dir="ltr"
-            />
-          </div>
+          )}
 
           <label className="flex items-center gap-3 cursor-pointer">
             <input
@@ -3505,9 +3635,9 @@ export default function CatalogManagementPage() {
               variant="primary"
               className="flex-1"
               onClick={handleTemplateSubmit}
-              isLoading={createTemplateMutation.isPending || updateTemplateMutation.isPending}
+              isLoading={isUploadingTemplateImage || createTemplateMutation.isPending || updateTemplateMutation.isPending}
             >
-              {editingTemplate ? "به‌روزرسانی" : "ایجاد"}
+              {editingTemplate ? "به‌روزرسانی" : "ایجاد و ویرایش"}
             </Button>
             <Button variant="outline" onClick={closeTemplateModal}>
               انصراف

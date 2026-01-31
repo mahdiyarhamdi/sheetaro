@@ -323,8 +323,6 @@ async def create_test_plan_with_questionnaire(db_session: AsyncSession, category
         "category_id": category.id,
         "slug": "semi-private",
         "name_fa": "نیمه‌خصوصی",
-        "name_en": "Semi-Private",
-        "plan_type": DesignPlanType.SEMI_PRIVATE,
         "has_questionnaire": True,
         "has_templates": False,
         "price": Decimal("600000"),
@@ -433,7 +431,6 @@ async def create_test_template(db_session: AsyncSession, plan, data: dict = None
     template_data = data or {
         "plan_id": plan.id,
         "name_fa": "قالب تست",
-        "name_en": "Test Template",
         "preview_url": "https://example.com/preview.png",
         "file_url": "https://example.com/template.png",
         "image_width": 1000,
@@ -461,7 +458,6 @@ def sample_category_data():
     return {
         "slug": "labels",
         "name_fa": "لیبل",
-        "name_en": "Labels",
         "description_fa": "انواع لیبل چاپی",
         "sort_order": 1,
         "is_active": True,

@@ -33,3 +33,6 @@ export type { LoadingProps } from "./loading";
 export { EmptyState } from "./empty-state";
 export type { EmptyStateProps } from "./empty-state";
 
+export { ImageUpload } from "./image-upload";
+export type { ImageUploadProps } from "./image-upload";
+

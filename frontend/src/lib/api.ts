@@ -332,6 +332,23 @@ export interface TemplatePreviewResponse {
   height: number;
 }
 
+export interface TemplateImageUploadResponse {
+  filename: string;
+  file_url: string;
+  preview_url: string;
+  file_size: number;
+  content_type: string;
+  width: number;
+  height: number;
+}
+
+export interface FontUploadResponse {
+  filename: string;
+  file_url: string;
+  file_size: number;
+  content_type: string;
+}
+
 export interface Questionnaire {
   id: string;
   plan_id: string;
@@ -669,6 +686,13 @@ export const adminApi = {
     api.patch<Template>(`/templates/${id}`, data),
   deleteTemplate: (id: string) =>
     api.delete(`/templates/${id}`),
+  uploadTemplateImage: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post<TemplateImageUploadResponse>("/templates/upload", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
 
   // ============ Dynamic Template Placeholders API ============
 
@@ -709,6 +733,13 @@ export const adminApi = {
     api.delete(`/fonts/${fontId}/variants/${weight}`, {
       params: { style: style || "normal" }
     }),
+  uploadFontFile: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post<FontUploadResponse>("/fonts/upload", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
 };
 
 // Error helper

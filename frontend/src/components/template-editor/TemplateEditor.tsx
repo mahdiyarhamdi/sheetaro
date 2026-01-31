@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Template,
@@ -8,6 +8,7 @@ import {
   PlaceholderType,
   PlaceholderCreateData,
   adminApi,
+  getErrorMessage,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,7 @@ import {
   ZoomIn,
   ZoomOut,
   Layers,
+  RefreshCw,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -39,6 +41,7 @@ type EditorTab = "design" | "preview";
 
 export default function TemplateEditor({ templateId, onClose }: TemplateEditorProps) {
   const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Editor state
   const [activeTab, setActiveTab] = useState<EditorTab>("design");
@@ -46,6 +49,7 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
   const [scale, setScale] = useState(0.5);
   const [localPlaceholders, setLocalPlaceholders] = useState<TemplatePlaceholder[]>([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   // Fetch template with placeholders
   const { data: template, isLoading } = useQuery({
@@ -212,6 +216,53 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
     });
   };
 
+  // Handle template image change
+  const handleImageChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ["image/png", "image/jpeg", "image/webp"];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("فرمت فایل مجاز نیست. فقط PNG، JPG و WEBP پشتیبانی می‌شود.");
+      return;
+    }
+
+    // Validate file size (20MB max)
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("حجم فایل بیش از ۲۰ مگابایت است.");
+      return;
+    }
+
+    try {
+      setIsUploadingImage(true);
+      
+      // Upload the image
+      const uploadResponse = await adminApi.uploadTemplateImage(file);
+      const uploadData = uploadResponse.data;
+
+      // Update the template with the new image
+      await adminApi.updateTemplate(templateId, {
+        file_url: uploadData.file_url,
+        preview_url: uploadData.preview_url,
+        image_width: uploadData.width,
+        image_height: uploadData.height,
+      });
+
+      // Invalidate queries to refresh the template
+      queryClient.invalidateQueries({ queryKey: ["template-details", templateId] });
+      toast.success("تصویر قالب با موفقیت تغییر کرد");
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setIsUploadingImage(false);
+      // Reset input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
   // Get selected placeholder object
   const selectedPlaceholderObj = localPlaceholders.find((p) => p.id === selectedPlaceholder) || null;
 
@@ -293,6 +344,30 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
                     <Type className="w-4 h-4 ml-1" />
                     متن
                   </Button>
+                  
+                  <div className="w-px h-6 bg-gray-200 dark:bg-gray-700 mx-1" />
+                  
+                  {/* Change Template Image Button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploadingImage}
+                  >
+                    {isUploadingImage ? (
+                      <Loader2 className="w-4 h-4 ml-1 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4 ml-1" />
+                    )}
+                    {isUploadingImage ? "در حال آپلود..." : "تغییر تصویر قالب"}
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={handleImageChange}
+                    className="hidden"
+                  />
                 </div>
                 <div className="flex items-center gap-2">
                   <Button

@@ -115,10 +115,14 @@ docker-compose up --build
 - `POST /subscriptions/{id}/cancel` - Cancel subscription
 - `GET /subscriptions/plans/price` - Get plan price
 
-### Files (`/api/v1/files`)
+### Files (`/api/v1`)
 - `POST /files/upload` - Upload design file
-- `GET /files/designs/{user_id}/{filename}` - Download file
-- `DELETE /files/designs/{user_id}/{filename}` - Delete file
+- `GET /files/designs/{user_id}/{filename}` - Download design file
+- `DELETE /files/designs/{user_id}/{filename}` - Delete design file
+- `POST /templates/upload` - Upload template image (Admin, PNG/JPG/WEBP, max 20MB)
+- `GET /files/templates/{filename}` - Download template image
+- `POST /fonts/upload` - Upload font file (Admin, TTF/WOFF/WOFF2, max 10MB)
+- `GET /files/fonts/{filename}` - Download font file
 
 ### Settings (`/api/v1/settings`)
 - `GET /settings/payment-card` - Get payment card info
@@ -369,7 +373,7 @@ API endpoints are rate-limited using slowapi with Redis backend:
 | Login/Auth | 5/minute |
 | Payment Initiate | 10/minute |
 | Receipt Upload | 5/minute |
-| File Upload | 20/minute |
+| File Upload (design/template/font) | 20/minute |
 | General Read | 100/minute |
 | General Write | 30/minute |
 | Admin Promote | 3/hour |

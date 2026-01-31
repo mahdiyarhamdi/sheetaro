@@ -731,6 +731,39 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 });
   }),
 
+  // Font file upload
+  http.post(`${API_URL}/fonts/upload`, ({ request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    return HttpResponse.json({
+      filename: "test-font.ttf",
+      file_url: "/files/fonts/20260131_abc123.ttf",
+      file_size: 1024000,
+      content_type: "font/ttf",
+    }, { status: 201 });
+  }),
+
+  // Template image upload
+  http.post(`${API_URL}/templates/upload`, ({ request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    return HttpResponse.json({
+      filename: "test-template.png",
+      file_url: "/files/templates/20260131_abc123.png",
+      preview_url: "/files/templates/20260131_abc123.png",
+      file_size: 2048000,
+      content_type: "image/png",
+      width: 1000,
+      height: 1400,
+    }, { status: 201 });
+  }),
+
   // Template Placeholders CRUD
   http.get(`${API_URL}/templates/:templateId/placeholders`, ({ request }) => {
     const authHeader = request.headers.get("Authorization");
