@@ -422,12 +422,30 @@ export const paymentsApi = {
 
 // ============ Files API ============
 
+export interface PlaceholderImageUploadResponse {
+  filename: string;
+  file_url: string;
+  preview_url: string;
+  file_size: number;
+  content_type: string;
+  width: number;
+  height: number;
+}
+
 export const filesApi = {
   upload: (file: File, type: string = "design") => {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("type", type);
     return api.post<{ url: string; file_id: string }>("/files/upload", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+  
+  uploadPlaceholderImage: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post<PlaceholderImageUploadResponse>("/placeholder-images/upload", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },

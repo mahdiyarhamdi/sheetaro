@@ -100,6 +100,36 @@ async def delete_file(
 
 
 @router.post(
+    "/placeholder-images/upload",
+    response_model=TemplateImageUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload placeholder image",
+    description=f"Upload an image for template placeholder (PNG, JPG, WEBP). Max size: {MAX_TEMPLATE_IMAGE_SIZE / 1024 / 1024}MB",
+)
+@limiter.limit(RateLimits.FILE_UPLOAD)
+async def upload_placeholder_image(
+    request: Request,
+    file: UploadFile = File(..., description="Placeholder image file"),
+) -> TemplateImageUploadResponse:
+    """Upload a placeholder image for order templates."""
+    # Read file content
+    content = await file.read()
+    
+    service = FileService()
+    try:
+        return await service.upload_template_image(
+            file_content=content,
+            filename=file.filename or "placeholder.png",
+            content_type=file.content_type or "image/png",
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post(
     "/templates/upload",
     response_model=TemplateImageUploadResponse,
     status_code=status.HTTP_201_CREATED,

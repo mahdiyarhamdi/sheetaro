@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useCategories, useCategoryAttributes, useCategoryPlans, usePlanTemplates, usePlanQuestionnaire, useTemplatePlaceholders, useTemplatePreview } from "@/hooks/useCatalog";
 import { useOrders } from "@/hooks/useOrders";
-import { filesApi } from "@/lib/api";
+import { filesApi, PlaceholderImageUploadResponse } from "@/lib/api";
 import {
   Card,
   CardHeader,
@@ -247,8 +247,8 @@ export default function NewOrderPage() {
   const handleImageUpload = async (placeholderId: string, file: File) => {
     setUploadingImage(placeholderId);
     try {
-      const response = await filesApi.upload(file, "template");
-      const imageUrl = response.data.url;
+      const response = await filesApi.uploadPlaceholderImage(file);
+      const imageUrl = response.data.file_url;
       setOrderData({
         ...orderData,
         placeholder_values: {
