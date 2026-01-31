@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Type,
@@ -20,6 +20,9 @@ import Modal from "@/components/ui/modal";
 import { useAuth } from "@/hooks/useAuth";
 import { adminApi, SystemFont, FontCreateData, FontVariant, getErrorMessage } from "@/lib/api";
 import toast from "react-hot-toast";
+
+// Get the API base URL for font files
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 interface FontFormData {
   name: string;
@@ -83,6 +86,80 @@ export default function AdminFontsPage() {
     },
     enabled: isAdmin,
   });
+
+  // Dynamically load fonts using @font-face
+  useEffect(() => {
+    if (!fonts || fonts.length === 0) return;
+
+    // Create a unique style element for dynamic fonts
+    const styleId = "dynamic-fonts-style";
+    let styleEl = document.getElementById(styleId) as HTMLStyleElement | null;
+    
+    if (!styleEl) {
+      styleEl = document.createElement("style");
+      styleEl.id = styleId;
+      document.head.appendChild(styleEl);
+    }
+
+    // Build @font-face rules for all fonts and their variants
+    const fontFaceRules: string[] = [];
+
+    fonts.forEach((font) => {
+      // If font has a main file_url, load it as default
+      if (font.file_url) {
+        const fullUrl = font.file_url.startsWith("http") 
+          ? font.file_url 
+          : `${API_BASE_URL}${font.file_url}`;
+        
+        fontFaceRules.push(`
+          @font-face {
+            font-family: '${font.name}';
+            src: url('${fullUrl}') format('truetype');
+            font-weight: 400;
+            font-style: normal;
+            font-display: swap;
+          }
+        `);
+      }
+
+      // Load each variant with its specific weight and style
+      if (font.variants && font.variants.length > 0) {
+        font.variants.forEach((variant) => {
+          if (variant.file_url) {
+            const fullUrl = variant.file_url.startsWith("http")
+              ? variant.file_url
+              : `${API_BASE_URL}${variant.file_url}`;
+            
+            // Detect format from extension
+            const ext = variant.file_url.split('.').pop()?.toLowerCase();
+            let format = 'truetype';
+            if (ext === 'woff') format = 'woff';
+            else if (ext === 'woff2') format = 'woff2';
+            else if (ext === 'ttf') format = 'truetype';
+
+            fontFaceRules.push(`
+              @font-face {
+                font-family: '${font.name}';
+                src: url('${fullUrl}') format('${format}');
+                font-weight: ${variant.weight};
+                font-style: ${variant.style};
+                font-display: swap;
+              }
+            `);
+          }
+        });
+      }
+    });
+
+    styleEl.textContent = fontFaceRules.join("\n");
+
+    // Cleanup on unmount
+    return () => {
+      if (styleEl && styleEl.parentNode) {
+        // Don't remove - keep fonts loaded for other components
+      }
+    };
+  }, [fonts]);
 
   // Mutations
   const createFontMutation = useMutation({
@@ -442,7 +519,7 @@ export default function AdminFontsPage() {
 
               {/* Font Variants */}
               <div className="border-t pt-4">
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between mb-3">
                   <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-400">
                     وزن‌های فونت
                   </h4>
@@ -455,24 +532,34 @@ export default function AdminFontsPage() {
                     افزودن وزن
                   </Button>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="space-y-2">
                   {font.variants && font.variants.length > 0 ? (
                     font.variants.map((variant, idx) => (
                       <div
                         key={idx}
-                        className="flex items-center gap-2 px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-lg"
+                        className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
                       >
-                        <span
-                          className="text-sm"
-                          style={{
-                            fontFamily: font.name,
-                            fontWeight: variant.weight,
-                            fontStyle: variant.style,
-                          }}
-                        >
-                          {fontWeightLabels[variant.weight] || variant.weight}
-                          {variant.style === "italic" && " Italic"}
-                        </span>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-medium text-gray-500 bg-gray-200 dark:bg-gray-600 px-2 py-0.5 rounded">
+                              {fontWeightLabels[variant.weight] || variant.weight}
+                              {variant.style === "italic" && " Italic"}
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              وزن {variant.weight}
+                            </span>
+                          </div>
+                          <p
+                            className="text-lg leading-relaxed"
+                            style={{
+                              fontFamily: `'${font.name}'`,
+                              fontWeight: variant.weight,
+                              fontStyle: variant.style,
+                            }}
+                          >
+                            {previewText}
+                          </p>
+                        </div>
                         <button
                           onClick={() =>
                             deleteVariantMutation.mutate({
@@ -481,9 +568,9 @@ export default function AdminFontsPage() {
                               style: variant.style,
                             })
                           }
-                          className="text-red-500 hover:text-red-600"
+                          className="text-red-500 hover:text-red-600 p-2"
                         >
-                          <X className="w-3 h-3" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     ))
