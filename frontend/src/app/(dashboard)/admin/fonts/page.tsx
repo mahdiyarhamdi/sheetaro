@@ -87,6 +87,18 @@ export default function AdminFontsPage() {
     enabled: isAdmin,
   });
 
+  // Helper function to construct full font URL
+  const getFontUrl = (fileUrl: string | undefined | null): string | null => {
+    if (!fileUrl) return null;
+    
+    // If already absolute URL, return as is
+    if (fileUrl.startsWith("http")) return fileUrl;
+    
+    // Add /api/v1 prefix if not present
+    const apiPath = fileUrl.startsWith("/api/v1") ? fileUrl : `/api/v1${fileUrl}`;
+    return `${API_BASE_URL}${apiPath}`;
+  };
+
   // Dynamically load fonts using @font-face
   useEffect(() => {
     if (!fonts || fonts.length === 0) return;
@@ -106,15 +118,17 @@ export default function AdminFontsPage() {
 
     fonts.forEach((font) => {
       // If font has a main file_url, load it as default
-      if (font.file_url) {
-        const fullUrl = font.file_url.startsWith("http") 
-          ? font.file_url 
-          : `${API_BASE_URL}${font.file_url}`;
+      const mainFontUrl = getFontUrl(font.file_url);
+      if (mainFontUrl) {
+        const ext = font.file_url?.split('.').pop()?.toLowerCase();
+        let format = 'truetype';
+        if (ext === 'woff') format = 'woff';
+        else if (ext === 'woff2') format = 'woff2';
         
         fontFaceRules.push(`
           @font-face {
             font-family: '${font.name}';
-            src: url('${fullUrl}') format('truetype');
+            src: url('${mainFontUrl}') format('${format}');
             font-weight: 400;
             font-style: normal;
             font-display: swap;
@@ -125,13 +139,10 @@ export default function AdminFontsPage() {
       // Load each variant with its specific weight and style
       if (font.variants && font.variants.length > 0) {
         font.variants.forEach((variant) => {
-          if (variant.file_url) {
-            const fullUrl = variant.file_url.startsWith("http")
-              ? variant.file_url
-              : `${API_BASE_URL}${variant.file_url}`;
-            
+          const variantUrl = getFontUrl(variant.file_url);
+          if (variantUrl) {
             // Detect format from extension
-            const ext = variant.file_url.split('.').pop()?.toLowerCase();
+            const ext = variant.file_url?.split('.').pop()?.toLowerCase();
             let format = 'truetype';
             if (ext === 'woff') format = 'woff';
             else if (ext === 'woff2') format = 'woff2';
@@ -140,7 +151,7 @@ export default function AdminFontsPage() {
             fontFaceRules.push(`
               @font-face {
                 font-family: '${font.name}';
-                src: url('${fullUrl}') format('${format}');
+                src: url('${variantUrl}') format('${format}');
                 font-weight: ${variant.weight};
                 font-style: ${variant.style};
                 font-display: swap;
