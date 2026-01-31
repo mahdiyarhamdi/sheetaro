@@ -502,8 +502,10 @@ class CategoryRepository:
     
     async def create_placeholder(self, template_id: UUID, data: PlaceholderCreate) -> TemplatePlaceholder:
         """Create a new placeholder."""
-        # Use mode='json' to get string values for enums (lowercase)
-        dump_data = data.model_dump(mode='json')
+        dump_data = data.model_dump(exclude_unset=True)
+        # Convert type enum to string value for database
+        if 'type' in dump_data and dump_data['type'] is not None:
+            dump_data['type'] = dump_data['type'].value if hasattr(dump_data['type'], 'value') else str(dump_data['type'])
         placeholder = TemplatePlaceholder(template_id=template_id, **dump_data)
         self.db.add(placeholder)
         await self.db.commit()
@@ -512,10 +514,13 @@ class CategoryRepository:
     
     async def update_placeholder(self, placeholder_id: UUID, data: PlaceholderUpdate) -> Optional[TemplatePlaceholder]:
         """Update a placeholder."""
-        # Use mode='json' to get string values for enums (lowercase)
-        update_data = data.model_dump(exclude_unset=True, mode='json')
+        update_data = data.model_dump(exclude_unset=True)
         if not update_data:
             return await self.get_placeholder_by_id(placeholder_id)
+        
+        # Convert type enum to string value for database
+        if 'type' in update_data and update_data['type'] is not None:
+            update_data['type'] = update_data['type'].value if hasattr(update_data['type'], 'value') else str(update_data['type'])
         
         await self.db.execute(
             update(TemplatePlaceholder).where(TemplatePlaceholder.id == placeholder_id).values(**update_data)

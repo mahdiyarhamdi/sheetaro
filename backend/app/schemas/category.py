@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from app.models.attribute import AttributeInputType
 from app.models.design_question import QuestionInputType
 from app.models.order_step import StepType
-from app.models.design_template import PlaceholderType, TextAlign
+from app.models.design_template import PlaceholderType
 
 
 # ============== Category Schemas ==============
@@ -471,7 +471,7 @@ class PlaceholderBase(BaseModel):
     font_size: Optional[int] = 24
     font_weight: Optional[int] = 400
     font_color: Optional[str] = Field("#000000", max_length=9)
-    text_align: Optional[TextAlign] = TextAlign.RIGHT
+    text_align: Optional[str] = Field(None, pattern="^(left|center|right)$")
     max_length: Optional[int] = None
     default_value: Optional[str] = None
     is_active: bool = True
@@ -494,7 +494,7 @@ class PlaceholderCreate(BaseModel):
     font_size: Optional[int] = 24
     font_weight: Optional[int] = 400
     font_color: Optional[str] = Field("#000000", max_length=9)
-    text_align: Optional[TextAlign] = TextAlign.RIGHT
+    text_align: Optional[str] = Field(None, pattern="^(left|center|right)$")
     max_length: Optional[int] = None
     default_value: Optional[str] = None
 
@@ -515,7 +515,7 @@ class PlaceholderUpdate(BaseModel):
     font_size: Optional[int] = None
     font_weight: Optional[int] = None
     font_color: Optional[str] = Field(None, max_length=9)
-    text_align: Optional[TextAlign] = None
+    text_align: Optional[str] = Field(None, pattern="^(left|center|right)$")
     max_length: Optional[int] = None
     default_value: Optional[str] = None
     is_active: Optional[bool] = None
