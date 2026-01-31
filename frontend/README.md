@@ -22,7 +22,7 @@ npm start
 
 | Variable | Description | Required | Default |
 |----------|-------------|----------|---------|
-| `NEXT_PUBLIC_API_URL` | Backend API URL | No | `http://localhost:3001` |
+| `NEXT_PUBLIC_API_URL` | Backend API URL | No | `http://localhost:3005` |
 
 ## Testing
 

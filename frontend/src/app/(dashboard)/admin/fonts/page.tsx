@@ -22,7 +22,7 @@ import { adminApi, SystemFont, FontCreateData, FontVariant, getErrorMessage } fr
 import toast from "react-hot-toast";
 
 // Get the API base URL for font files
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3005";
 
 interface FontFormData {
   name: string;
@@ -103,6 +103,9 @@ export default function AdminFontsPage() {
   useEffect(() => {
     if (!fonts || fonts.length === 0) return;
 
+    // Debug: Log fonts data
+    console.log("Loading fonts:", fonts);
+
     // Create a unique style element for dynamic fonts
     const styleId = "dynamic-fonts-style";
     let styleEl = document.getElementById(styleId) as HTMLStyleElement | null;
@@ -139,7 +142,10 @@ export default function AdminFontsPage() {
       // Load each variant with its specific weight and style
       if (font.variants && font.variants.length > 0) {
         font.variants.forEach((variant) => {
+          console.log(`Variant: weight=${variant.weight}, style=${variant.style}, file_url=${variant.file_url}`);
           const variantUrl = getFontUrl(variant.file_url);
+          console.log(`Constructed URL: ${variantUrl}`);
+          
           if (variantUrl) {
             // Detect format from extension
             const ext = variant.file_url?.split('.').pop()?.toLowerCase();
@@ -162,6 +168,7 @@ export default function AdminFontsPage() {
       }
     });
 
+    console.log("Generated @font-face rules:", fontFaceRules);
     styleEl.textContent = fontFaceRules.join("\n");
 
     // Cleanup on unmount
