@@ -199,6 +199,36 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
     deletePlaceholderMutation.mutate(selectedPlaceholder);
   };
 
+  // Save all pending changes
+  const handleSaveAll = async () => {
+    if (hasUnsavedChanges && selectedPlaceholder) {
+      const placeholder = localPlaceholders.find((p) => p.id === selectedPlaceholder);
+      if (placeholder) {
+        try {
+          await updatePlaceholderMutation.mutateAsync({
+            id: selectedPlaceholder,
+            data: {
+              x: placeholder.x,
+              y: placeholder.y,
+              width: placeholder.width,
+              height: placeholder.height,
+              rotation: placeholder.rotation,
+            },
+          });
+          setHasUnsavedChanges(false);
+        } catch (error) {
+          // Error already handled by mutation
+        }
+      }
+    }
+  };
+
+  // Handle close with save
+  const handleClose = async () => {
+    await handleSaveAll();
+    onClose();
+  };
+
   // Duplicate selected placeholder
   const handleDuplicatePlaceholder = () => {
     if (!selectedPlaceholder) return;
@@ -323,8 +353,15 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
             </button>
           </div>
 
-          <Button variant="outline" onClick={onClose}>
-            بستن
+          <Button 
+            variant="outline" 
+            onClick={handleClose}
+            disabled={updatePlaceholderMutation.isPending}
+          >
+            {updatePlaceholderMutation.isPending ? (
+              <Loader2 className="w-4 h-4 ml-1 animate-spin" />
+            ) : null}
+            {hasUnsavedChanges ? "ذخیره و بستن" : "بستن"}
           </Button>
         </div>
       </div>

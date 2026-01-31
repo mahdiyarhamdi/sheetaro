@@ -15,6 +15,7 @@ from app.models.design_template import DesignTemplate, TemplatePlaceholder
 from app.models.processed_design import ProcessedDesign
 from app.models.order_step import OrderStepTemplate
 from app.models.question_answer import QuestionAnswer
+from app.models.system_font import SystemFont
 from app.schemas.category import (
     CategoryCreate, CategoryUpdate,
     AttributeCreate, AttributeUpdate,
@@ -674,4 +675,28 @@ class CategoryRepository:
         )
         await self.db.commit()
         return result.rowcount > 0
+    
+    # ============== System Fonts ==============
+    
+    async def get_font_by_name(self, name: str) -> Optional[SystemFont]:
+        """Get a font by its name."""
+        result = await self.db.execute(
+            select(SystemFont).where(SystemFont.name == name)
+        )
+        return result.scalar_one_or_none()
+    
+    async def get_font_by_name_fa(self, name_fa: str) -> Optional[SystemFont]:
+        """Get a font by its Persian name."""
+        result = await self.db.execute(
+            select(SystemFont).where(SystemFont.name_fa == name_fa)
+        )
+        return result.scalar_one_or_none()
+    
+    async def get_all_fonts(self, active_only: bool = True) -> List[SystemFont]:
+        """Get all fonts."""
+        query = select(SystemFont)
+        if active_only:
+            query = query.where(SystemFont.is_active == True)
+        result = await self.db.execute(query)
+        return result.scalars().all()
 

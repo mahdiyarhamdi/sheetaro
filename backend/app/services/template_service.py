@@ -427,7 +427,7 @@ class TemplateService:
         
         return result
     
-    def apply_text_placeholder(
+    async def apply_text_placeholder(
         self,
         base_image: Image.Image,
         text: str,
@@ -438,8 +438,8 @@ class TemplateService:
         result = base_image.copy().convert("RGBA")
         draw = ImageDraw.Draw(result)
         
-        # Get font
-        font = self._get_font(placeholder, font_cache)
+        # Get font (use async version to load from database)
+        font = await self._get_font_async(placeholder, font_cache)
         
         # Parse color (support hex with optional alpha)
         color = self._parse_color(placeholder.font_color or "#000000")
@@ -466,16 +466,16 @@ class TemplateService:
         return result
     
     def _get_font(self, placeholder: TemplatePlaceholder, font_cache: dict) -> ImageFont.FreeTypeFont:
-        """Get or load font for placeholder."""
+        """Get or load font for placeholder (sync version for compatibility)."""
         font_key = f"{placeholder.font_family}_{placeholder.font_size}_{placeholder.font_weight}"
         
         if font_key in font_cache:
             return font_cache[font_key]
         
-        # Try to load the font
         font_size = placeholder.font_size or 24
+        font_weight = placeholder.font_weight or 400
         
-        # Check for custom font files
+        # Check for custom font files using the old path structure
         if placeholder.font_family:
             font_paths = [
                 f"/app/fonts/{placeholder.font_family}.ttf",
@@ -492,7 +492,92 @@ class TemplateService:
                     except Exception:
                         pass
         
+        # Fallback to bundled Persian fonts
+        persian_font_paths = [
+            "/app/fonts/Vazirmatn-Regular.ttf",
+            "/app/fonts/Vazir.ttf",
+            "/app/fonts/IRANSans.ttf",
+        ]
+        for path in persian_font_paths:
+            if os.path.exists(path):
+                try:
+                    font = ImageFont.truetype(path, font_size)
+                    font_cache[font_key] = font
+                    return font
+                except Exception:
+                    pass
+        
         # Fallback to default font
+        try:
+            font = ImageFont.load_default(size=font_size)
+        except TypeError:
+            font = ImageFont.load_default()
+        
+        font_cache[font_key] = font
+        return font
+    
+    async def _get_font_async(self, placeholder: TemplatePlaceholder, font_cache: dict) -> ImageFont.FreeTypeFont:
+        """Get or load font for placeholder from database."""
+        font_key = f"{placeholder.font_family}_{placeholder.font_size}_{placeholder.font_weight}"
+        
+        if font_key in font_cache:
+            return font_cache[font_key]
+        
+        font_size = placeholder.font_size or 24
+        font_weight = placeholder.font_weight or 400
+        
+        # Try to load from database via repository
+        if self.repository and placeholder.font_family:
+            # Try by name first, then by name_fa
+            font_record = await self.repository.get_font_by_name(placeholder.font_family)
+            if not font_record:
+                font_record = await self.repository.get_font_by_name_fa(placeholder.font_family)
+            
+            if font_record and font_record.variants:
+                # Find best matching variant (prefer exact weight match)
+                best_variant = None
+                for variant in font_record.variants:
+                    if variant.get("weight") == font_weight:
+                        best_variant = variant
+                        break
+                    # Fallback to first variant
+                    if best_variant is None:
+                        best_variant = variant
+                
+                if best_variant:
+                    file_url = best_variant.get("file_url", "")
+                    # Handle both /files/ and /api/v1/files/ prefixes
+                    if file_url.startswith("/api/v1/files/"):
+                        local_path = os.path.join(self.upload_dir, file_url.replace("/api/v1/files/", ""))
+                    elif file_url.startswith("/files/"):
+                        local_path = os.path.join(self.upload_dir, file_url.lstrip("/files/"))
+                    else:
+                        local_path = None
+                    
+                    if local_path and os.path.exists(local_path):
+                        try:
+                            font = ImageFont.truetype(local_path, font_size)
+                            font_cache[font_key] = font
+                            return font
+                        except Exception:
+                            pass
+        
+        # Fallback to bundled Persian fonts
+        persian_font_paths = [
+            "/app/fonts/Vazirmatn-Regular.ttf",
+            "/app/fonts/Vazir.ttf",
+            "/app/fonts/IRANSans.ttf",
+        ]
+        for path in persian_font_paths:
+            if os.path.exists(path):
+                try:
+                    font = ImageFont.truetype(path, font_size)
+                    font_cache[font_key] = font
+                    return font
+                except Exception:
+                    pass
+        
+        # Last fallback to default font
         try:
             font = ImageFont.load_default(size=font_size)
         except TypeError:
@@ -583,7 +668,7 @@ class TemplateService:
                 elif placeholder.type == PlaceholderType.TEXT:
                     text = data.get("text_value") or placeholder.default_value or ""
                     if text:
-                        result_image = self.apply_text_placeholder(
+                        result_image = await self.apply_text_placeholder(
                             result_image,
                             text,
                             placeholder,
