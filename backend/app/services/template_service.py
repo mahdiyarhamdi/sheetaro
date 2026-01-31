@@ -29,6 +29,36 @@ class TemplateService:
             response.raise_for_status()
             return Image.open(BytesIO(response.content))
     
+    async def load_image(self, url_or_path: str, base_url: str = "") -> Image.Image:
+        """Load image from local path or remote URL.
+        
+        Args:
+            url_or_path: Either a local path (/files/...) or full URL (http://...)
+            base_url: Base URL to prepend for relative paths
+            
+        Returns:
+            PIL Image object
+        """
+        # Check if it's a local file path
+        if url_or_path.startswith("/files/"):
+            # Convert to local filesystem path
+            local_path = os.path.join(self.upload_dir, url_or_path.lstrip("/files/"))
+            if os.path.exists(local_path):
+                return Image.open(local_path)
+            else:
+                raise FileNotFoundError(f"Local file not found: {local_path}")
+        
+        # Check if it's a full URL
+        if url_or_path.startswith(("http://", "https://")):
+            return await self.download_image(url_or_path)
+        
+        # Try prepending base_url for relative paths
+        if base_url and not url_or_path.startswith(("http://", "https://")):
+            full_url = f"{base_url}{url_or_path}"
+            return await self.download_image(full_url)
+        
+        raise ValueError(f"Cannot load image from: {url_or_path}")
+    
     def apply_logo_to_template(
         self,
         template_image: Image.Image,
@@ -507,24 +537,24 @@ class TemplateService:
             dict with preview_url, width, height
         """
         try:
-            # Download base template image
+            # Load base template image (from local file or remote URL)
             if not template.file_url:
                 raise ValueError("Template has no file_url")
             
-            base_image = await self.download_image(template.file_url)
+            base_image = await self.load_image(template.file_url, base_url)
             width, height = self.get_image_dimensions(base_image)
             
             # Build placeholder data lookup
             placeholder_values = {str(d["placeholder_id"]): d for d in placeholder_data}
             
-            # Download all images first
+            # Load all images first (from local files or remote URLs)
             downloaded_images = {}
             for data in placeholder_data:
                 if data.get("image_url"):
                     try:
-                        downloaded_images[data["image_url"]] = await self.download_image(data["image_url"])
+                        downloaded_images[data["image_url"]] = await self.load_image(data["image_url"], base_url)
                     except Exception:
-                        pass  # Skip failed downloads
+                        pass  # Skip failed loads
             
             # Font cache
             font_cache = {}
