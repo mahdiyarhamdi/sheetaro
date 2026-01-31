@@ -89,7 +89,7 @@ class TemplatePlaceholder(Base):
     font_size = Column(Integer, nullable=True, default=24)  # Font size in pixels
     font_weight = Column(Integer, nullable=True, default=400)  # Font weight (100-900)
     font_color = Column(String(9), nullable=True, default="#000000")  # Hex color with optional alpha
-    text_align = Column(Enum(TextAlign, name='textalign', create_type=False), nullable=True)
+    text_align = Column(String(10), nullable=True)  # 'left', 'center', 'right'
     max_length = Column(Integer, nullable=True)  # Maximum text length
     default_value = Column(Text, nullable=True)  # Default text value
     
