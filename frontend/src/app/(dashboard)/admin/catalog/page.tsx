@@ -1501,7 +1501,7 @@ export default function CatalogManagementPage() {
         // Create placeholders based on counts
         const placeholderPromises: Promise<any>[] = [];
         
-        // Create image placeholders
+        // Create image placeholders (no text_align needed for images)
         for (let i = 0; i < templateForm.image_placeholder_count; i++) {
           placeholderPromises.push(
             adminApi.createPlaceholder(newTemplate.id, {
@@ -1514,7 +1514,6 @@ export default function CatalogManagementPage() {
               height: 200,
               rotation: 0,
               sort_order: i,
-              is_active: true,
             })
           );
         }
@@ -1533,9 +1532,8 @@ export default function CatalogManagementPage() {
               rotation: 0,
               font_size: 24,
               font_color: "#000000",
-              text_align: "center",
+              text_align: "right",
               sort_order: templateForm.image_placeholder_count + i,
-              is_active: true,
             })
           );
         }
