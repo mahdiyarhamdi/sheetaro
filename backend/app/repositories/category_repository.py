@@ -11,7 +11,7 @@ from app.models.attribute import CategoryAttribute, AttributeOption
 from app.models.design_plan import CategoryDesignPlan
 from app.models.question_section import QuestionSection
 from app.models.design_question import DesignQuestion, QuestionOption
-from app.models.design_template import DesignTemplate
+from app.models.design_template import DesignTemplate, TemplatePlaceholder
 from app.models.processed_design import ProcessedDesign
 from app.models.order_step import OrderStepTemplate
 from app.models.question_answer import QuestionAnswer
@@ -24,6 +24,7 @@ from app.schemas.category import (
     QuestionCreate, QuestionUpdate,
     QuestionOptionCreate, QuestionOptionUpdate,
     TemplateCreate, TemplateUpdate,
+    PlaceholderCreate, PlaceholderUpdate,
     StepTemplateCreate, StepTemplateUpdate,
     ProcessedDesignCreate,
     QuestionAnswerCreate,
@@ -471,6 +472,71 @@ class CategoryRepository:
         )
         await self.db.commit()
         return result.rowcount > 0
+    
+    async def get_template_with_placeholders(self, template_id: UUID) -> Optional[DesignTemplate]:
+        """Get template with all its placeholders."""
+        result = await self.db.execute(
+            select(DesignTemplate)
+            .where(DesignTemplate.id == template_id)
+            .options(selectinload(DesignTemplate.placeholders))
+        )
+        return result.scalar_one_or_none()
+    
+    # ============== Template Placeholders ==============
+    
+    async def get_placeholders(self, template_id: UUID, active_only: bool = True) -> List[TemplatePlaceholder]:
+        """Get all placeholders for a template."""
+        query = select(TemplatePlaceholder).where(TemplatePlaceholder.template_id == template_id)
+        if active_only:
+            query = query.where(TemplatePlaceholder.is_active == True)
+        query = query.order_by(TemplatePlaceholder.sort_order)
+        result = await self.db.execute(query)
+        return result.scalars().all()
+    
+    async def get_placeholder_by_id(self, placeholder_id: UUID) -> Optional[TemplatePlaceholder]:
+        """Get placeholder by ID."""
+        result = await self.db.execute(
+            select(TemplatePlaceholder).where(TemplatePlaceholder.id == placeholder_id)
+        )
+        return result.scalar_one_or_none()
+    
+    async def create_placeholder(self, template_id: UUID, data: PlaceholderCreate) -> TemplatePlaceholder:
+        """Create a new placeholder."""
+        placeholder = TemplatePlaceholder(template_id=template_id, **data.model_dump())
+        self.db.add(placeholder)
+        await self.db.commit()
+        await self.db.refresh(placeholder)
+        return placeholder
+    
+    async def update_placeholder(self, placeholder_id: UUID, data: PlaceholderUpdate) -> Optional[TemplatePlaceholder]:
+        """Update a placeholder."""
+        update_data = data.model_dump(exclude_unset=True)
+        if not update_data:
+            return await self.get_placeholder_by_id(placeholder_id)
+        
+        await self.db.execute(
+            update(TemplatePlaceholder).where(TemplatePlaceholder.id == placeholder_id).values(**update_data)
+        )
+        await self.db.commit()
+        return await self.get_placeholder_by_id(placeholder_id)
+    
+    async def delete_placeholder(self, placeholder_id: UUID) -> bool:
+        """Delete a placeholder."""
+        result = await self.db.execute(
+            delete(TemplatePlaceholder).where(TemplatePlaceholder.id == placeholder_id)
+        )
+        await self.db.commit()
+        return result.rowcount > 0
+    
+    async def reorder_placeholders(self, items: List[dict]) -> None:
+        """Reorder placeholders by updating their sort_order."""
+        for item in items:
+            await self.db.execute(
+                update(TemplatePlaceholder)
+                .where(TemplatePlaceholder.id == item["id"])
+                .values(sort_order=item["sort_order"])
+            )
+        await self.db.commit()
     
     # ============== Step Templates ==============
     

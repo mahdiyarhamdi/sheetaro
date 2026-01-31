@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from app.models.attribute import AttributeInputType
 from app.models.design_question import QuestionInputType
 from app.models.order_step import StepType
+from app.models.design_template import PlaceholderType, TextAlign
 
 
 # ============== Category Schemas ==============
@@ -376,21 +377,35 @@ class TemplateBase(BaseModel):
     """Base template schema."""
     name_fa: str = Field(..., max_length=100)
     description_fa: Optional[str] = Field(None, max_length=500)
-    preview_url: str = Field(..., max_length=500)
-    file_url: str = Field(..., max_length=500)
+    preview_url: Optional[str] = Field(None, max_length=500)
+    file_url: Optional[str] = Field(None, max_length=500)
     image_width: Optional[int] = None  # Original image width
     image_height: Optional[int] = None  # Original image height
-    placeholder_x: int
-    placeholder_y: int
-    placeholder_width: int
-    placeholder_height: int
+    # Legacy fields (for backward compatibility)
+    placeholder_x: Optional[int] = None
+    placeholder_y: Optional[int] = None
+    placeholder_width: Optional[int] = None
+    placeholder_height: Optional[int] = None
+    placeholder_rotation: Optional[int] = 0
     sort_order: int = 0
     is_active: bool = True
 
 
-class TemplateCreate(TemplateBase):
+class TemplateCreate(BaseModel):
     """Schema for creating a template."""
-    pass
+    name_fa: str = Field(..., max_length=100)
+    description_fa: Optional[str] = Field(None, max_length=500)
+    preview_url: Optional[str] = Field(None, max_length=500)
+    file_url: Optional[str] = Field(None, max_length=500)
+    image_width: Optional[int] = None
+    image_height: Optional[int] = None
+    placeholder_x: Optional[int] = None
+    placeholder_y: Optional[int] = None
+    placeholder_width: Optional[int] = None
+    placeholder_height: Optional[int] = None
+    placeholder_rotation: Optional[int] = 0
+    sort_order: int = 0
+    is_active: bool = True
 
 
 class TemplateUpdate(BaseModel):
@@ -405,6 +420,7 @@ class TemplateUpdate(BaseModel):
     placeholder_y: Optional[int] = None
     placeholder_width: Optional[int] = None
     placeholder_height: Optional[int] = None
+    placeholder_rotation: Optional[int] = None
     sort_order: Optional[int] = None
     is_active: Optional[bool] = None
 
@@ -420,6 +436,11 @@ class TemplateOut(TemplateBase):
         from_attributes = True
 
 
+class TemplateWithPlaceholders(TemplateOut):
+    """Template with its dynamic placeholders."""
+    placeholders: List["PlaceholderOut"] = []
+
+
 class ApplyLogoRequest(BaseModel):
     """Request to apply logo to template."""
     logo_file_url: str = Field(..., max_length=500)
@@ -429,6 +450,168 @@ class ApplyLogoResponse(BaseModel):
     """Response after applying logo to template."""
     preview_url: str
     final_url: str
+
+
+# ============== Template Placeholder Schemas ==============
+
+class PlaceholderBase(BaseModel):
+    """Base placeholder schema for template areas."""
+    type: PlaceholderType
+    name: str = Field(..., max_length=50)
+    label_fa: str = Field(..., max_length=100)
+    x: int = 0
+    y: int = 0
+    width: int = 100
+    height: int = 100
+    rotation: int = 0
+    is_required: bool = True
+    sort_order: int = 0
+    # Text-specific fields
+    font_family: Optional[str] = Field(None, max_length=100)
+    font_size: Optional[int] = 24
+    font_weight: Optional[int] = 400
+    font_color: Optional[str] = Field("#000000", max_length=9)
+    text_align: Optional[TextAlign] = TextAlign.RIGHT
+    max_length: Optional[int] = None
+    default_value: Optional[str] = None
+    is_active: bool = True
+
+
+class PlaceholderCreate(BaseModel):
+    """Schema for creating a placeholder."""
+    type: PlaceholderType
+    name: str = Field(..., max_length=50)
+    label_fa: str = Field(..., max_length=100)
+    x: int = 0
+    y: int = 0
+    width: int = 100
+    height: int = 100
+    rotation: int = 0
+    is_required: bool = True
+    sort_order: int = 0
+    # Text-specific fields
+    font_family: Optional[str] = Field(None, max_length=100)
+    font_size: Optional[int] = 24
+    font_weight: Optional[int] = 400
+    font_color: Optional[str] = Field("#000000", max_length=9)
+    text_align: Optional[TextAlign] = TextAlign.RIGHT
+    max_length: Optional[int] = None
+    default_value: Optional[str] = None
+
+
+class PlaceholderUpdate(BaseModel):
+    """Schema for updating a placeholder."""
+    type: Optional[PlaceholderType] = None
+    name: Optional[str] = Field(None, max_length=50)
+    label_fa: Optional[str] = Field(None, max_length=100)
+    x: Optional[int] = None
+    y: Optional[int] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    rotation: Optional[int] = None
+    is_required: Optional[bool] = None
+    sort_order: Optional[int] = None
+    font_family: Optional[str] = Field(None, max_length=100)
+    font_size: Optional[int] = None
+    font_weight: Optional[int] = None
+    font_color: Optional[str] = Field(None, max_length=9)
+    text_align: Optional[TextAlign] = None
+    max_length: Optional[int] = None
+    default_value: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class PlaceholderOut(PlaceholderBase):
+    """Schema for placeholder response."""
+    id: UUID
+    template_id: UUID
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class PlaceholderReorderItem(BaseModel):
+    """Item for reordering placeholders."""
+    id: UUID
+    sort_order: int
+
+
+class PlaceholderReorderRequest(BaseModel):
+    """Request to reorder placeholders."""
+    items: List[PlaceholderReorderItem]
+
+
+# ============== System Font Schemas ==============
+
+class FontVariant(BaseModel):
+    """Font variant with weight and style."""
+    weight: int = Field(..., ge=100, le=900)
+    style: str = Field("normal", max_length=20)  # "normal" or "italic"
+    file_url: str = Field(..., max_length=500)
+
+
+class SystemFontBase(BaseModel):
+    """Base system font schema."""
+    name: str = Field(..., max_length=100)
+    name_fa: str = Field(..., max_length=100)
+    file_url: Optional[str] = Field(None, max_length=500)
+    variants: List[FontVariant] = []
+    sample_text: Optional[str] = Field("نمونه متن فارسی - Sample Text 123", max_length=200)
+    is_active: bool = True
+
+
+class SystemFontCreate(BaseModel):
+    """Schema for creating a system font."""
+    name: str = Field(..., max_length=100)
+    name_fa: str = Field(..., max_length=100)
+    file_url: Optional[str] = Field(None, max_length=500)
+    variants: List[FontVariant] = []
+    sample_text: Optional[str] = Field("نمونه متن فارسی - Sample Text 123", max_length=200)
+
+
+class SystemFontUpdate(BaseModel):
+    """Schema for updating a system font."""
+    name: Optional[str] = Field(None, max_length=100)
+    name_fa: Optional[str] = Field(None, max_length=100)
+    file_url: Optional[str] = Field(None, max_length=500)
+    variants: Optional[List[FontVariant]] = None
+    sample_text: Optional[str] = Field(None, max_length=200)
+    is_active: Optional[bool] = None
+
+
+class SystemFontOut(SystemFontBase):
+    """Schema for system font response."""
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+# ============== Template Preview Schemas ==============
+
+class PlaceholderPreviewData(BaseModel):
+    """Data for a single placeholder in preview."""
+    placeholder_id: UUID
+    # For IMAGE type
+    image_url: Optional[str] = None
+    # For TEXT type
+    text_value: Optional[str] = None
+
+
+class TemplatePreviewRequest(BaseModel):
+    """Request to generate a template preview."""
+    placeholders: List[PlaceholderPreviewData]
+
+
+class TemplatePreviewResponse(BaseModel):
+    """Response with generated preview."""
+    preview_url: str
+    width: int
+    height: int
 
 
 # ============== Processed Design Schemas ==============
@@ -539,4 +722,5 @@ CategoryWithDetails.model_rebuild()
 DesignPlanWithDetails.model_rebuild()
 SectionWithQuestions.model_rebuild()
 ProcessedDesignWithTemplate.model_rebuild()
+TemplateWithPlaceholders.model_rebuild()
 

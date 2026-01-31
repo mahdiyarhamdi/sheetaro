@@ -84,7 +84,17 @@ export default function AdminDashboardPage() {
     return <PageLoading />;
   }
 
-  const statCards = [
+  const statCards: {
+    title: string;
+    value: number | string;
+    subValue: string;
+    icon: any;
+    color: string;
+    iconColor: string;
+    href?: string;
+    alert?: boolean;
+    isPrice?: boolean;
+  }[] = [
     {
       title: "کل سفارشات",
       value: stats?.total_orders ?? 0,

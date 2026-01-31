@@ -68,23 +68,30 @@ frontend/
 ├── e2e/                        # E2E tests (Playwright)
 │   ├── auth.spec.ts           # Authentication flow tests
 │   ├── order.spec.ts          # Order creation tests
-│   └── admin.spec.ts          # Admin panel tests
+│   ├── admin.spec.ts          # Admin panel tests
+│   └── template-builder.spec.ts # Template builder tests
 ├── public/
 │   └── fonts/                  # IranYekan font files
 ├── src/
 │   ├── __tests__/             # Unit tests (Vitest)
+│   │   ├── api/               # API client tests
 │   │   ├── components/        # Component tests
+│   │   │   └── template-editor/ # Template editor components
+│   │   ├── contracts/         # API contract tests (Zod)
 │   │   ├── hooks/             # Hook tests
 │   │   ├── pages/             # Page tests
+│   │   ├── smoke/             # Smoke tests (real API)
 │   │   ├── mocks/             # MSW mock handlers
 │   │   ├── setup.ts           # Test setup
 │   │   └── utils/             # Test utilities
 │   ├── app/                   # Next.js App Router pages
 │   │   ├── (auth)/            # Auth pages (login, register, verify)
 │   │   ├── (dashboard)/       # Protected dashboard pages
+│   │   │   └── admin/         # Admin pages (catalog, users, fonts)
 │   │   └── layout.tsx         # Root layout
 │   ├── components/
 │   │   ├── layout/            # Layout components (Header, Sidebar, Footer)
+│   │   ├── template-editor/   # Dynamic template builder components
 │   │   └── ui/                # Reusable UI components
 │   ├── hooks/                 # Custom React hooks
 │   │   ├── useAuth.ts         # Authentication hook
@@ -144,14 +151,27 @@ frontend/
 | Components | `Button.test.tsx`, `Input.test.tsx`, `Modal.test.tsx` | UI component tests |
 | Hooks | `useAuth.test.tsx`, `useOrders.test.tsx` | Custom hook tests |
 | Pages | `login.test.tsx`, `register.test.tsx`, `dashboard.test.tsx` | Page component tests |
+| Template Editor | `TemplateCanvas.test.tsx`, `PlaceholderPanel.test.tsx`, `PreviewPanel.test.tsx`, `TemplateEditor.test.tsx` | Dynamic template builder tests |
+| Admin Fonts | `admin-fonts.test.tsx` | Font management page tests |
+| API Tests | `template-api.test.ts`, `template-url-validation.test.ts` | Template API client tests |
+| Contract Tests | `template-contracts.test.ts` | API schema validation (Zod) |
 
-### E2E Tests
+### E2E Tests (Playwright)
 
 | File | Description |
 |------|-------------|
 | `auth.spec.ts` | Registration, login, logout, session persistence |
 | `order.spec.ts` | Order creation, payment upload, order list |
 | `admin.spec.ts` | Payment approval, admin dashboard |
+| `template-builder.spec.ts` | Dynamic template builder workflow |
+
+### Smoke Tests
+
+| File | Description |
+|------|-------------|
+| `admin-catalog.smoke.test.ts` | Real API tests against running backend |
+
+Run smoke tests with: `npm run test:smoke`
 
 ## Development
 
@@ -193,4 +213,4 @@ docker run -p 3000:3000 sheetaro-frontend
 
 ---
 
-**Last Updated**: 2026-01-21
+**Last Updated**: 2026-01-31

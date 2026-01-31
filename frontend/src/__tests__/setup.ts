@@ -40,14 +40,15 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/",
 }));
 
-// Mock localStorage
+// Mock localStorage that actually stores values
+const storage: Record<string, string> = {};
 const localStorageMock = {
-  getItem: vi.fn(),
-  setItem: vi.fn(),
-  removeItem: vi.fn(),
-  clear: vi.fn(),
+  getItem: vi.fn((key: string) => storage[key] ?? null),
+  setItem: vi.fn((key: string, value: string) => { storage[key] = value; }),
+  removeItem: vi.fn((key: string) => { delete storage[key]; }),
+  clear: vi.fn(() => { Object.keys(storage).forEach(key => delete storage[key]); }),
   length: 0,
-  key: vi.fn(),
+  key: vi.fn((index: number) => Object.keys(storage)[index] ?? null),
 };
 
 Object.defineProperty(window, "localStorage", {

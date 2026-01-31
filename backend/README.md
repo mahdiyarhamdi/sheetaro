@@ -270,6 +270,17 @@ python -m pytest tests/ -v -k "auth"
 | Integration Tests | `tests/integration/` | API endpoint tests with database |
 | E2E Tests | `tests/e2e/` | Full flow tests (order creation, payment, etc.) |
 
+### Dynamic Template Builder Tests
+
+| File | Description |
+|------|-------------|
+| `tests/unit/test_template_models.py` | TemplatePlaceholder, SystemFont models |
+| `tests/unit/test_template_schemas.py` | Pydantic validation for placeholder/font schemas |
+| `tests/unit/test_dynamic_template_service.py` | Image/text rendering, color parsing, font loading, preview generation |
+| `tests/integration/test_fonts_api.py` | Font CRUD API endpoints |
+| `tests/integration/test_placeholders_api.py` | Placeholder CRUD API endpoints |
+| `tests/integration/test_template_preview_api.py` | Template preview generation API |
+
 ### Test Fixtures
 
 Main fixtures are defined in `tests/conftest.py`:

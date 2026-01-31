@@ -227,9 +227,109 @@ export interface Template {
   id: string;
   plan_id: string;
   name_fa: string;
-  preview_url: string;
-  placeholder_data?: Record<string, unknown>;
+  description_fa?: string;
+  preview_url?: string;
+  file_url?: string;
+  image_width?: number;
+  image_height?: number;
+  placeholder_x?: number;
+  placeholder_y?: number;
+  placeholder_width?: number;
+  placeholder_height?: number;
+  placeholder_rotation?: number;
   is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+  placeholders?: TemplatePlaceholder[];
+}
+
+// ============ Dynamic Template Types ============
+
+export type PlaceholderType = "IMAGE" | "TEXT";
+export type TextAlign = "left" | "center" | "right";
+
+export interface TemplatePlaceholder {
+  id: string;
+  template_id: string;
+  type: PlaceholderType;
+  name: string;
+  label_fa: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  is_required: boolean;
+  sort_order: number;
+  // Text-specific fields
+  font_family?: string;
+  font_size?: number;
+  font_weight?: number;
+  font_color?: string;
+  text_align?: TextAlign;
+  max_length?: number;
+  default_value?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlaceholderCreateData {
+  type: PlaceholderType;
+  name: string;
+  label_fa: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  rotation?: number;
+  is_required?: boolean;
+  sort_order?: number;
+  font_family?: string;
+  font_size?: number;
+  font_weight?: number;
+  font_color?: string;
+  text_align?: TextAlign;
+  max_length?: number;
+  default_value?: string;
+}
+
+export interface FontVariant {
+  weight: number;
+  style: string;
+  file_url?: string;
+}
+
+export interface SystemFont {
+  id: string;
+  name: string;
+  name_fa: string;
+  file_url?: string;
+  variants: FontVariant[];
+  sample_text?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FontCreateData {
+  name: string;
+  name_fa: string;
+  file_url?: string;
+  variants?: FontVariant[];
+  sample_text?: string;
+}
+
+export interface PlaceholderPreviewData {
+  placeholder_id: string;
+  image_url?: string;
+  text_value?: string;
+}
+
+export interface TemplatePreviewResponse {
+  preview_url: string;
+  width: number;
+  height: number;
 }
 
 export interface Questionnaire {
@@ -339,6 +439,121 @@ export interface RevenueStats {
   by_day: Array<{ date: string; amount: number }>;
 }
 
+// ============ Questionnaire Types ============
+
+export type QuestionInputType = 
+  | "TEXT" 
+  | "TEXTAREA" 
+  | "NUMBER" 
+  | "SINGLE_CHOICE" 
+  | "MULTI_CHOICE" 
+  | "IMAGE_UPLOAD" 
+  | "FILE_UPLOAD" 
+  | "COLOR_PICKER" 
+  | "DATE_PICKER" 
+  | "SCALE";
+
+export interface ValidationRules {
+  min_length?: number;
+  max_length?: number;
+  min_value?: number;
+  max_value?: number;
+  regex?: string;
+  allowed_extensions?: string[];
+  error_message_fa?: string;
+}
+
+export interface QuestionCreateData {
+  question_fa: string;
+  input_type: QuestionInputType;
+  is_required?: boolean;
+  placeholder_fa?: string;
+  help_text_fa?: string;
+  validation_rules?: ValidationRules;
+  depends_on_question_id?: string;
+  depends_on_values?: string[];
+  sort_order?: number;
+  is_active?: boolean;
+  options?: Array<{
+    value: string;
+    label_fa: string;
+    price_modifier?: number;
+    sort_order?: number;
+    is_active?: boolean;
+  }>;
+}
+
+export interface QuestionOptionData {
+  value: string;
+  label_fa: string;
+  price_modifier?: number;
+  sort_order?: number;
+  is_active?: boolean;
+}
+
+export interface SectionData {
+  id: string;
+  plan_id: string;
+  title_fa: string;
+  description_fa?: string;
+  sort_order: number;
+  is_active: boolean;
+  questions?: QuestionData[];
+}
+
+export interface QuestionData {
+  id: string;
+  plan_id: string;
+  section_id?: string;
+  question_fa: string;
+  input_type: QuestionInputType;
+  is_required: boolean;
+  placeholder_fa?: string;
+  help_text_fa?: string;
+  validation_rules?: ValidationRules;
+  depends_on_question_id?: string;
+  depends_on_values?: string[];
+  sort_order: number;
+  is_active: boolean;
+  options?: QuestionOptionData[];
+}
+
+// ============ Template Types ============
+
+export interface TemplateCreateData {
+  name_fa: string;
+  description_fa?: string;
+  preview_url?: string;
+  file_url?: string;
+  image_width?: number;
+  image_height?: number;
+  placeholder_x?: number;
+  placeholder_y?: number;
+  placeholder_width?: number;
+  placeholder_height?: number;
+  placeholder_rotation?: number;
+  is_active?: boolean;
+}
+
+export interface TemplateData {
+  id: string;
+  plan_id: string;
+  name_fa: string;
+  description_fa?: string;
+  preview_url?: string;
+  file_url?: string;
+  image_width?: number;
+  image_height?: number;
+  placeholder_x?: number;
+  placeholder_y?: number;
+  placeholder_width?: number;
+  placeholder_height?: number;
+  placeholder_rotation?: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export const adminApi = {
   // Dashboard stats
   getStats: () => api.get<AdminStats>("/admin/stats"),
@@ -377,6 +592,14 @@ export const adminApi = {
   updateAttribute: (id: string, data: any) => api.patch<any>(`/attributes/${id}`, data),
   deleteAttribute: (id: string) => api.delete(`/attributes/${id}`),
 
+  // Attribute Options management
+  createAttributeOption: (attributeId: string, data: any) => 
+    api.post<any>(`/attributes/${attributeId}/options`, data),
+  updateAttributeOption: (optionId: string, data: any) => 
+    api.patch<any>(`/options/${optionId}`, data),
+  deleteAttributeOption: (optionId: string) => 
+    api.delete(`/options/${optionId}`),
+
   // Users management
   getUsers: (params?: { page?: number; page_size?: number; search?: string; role?: string; is_active?: boolean }) =>
     api.get<{ items: User[]; total: number; page: number; page_size: number }>("/admin/users", { params }),
@@ -398,6 +621,94 @@ export const adminApi = {
     api.get<{ items: any[]; total: number; page: number; page_size: number }>("/admin/payments", { params }),
   verifyPayment: (id: string, approved: boolean, reason?: string) =>
     api.post<any>(`/admin/payments/${id}/verify`, null, { params: { approved, reason } }),
+
+  // ============ Questionnaire Builder API ============
+
+  // Sections management
+  getPlanSections: (planId: string) =>
+    api.get<any[]>(`/plans/${planId}/sections`),
+  createSection: (planId: string, data: { title_fa: string; description_fa?: string; sort_order?: number; is_active?: boolean }) =>
+    api.post<any>(`/plans/${planId}/sections`, data),
+  updateSection: (id: string, data: { title_fa?: string; description_fa?: string; sort_order?: number; is_active?: boolean }) =>
+    api.patch<any>(`/sections/${id}`, data),
+  deleteSection: (id: string) =>
+    api.delete(`/sections/${id}`),
+  reorderSections: (items: Array<{ id: string; sort_order: number }>) =>
+    api.patch<any>(`/sections/reorder`, { items }),
+
+  // Questions management
+  getSectionQuestions: (sectionId: string) =>
+    api.get<any[]>(`/sections/${sectionId}/questions`),
+  createQuestion: (sectionId: string, data: QuestionCreateData) =>
+    api.post<any>(`/sections/${sectionId}/questions`, data),
+  updateQuestion: (id: string, data: Partial<QuestionCreateData>) =>
+    api.patch<any>(`/questions/${id}`, data),
+  deleteQuestion: (id: string) =>
+    api.delete(`/questions/${id}`),
+  reorderQuestions: (items: Array<{ id: string; sort_order: number }>) =>
+    api.patch<any>(`/questions/reorder`, { items }),
+
+  // Question Options management
+  createQuestionOption: (questionId: string, data: { value: string; label_fa: string; price_modifier?: number; sort_order?: number; is_active?: boolean }) =>
+    api.post<any>(`/questions/${questionId}/options`, data),
+  updateQuestionOption: (optionId: string, data: { value?: string; label_fa?: string; price_modifier?: number; sort_order?: number; is_active?: boolean }) =>
+    api.patch<any>(`/question-options/${optionId}`, data),
+  deleteQuestionOption: (optionId: string) =>
+    api.delete(`/question-options/${optionId}`),
+
+  // ============ Template Gallery API ============
+
+  // Templates management
+  getPlanTemplates: (planId: string) =>
+    api.get<Template[]>(`/plans/${planId}/templates`),
+  getTemplateDetails: (id: string) =>
+    api.get<Template>(`/templates/${id}/details`),
+  createTemplate: (planId: string, data: TemplateCreateData) =>
+    api.post<Template>(`/plans/${planId}/templates`, data),
+  updateTemplate: (id: string, data: Partial<TemplateCreateData>) =>
+    api.patch<Template>(`/templates/${id}`, data),
+  deleteTemplate: (id: string) =>
+    api.delete(`/templates/${id}`),
+
+  // ============ Dynamic Template Placeholders API ============
+
+  // Placeholders management
+  getTemplatePlaceholders: (templateId: string) =>
+    api.get<TemplatePlaceholder[]>(`/templates/${templateId}/placeholders`),
+  createPlaceholder: (templateId: string, data: PlaceholderCreateData) =>
+    api.post<TemplatePlaceholder>(`/templates/${templateId}/placeholders`, data),
+  updatePlaceholder: (id: string, data: Partial<PlaceholderCreateData>) =>
+    api.patch<TemplatePlaceholder>(`/placeholders/${id}`, data),
+  deletePlaceholder: (id: string) =>
+    api.delete(`/placeholders/${id}`),
+  reorderPlaceholders: (items: Array<{ id: string; sort_order: number }>) =>
+    api.patch<{ success: boolean }>(`/placeholders/reorder`, { items }),
+  
+  // Template preview
+  generateTemplatePreview: (templateId: string, data: { placeholders: PlaceholderPreviewData[] }) =>
+    api.post<TemplatePreviewResponse>(`/templates/${templateId}/preview`, data),
+
+  // ============ System Fonts API ============
+
+  // Fonts management
+  getFonts: (activeOnly?: boolean) =>
+    api.get<SystemFont[]>("/fonts", { params: { active_only: activeOnly } }),
+  getFont: (id: string) =>
+    api.get<SystemFont>(`/fonts/${id}`),
+  createFont: (data: FontCreateData) =>
+    api.post<SystemFont>("/fonts", data),
+  updateFont: (id: string, data: Partial<FontCreateData & { is_active?: boolean }>) =>
+    api.patch<SystemFont>(`/fonts/${id}`, data),
+  deleteFont: (id: string) =>
+    api.delete(`/fonts/${id}`),
+  addFontVariant: (fontId: string, weight: number, style?: string, fileUrl?: string) =>
+    api.post<SystemFont>(`/fonts/${fontId}/variants`, null, { 
+      params: { weight, style: style || "normal", file_url: fileUrl }
+    }),
+  deleteFontVariant: (fontId: string, weight: number, style?: string) =>
+    api.delete(`/fonts/${fontId}/variants/${weight}`, {
+      params: { style: style || "normal" }
+    }),
 };
 
 // Error helper

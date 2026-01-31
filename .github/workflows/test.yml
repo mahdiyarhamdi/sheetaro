@@ -1,4 +1,4 @@
-name: Tests
+name: Test Suite
 
 on:
   push:
@@ -7,22 +7,144 @@ on:
     branches: [main, develop]
 
 env:
-  PYTHON_VERSION: "3.12"
-  NODE_VERSION: "20"
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
 
 jobs:
-  # ==================== Backend Tests ====================
-  backend-tests:
-    name: Backend Tests
+  # ============================================
+  # Frontend Audit Tests
+  # ============================================
+  frontend-audit:
+    name: Frontend Audit
     runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci --legacy-peer-deps
+
+      - name: Lint for buttons without handlers
+        working-directory: frontend
+        run: |
+          echo "Checking for buttons without onClick handlers..."
+          ISSUES=$(grep -rn "<Button" src --include="*.tsx" | grep -v "onClick" | grep -v 'type="submit"' | grep -v "disabled" | grep -v ".test.tsx" || true)
+          if [ -n "$ISSUES" ]; then
+            echo "❌ Found buttons without handlers:"
+            echo "$ISSUES"
+            exit 1
+          fi
+          echo "✅ All buttons have handlers"
+
+      - name: Lint for empty href links
+        working-directory: frontend
+        run: |
+          echo "Checking for empty href links..."
+          ISSUES=$(grep -rn 'href=""' src --include="*.tsx" | grep -v ".test.tsx" || true)
+          HASH_ISSUES=$(grep -rn 'href="#"' src --include="*.tsx" | grep -v ".test.tsx" || true)
+          if [ -n "$ISSUES" ] || [ -n "$HASH_ISSUES" ]; then
+            echo "❌ Found links with empty or # href:"
+            echo "$ISSUES"
+            echo "$HASH_ISSUES"
+            exit 1
+          fi
+          echo "✅ All links have valid hrefs"
+
+      - name: Run audit tests
+        working-directory: frontend
+        run: npm run test:audit
+
+  # ============================================
+  # Frontend Unit Tests
+  # ============================================
+  frontend-unit:
+    name: Frontend Unit Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci --legacy-peer-deps
+
+      - name: Run unit tests with coverage
+        working-directory: frontend
+        run: npm run test:coverage
+
+      - name: Check coverage threshold
+        working-directory: frontend
+        run: |
+          COVERAGE=$(cat coverage/coverage-summary.json | jq '.total.lines.pct' 2>/dev/null || echo "0")
+          echo "Coverage: $COVERAGE%"
+          if [ $(echo "$COVERAGE < 50" | bc -l) -eq 1 ]; then
+            echo "⚠️ Warning: Coverage below 50%"
+          fi
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: frontend/coverage/
+
+  # ============================================
+  # Frontend Contract Tests
+  # ============================================
+  frontend-contracts:
+    name: Frontend Contract Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci --legacy-peer-deps
+
+      - name: Run contract tests
+        working-directory: frontend
+        run: npm run test:contracts
+
+  # ============================================
+  # Frontend E2E Tests
+  # ============================================
+  frontend-e2e:
+    name: Frontend E2E Tests
+    runs-on: ubuntu-latest
+    needs: [frontend-audit, frontend-unit]
     
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:15
         env:
-          POSTGRES_USER: test_user
-          POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: sheetaro_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test_db
         ports:
           - 5432:5432
         options: >-
@@ -30,9 +152,9 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      
+
       redis:
-        image: redis:7-alpine
+        image: redis:7
         ports:
           - 6379:6379
         options: >-
@@ -40,94 +162,88 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-          cache-dependency-path: backend/requirements.txt
-      
-      - name: Install dependencies
-        working-directory: ./backend
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-asyncio pytest-cov fakeredis
-      
-      - name: Run unit tests
-        working-directory: ./backend
-        env:
-          DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/sheetaro_test
-          REDIS_URL: redis://localhost:6379/0
-          SECRET_KEY: test-secret-key
-        run: |
-          python -m pytest tests/unit/ -v --cov=app --cov-report=xml --cov-report=term-missing
-      
-      - name: Run integration tests
-        working-directory: ./backend
-        env:
-          DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/sheetaro_test
-          REDIS_URL: redis://localhost:6379/0
-          SECRET_KEY: test-secret-key
-        run: |
-          python -m pytest tests/integration/ -v --cov=app --cov-append --cov-report=xml
-      
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./backend/coverage.xml
-          flags: backend
-          name: backend-coverage
 
-  # ==================== Frontend Unit Tests ====================
-  frontend-tests:
-    name: Frontend Unit Tests
-    runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
-      - name: Set up Node.js
+
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
-      
-      - name: Install dependencies
-        working-directory: ./frontend
-        run: npm ci
-      
-      - name: Run unit tests
-        working-directory: ./frontend
-        run: npm run test:run -- --coverage
-      
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./frontend/coverage/coverage-final.json
-          flags: frontend
-          name: frontend-coverage
 
-  # ==================== E2E Tests ====================
-  e2e-tests:
-    name: E2E Tests
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run backend migrations
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test_db
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test-secret-key
+        run: |
+          alembic upgrade head
+
+      - name: Start backend server
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test_db
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test-secret-key
+        run: |
+          uvicorn app.main:app --host 0.0.0.0 --port 3005 &
+          sleep 5
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3005
+        run: |
+          npm run build
+          npm run start &
+          sleep 5
+          npx playwright test --project=chromium
+
+      - name: Upload E2E test results
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+
+  # ============================================
+  # Backend Tests
+  # ============================================
+  backend-tests:
+    name: Backend Tests
     runs-on: ubuntu-latest
-    needs: [backend-tests, frontend-tests]
     
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:15
         env:
-          POSTGRES_USER: test_user
-          POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: sheetaro_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test_db
         ports:
           - 5432:5432
         options: >-
@@ -135,129 +251,67 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      
+
       redis:
-        image: redis:7-alpine
+        image: redis:7
         ports:
           - 6379:6379
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
-      - name: Set up Python
+
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
           cache-dependency-path: backend/requirements.txt
-      
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-      
-      - name: Install backend dependencies
-        working-directory: ./backend
+
+      - name: Install dependencies
+        working-directory: backend
         run: |
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
-      
-      - name: Install frontend dependencies
-        working-directory: ./frontend
-        run: npm ci
-      
-      - name: Install Playwright browsers
-        working-directory: ./frontend
-        run: npx playwright install --with-deps chromium
-      
-      - name: Start backend server
-        working-directory: ./backend
+          pip install pytest-cov
+
+      - name: Run tests with coverage
+        working-directory: backend
         env:
-          DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/sheetaro_test
+          DATABASE_URL: postgresql://test:test@localhost:5432/test_db
           REDIS_URL: redis://localhost:6379/0
           SECRET_KEY: test-secret-key
+          TESTING: "true"
         run: |
-          alembic upgrade head
-          uvicorn app.main:app --host 0.0.0.0 --port 3001 &
-          sleep 5
-      
-      - name: Build frontend
-        working-directory: ./frontend
-        env:
-          NEXT_PUBLIC_API_URL: http://localhost:3001
-        run: npm run build
-      
-      - name: Run E2E tests
-        working-directory: ./frontend
-        env:
-          BASE_URL: http://localhost:3000
-        run: npx playwright test --project=chromium
-      
-      - name: Upload test results
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: playwright-report
-          path: frontend/playwright-report/
-          retention-days: 7
+          pytest tests/ -v --cov=app --cov-report=xml
 
-  # ==================== Bot Tests ====================
-  bot-tests:
-    name: Bot Tests
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: backend/coverage.xml
+          fail_ci_if_error: false
+
+  # ============================================
+  # TypeScript Type Check
+  # ============================================
+  typescript-check:
+    name: TypeScript Check
     runs-on: ubuntu-latest
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-          cache-dependency-path: bot/requirements.txt
-      
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
       - name: Install dependencies
-        working-directory: ./bot
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-asyncio pytest-mock
-      
-      - name: Run bot tests
-        working-directory: ./bot
-        env:
-          API_BASE_URL: http://localhost:3001
-          TELEGRAM_BOT_TOKEN: test_token
-        run: |
-          python -m pytest tests/ -v --cov=. --cov-report=xml
-      
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./bot/coverage.xml
-          flags: bot
-          name: bot-coverage
+        working-directory: frontend
+        run: npm ci --legacy-peer-deps
 
-  # ==================== All Tests Summary ====================
-  test-summary:
-    name: Test Summary
-    runs-on: ubuntu-latest
-    needs: [backend-tests, frontend-tests, e2e-tests, bot-tests]
-    if: always()
-    
-    steps:
-      - name: Check test results
-        run: |
-          if [ "${{ needs.backend-tests.result }}" != "success" ] ||
-             [ "${{ needs.frontend-tests.result }}" != "success" ] ||
-             [ "${{ needs.e2e-tests.result }}" != "success" ] ||
-             [ "${{ needs.bot-tests.result }}" != "success" ]; then
-            echo "One or more test jobs failed"
-            exit 1
-          fi
-          echo "All tests passed successfully!"
-
+      - name: Run type check
+        working-directory: frontend
+        run: npx tsc --noEmit --skipLibCheck

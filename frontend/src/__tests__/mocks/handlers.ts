@@ -651,5 +651,284 @@ export const handlers = [
       status: approved ? "SUCCESS" : "FAILED",
     });
   }),
+
+  // ==================== Template Builder Endpoints ====================
+
+  // Fonts CRUD
+  http.get(`${API_URL}/fonts`, ({ request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    return HttpResponse.json({
+      items: [
+        {
+          id: "font-1",
+          name: "IRANSans",
+          name_fa: "ایران سنس",
+          file_url: "https://example.com/iransans.woff2",
+          variants: [
+            { weight: 400, style: "normal", file_url: "https://example.com/iransans-regular.woff2" },
+            { weight: 700, style: "normal", file_url: "https://example.com/iransans-bold.woff2" },
+          ],
+          sample_text: "نمونه متن فارسی",
+          is_active: true,
+          created_at: "2024-01-01T00:00:00Z",
+          updated_at: "2024-01-01T00:00:00Z",
+        },
+      ],
+      total: 1,
+    });
+  }),
+
+  http.post(`${API_URL}/fonts`, async ({ request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    const body = (await request.json()) as Record<string, unknown>;
+    return HttpResponse.json(
+      {
+        id: "font-new",
+        ...body,
+        variants: body.variants || [],
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { status: 201 }
+    );
+  }),
+
+  http.patch(`${API_URL}/fonts/:id`, async ({ params, request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    const body = (await request.json()) as Record<string, unknown>;
+    return HttpResponse.json({
+      id: params.id,
+      name: body.name || "IRANSans",
+      name_fa: body.name_fa || "ایران سنس",
+      file_url: body.file_url || null,
+      variants: body.variants || [],
+      sample_text: body.sample_text || "نمونه متن",
+      is_active: true,
+      created_at: "2024-01-01T00:00:00Z",
+      updated_at: new Date().toISOString(),
+    });
+  }),
+
+  http.delete(`${API_URL}/fonts/:id`, ({ request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  // Template Placeholders CRUD
+  http.get(`${API_URL}/templates/:templateId/placeholders`, ({ request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    return HttpResponse.json({
+      items: [
+        {
+          id: "ph-1",
+          template_id: "template-1",
+          type: "IMAGE",
+          name: "logo",
+          label_fa: "لوگو",
+          x: 100,
+          y: 100,
+          width: 200,
+          height: 200,
+          rotation: 0,
+          is_required: true,
+          sort_order: 0,
+          font_family: null,
+          font_size: null,
+          font_weight: null,
+          font_color: null,
+          text_align: null,
+          max_length: null,
+          default_value: null,
+          is_active: true,
+          created_at: "2024-01-01T00:00:00Z",
+          updated_at: "2024-01-01T00:00:00Z",
+        },
+      ],
+      total: 1,
+    });
+  }),
+
+  http.post(`${API_URL}/templates/:templateId/placeholders`, async ({ params, request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    const body = (await request.json()) as Record<string, unknown>;
+    return HttpResponse.json(
+      {
+        id: "ph-new",
+        template_id: params.templateId,
+        type: body.type || "IMAGE",
+        name: body.name || "placeholder",
+        label_fa: body.label_fa || "جایگاه",
+        x: body.x || 0,
+        y: body.y || 0,
+        width: body.width || 100,
+        height: body.height || 100,
+        rotation: body.rotation || 0,
+        is_required: body.is_required ?? true,
+        sort_order: body.sort_order || 0,
+        font_family: body.font_family || null,
+        font_size: body.font_size || null,
+        font_weight: body.font_weight || null,
+        font_color: body.font_color || null,
+        text_align: body.text_align || null,
+        max_length: body.max_length || null,
+        default_value: body.default_value || null,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { status: 201 }
+    );
+  }),
+
+  // Update placeholder - using /placeholders/:id (NOT /templates/placeholders/:id)
+  http.patch(`${API_URL}/placeholders/:id`, async ({ params, request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    const body = (await request.json()) as Record<string, unknown>;
+    return HttpResponse.json({
+      id: params.id,
+      template_id: "template-1",
+      type: body.type || "IMAGE",
+      name: body.name || "placeholder",
+      label_fa: body.label_fa || "جایگاه",
+      x: body.x ?? 100,
+      y: body.y ?? 100,
+      width: body.width ?? 200,
+      height: body.height ?? 200,
+      rotation: body.rotation ?? 0,
+      is_required: body.is_required ?? true,
+      sort_order: body.sort_order ?? 0,
+      font_family: body.font_family || null,
+      font_size: body.font_size || null,
+      font_weight: body.font_weight || null,
+      font_color: body.font_color || null,
+      text_align: body.text_align || null,
+      max_length: body.max_length || null,
+      default_value: body.default_value || null,
+      is_active: body.is_active ?? true,
+      created_at: "2024-01-01T00:00:00Z",
+      updated_at: new Date().toISOString(),
+    });
+  }),
+
+  // Delete placeholder - using /placeholders/:id (NOT /templates/placeholders/:id)
+  http.delete(`${API_URL}/placeholders/:id`, ({ request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  // Reorder placeholders - using /placeholders/reorder (NOT /templates/placeholders/reorder)
+  http.patch(`${API_URL}/placeholders/reorder`, async ({ request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    const body = (await request.json()) as { items: Array<{ id: string; sort_order: number }> };
+    return HttpResponse.json({
+      success: true,
+      updated: body.items?.length || 0,
+    });
+  }),
+
+  // Template Preview
+  http.post(`${API_URL}/templates/:templateId/preview`, async ({ params, request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    return HttpResponse.json({
+      preview_url: `https://example.com/previews/${params.templateId}.png`,
+      width: 800,
+      height: 600,
+    });
+  }),
+
+  // Get Template Details
+  http.get(`${API_URL}/templates/:templateId/details`, ({ params, request }) => {
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+    
+    return HttpResponse.json({
+      id: params.templateId,
+      plan_id: "plan-1",
+      name_fa: "قالب تست",
+      description_fa: "توضیحات قالب",
+      preview_url: "https://example.com/preview.png",
+      file_url: "https://example.com/template.png",
+      image_width: 800,
+      image_height: 600,
+      placeholder_x: null,
+      placeholder_y: null,
+      placeholder_width: null,
+      placeholder_height: null,
+      placeholder_rotation: null,
+      sort_order: 0,
+      is_active: true,
+      created_at: "2024-01-01T00:00:00Z",
+      updated_at: "2024-01-01T00:00:00Z",
+      placeholders: [
+        {
+          id: "ph-1",
+          template_id: params.templateId,
+          type: "IMAGE",
+          name: "logo",
+          label_fa: "لوگو",
+          x: 100,
+          y: 100,
+          width: 200,
+          height: 200,
+          rotation: 0,
+          is_required: true,
+          sort_order: 0,
+          font_family: null,
+          font_size: null,
+          font_weight: null,
+          font_color: null,
+          text_align: null,
+          max_length: null,
+          default_value: null,
+          is_active: true,
+          created_at: "2024-01-01T00:00:00Z",
+          updated_at: "2024-01-01T00:00:00Z",
+        },
+      ],
+    });
+  }),
 ];
 

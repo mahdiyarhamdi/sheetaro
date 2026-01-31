@@ -17,7 +17,10 @@ from app.schemas.category import (
     QuestionCreate, QuestionUpdate, QuestionOut, QuestionWithOptions,
     QuestionReorderRequest, ValidateAnswerRequest, ValidateAnswerResponse,
     QuestionOptionCreate, QuestionOptionUpdate, QuestionOptionOut,
-    TemplateCreate, TemplateUpdate, TemplateOut, ApplyLogoRequest, ApplyLogoResponse,
+    TemplateCreate, TemplateUpdate, TemplateOut, TemplateWithPlaceholders,
+    ApplyLogoRequest, ApplyLogoResponse,
+    PlaceholderCreate, PlaceholderUpdate, PlaceholderOut, PlaceholderReorderRequest,
+    TemplatePreviewRequest, TemplatePreviewResponse,
     ProcessedDesignOut, ProcessedDesignCreate, ProcessedDesignWithTemplate,
     StepTemplateCreate, StepTemplateUpdate, StepTemplateOut,
     QuestionAnswerOut, QuestionAnswerCreate, SubmitAnswersRequest,
@@ -667,6 +670,136 @@ async def apply_logo_to_template(
         return ApplyLogoResponse(**result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ============== Template Placeholder Endpoints ==============
+
+@templates_router.get("/{template_id}/placeholders", response_model=List[PlaceholderOut])
+async def list_placeholders(
+    template_id: UUID,
+    active_only: bool = True,
+    db: AsyncSession = Depends(get_db),
+):
+    """List all placeholders for a template."""
+    repo = CategoryRepository(db)
+    return await repo.get_placeholders(template_id, active_only)
+
+
+@templates_router.get("/{template_id}/details", response_model=TemplateWithPlaceholders)
+async def get_template_with_placeholders(
+    template_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a template with all its placeholders."""
+    repo = CategoryRepository(db)
+    template = await repo.get_template_with_placeholders(template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return template
+
+
+@templates_router.post("/{template_id}/placeholders", response_model=PlaceholderOut, status_code=status.HTTP_201_CREATED)
+async def create_placeholder(
+    template_id: UUID,
+    data: PlaceholderCreate,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(get_current_admin_user),
+):
+    """Create a new placeholder. Admin only."""
+    repo = CategoryRepository(db)
+    
+    # Verify template exists
+    template = await repo.get_template_by_id(template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    return await repo.create_placeholder(template_id, data)
+
+
+@templates_router.post("/{template_id}/preview", response_model=TemplatePreviewResponse)
+async def generate_template_preview(
+    template_id: UUID,
+    data: TemplatePreviewRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate a preview of the template with sample data."""
+    repo = CategoryRepository(db)
+    template = await repo.get_template_with_placeholders(template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    # Process template with placeholder data
+    template_service = TemplateService(repository=repo)
+    base_url = str(request.base_url).rstrip('/')
+    
+    try:
+        result = await template_service.generate_preview(
+            template=template,
+            placeholder_data=data.placeholders,
+            base_url=base_url,
+        )
+        return TemplatePreviewResponse(**result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# Placeholders CRUD (outside template scope)
+placeholders_router = APIRouter(prefix="/api/v1/placeholders", tags=["placeholders"])
+
+
+@placeholders_router.get("/{placeholder_id}", response_model=PlaceholderOut)
+async def get_placeholder(
+    placeholder_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a placeholder by ID."""
+    repo = CategoryRepository(db)
+    placeholder = await repo.get_placeholder_by_id(placeholder_id)
+    if not placeholder:
+        raise HTTPException(status_code=404, detail="Placeholder not found")
+    return placeholder
+
+
+@placeholders_router.patch("/{placeholder_id}", response_model=PlaceholderOut)
+async def update_placeholder(
+    placeholder_id: UUID,
+    data: PlaceholderUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(get_current_admin_user),
+):
+    """Update a placeholder. Admin only."""
+    repo = CategoryRepository(db)
+    placeholder = await repo.update_placeholder(placeholder_id, data)
+    if not placeholder:
+        raise HTTPException(status_code=404, detail="Placeholder not found")
+    return placeholder
+
+
+@placeholders_router.delete("/{placeholder_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_placeholder(
+    placeholder_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(get_current_admin_user),
+):
+    """Delete a placeholder. Admin only."""
+    repo = CategoryRepository(db)
+    deleted = await repo.delete_placeholder(placeholder_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Placeholder not found")
+
+
+@placeholders_router.patch("/reorder", status_code=status.HTTP_200_OK)
+async def reorder_placeholders(
+    data: PlaceholderReorderRequest,
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(get_current_admin_user),
+):
+    """Reorder placeholders. Admin only."""
+    repo = CategoryRepository(db)
+    items = [{"id": item.id, "sort_order": item.sort_order} for item in data.items]
+    await repo.reorder_placeholders(items)
+    return {"success": True}
 
 
 # ============== Step Template Endpoints ==============

@@ -302,7 +302,6 @@ async def create_test_category(db_session: AsyncSession, data: dict = None):
     category_data = data or {
         "slug": "test-category",
         "name_fa": "دسته تست",
-        "name_en": "Test Category",
         "description_fa": "توضیحات تست",
         "sort_order": 1,
         "is_active": True,
@@ -343,14 +342,12 @@ async def create_test_plan_with_questionnaire(db_session: AsyncSession, category
 async def create_test_plan_with_templates(db_session: AsyncSession, category, data: dict = None):
     """Create a plan configured for public (has_templates=True)."""
     from app.models.design_plan import CategoryDesignPlan
-    from app.models.design_plan import DesignPlanType
     
     plan_data = data or {
         "category_id": category.id,
         "slug": "public",
         "name_fa": "عمومی",
-        "name_en": "Public",
-        "plan_type": DesignPlanType.PUBLIC,
+        "description_fa": "پلن عمومی با قالب",
         "has_questionnaire": False,
         "has_templates": True,
         "price": Decimal("0"),

@@ -22,10 +22,12 @@ from app.api.routers.categories import (
     questions_router,
     question_options_router,
     templates_router,
+    placeholders_router,
     step_templates_router,
     processed_designs_router,
     answers_router,
 )
+from app.api.routers.fonts import router as fonts_router
 from app.utils.logger import logger, set_request_context, clear_request_context
 
 
@@ -289,6 +291,8 @@ app.include_router(sections_router, tags=["Sections"])
 app.include_router(questions_router, tags=["Questions"])
 app.include_router(question_options_router, tags=["Question Options"])
 app.include_router(templates_router, tags=["Templates"])
+app.include_router(placeholders_router, tags=["Placeholders"])
+app.include_router(fonts_router, tags=["Fonts"])
 app.include_router(step_templates_router, tags=["Step Templates"])
 app.include_router(processed_designs_router, tags=["Processed Designs"])
 app.include_router(answers_router, tags=["Answers"])
