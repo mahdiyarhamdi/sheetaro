@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Template,
@@ -60,6 +60,7 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
   const [localPlaceholders, setLocalPlaceholders] = useState<TemplatePlaceholder[]>([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Fetch template with placeholders
   const { data: template, isLoading } = useQuery({
@@ -68,10 +69,14 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
       const response = await adminApi.getTemplateDetails(templateId);
       return response.data;
     },
-    onSuccess: (data) => {
-      setLocalPlaceholders(data.placeholders || []);
-    },
   });
+  
+  // Sync local placeholders with fetched data
+  useEffect(() => {
+    if (template?.placeholders) {
+      setLocalPlaceholders(template.placeholders);
+    }
+  }, [template?.placeholders]);
 
   // Mutations
   const createPlaceholderMutation = useMutation({
@@ -93,8 +98,13 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
   const updatePlaceholderMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<PlaceholderCreateData> }) =>
       adminApi.updatePlaceholder(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["template-details", templateId] });
+    onSuccess: (response) => {
+      // Update local state directly instead of invalidating query
+      // This prevents race conditions when saving multiple placeholders
+      const updatedPlaceholder = response.data;
+      setLocalPlaceholders((prev) =>
+        prev.map((p) => (p.id === updatedPlaceholder.id ? updatedPlaceholder : p))
+      );
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.detail || "خطا در به‌روزرسانی");
@@ -223,9 +233,29 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
     }
   };
 
-  // Handle close with save
+  // Handle close with save - saves all placeholders before closing
   const handleClose = async () => {
-    await handleSaveAll();
+    // Save all placeholder positions before closing
+    try {
+      const savePromises = localPlaceholders.map(async (placeholder) => {
+        try {
+          await adminApi.updatePlaceholder(placeholder.id, {
+            x: placeholder.x,
+            y: placeholder.y,
+            width: placeholder.width,
+            height: placeholder.height,
+            rotation: placeholder.rotation,
+          });
+        } catch (error) {
+          console.error(`Failed to save placeholder ${placeholder.id}:`, error);
+        }
+      });
+      await Promise.all(savePromises);
+      // Invalidate queries so next open gets fresh data
+      queryClient.invalidateQueries({ queryKey: ["template-details", templateId] });
+    } catch (error) {
+      console.error("Error saving placeholders on close:", error);
+    }
     onClose();
   };
 
@@ -355,37 +385,47 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
 
           {/* Save Button - Always enabled to save any position changes */}
           <Button 
-            variant="default"
+            variant="primary"
             onClick={async () => {
-              // Save all placeholder positions to server
-              let savedCount = 0;
-              for (const placeholder of localPlaceholders) {
-                try {
-                  await updatePlaceholderMutation.mutateAsync({
-                    id: placeholder.id,
-                    data: {
+              if (isSaving) return;
+              setIsSaving(true);
+              
+              try {
+                // Save all placeholder positions to server in parallel
+                let savedCount = 0;
+                const savePromises = localPlaceholders.map(async (placeholder) => {
+                  try {
+                    await adminApi.updatePlaceholder(placeholder.id, {
                       x: placeholder.x,
                       y: placeholder.y,
                       width: placeholder.width,
                       height: placeholder.height,
                       rotation: placeholder.rotation,
-                    },
-                  });
-                  savedCount++;
-                } catch (error) {
-                  // Continue with other placeholders
+                    });
+                    savedCount++;
+                  } catch (error) {
+                    console.error(`Failed to save placeholder ${placeholder.id}:`, error);
+                  }
+                });
+                
+                await Promise.all(savePromises);
+                setHasUnsavedChanges(false);
+                
+                // Invalidate queries once after all saves complete
+                queryClient.invalidateQueries({ queryKey: ["template-details", templateId] });
+                
+                if (savedCount > 0) {
+                  toast.success(`${savedCount} جایگاه ذخیره شد`);
+                } else {
+                  toast.success("تغییرات ذخیره شد");
                 }
-              }
-              setHasUnsavedChanges(false);
-              if (savedCount > 0) {
-                toast.success(`${savedCount} جایگاه ذخیره شد`);
-              } else {
-                toast.success("تغییرات ذخیره شد");
+              } finally {
+                setIsSaving(false);
               }
             }}
-            disabled={updatePlaceholderMutation.isPending}
+            disabled={isSaving}
           >
-            {updatePlaceholderMutation.isPending ? (
+            {isSaving ? (
               <Loader2 className="w-4 h-4 ml-1 animate-spin" />
             ) : (
               <Save className="w-4 h-4 ml-1" />
@@ -397,7 +437,7 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
           <Button 
             variant="outline" 
             onClick={handleClose}
-            disabled={updatePlaceholderMutation.isPending}
+            disabled={isSaving}
           >
             بستن
           </Button>

@@ -70,7 +70,9 @@ export default function AdminFontsPage() {
     weight: 400,
     style: "normal",
     file_url: "",
-    file: null,
+    file_ttf: null,
+    file_woff: null,
+    file_woff2: null,
   });
   const [isUploadingVariant, setIsUploadingVariant] = useState(false);
 
