@@ -9,9 +9,31 @@ from PIL import Image, ImageDraw, ImageFont
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Libraries for Persian/Arabic text rendering
+import arabic_reshaper
+from bidi.algorithm import get_display
+
 from app.models.design_template import DesignTemplate, TemplatePlaceholder, PlaceholderType
 from app.models.system_font import SystemFont
 from app.repositories.category_repository import CategoryRepository
+
+
+def reshape_persian_text(text: str) -> str:
+    """Reshape Persian/Arabic text for correct rendering with Pillow.
+    
+    Persian/Arabic text requires:
+    1. Reshaping: Characters change form based on position (initial, medial, final, isolated)
+    2. BiDi: Right-to-left text direction
+    """
+    try:
+        # Reshape the text (connect characters properly)
+        reshaped = arabic_reshaper.reshape(text)
+        # Apply bidirectional algorithm (RTL)
+        bidi_text = get_display(reshaped)
+        return bidi_text
+    except Exception:
+        # Fallback to original text if reshaping fails
+        return text
 
 
 class TemplateService:
@@ -444,8 +466,11 @@ class TemplateService:
         # Parse color (support hex with optional alpha)
         color = self._parse_color(placeholder.font_color or "#000000")
         
+        # Reshape Persian/Arabic text for correct rendering
+        display_text = reshape_persian_text(text)
+        
         # Calculate text position based on alignment
-        text_bbox = draw.textbbox((0, 0), text, font=font)
+        text_bbox = draw.textbbox((0, 0), display_text, font=font)
         text_width = text_bbox[2] - text_bbox[0]
         text_height = text_bbox[3] - text_bbox[1]
         
@@ -460,8 +485,8 @@ class TemplateService:
         # Vertical center
         y = placeholder.y + (placeholder.height - text_height) // 2
         
-        # Draw text
-        draw.text((x, y), text, fill=color, font=font)
+        # Draw text with reshaped Persian text
+        draw.text((x, y), display_text, fill=color, font=font)
         
         return result
     

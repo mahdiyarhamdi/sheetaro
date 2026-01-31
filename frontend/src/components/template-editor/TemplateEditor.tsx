@@ -353,15 +353,30 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
             </button>
           </div>
 
+          {/* Save Button */}
+          <Button 
+            variant="default"
+            onClick={async () => {
+              await handleSaveAll();
+              toast.success("تغییرات ذخیره شد");
+            }}
+            disabled={!hasUnsavedChanges || updatePlaceholderMutation.isPending}
+          >
+            {updatePlaceholderMutation.isPending ? (
+              <Loader2 className="w-4 h-4 ml-1 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4 ml-1" />
+            )}
+            ذخیره تغییرات
+          </Button>
+
+          {/* Close Button */}
           <Button 
             variant="outline" 
             onClick={handleClose}
             disabled={updatePlaceholderMutation.isPending}
           >
-            {updatePlaceholderMutation.isPending ? (
-              <Loader2 className="w-4 h-4 ml-1 animate-spin" />
-            ) : null}
-            {hasUnsavedChanges ? "ذخیره و بستن" : "بستن"}
+            بستن
           </Button>
         </div>
       </div>
