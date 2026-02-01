@@ -20,13 +20,13 @@ class PaymentBase(BaseModel):
 class PaymentInitiate(BaseModel):
     """Schema for initiating a payment."""
     order_id: UUID = Field(..., description="Order ID")
-    type: PaymentType = Field(..., description="Payment type")
-    callback_url: str = Field(..., description="Callback URL after payment")
+    type: Optional[PaymentType] = Field(None, description="Payment type (optional, defaults to FULL order payment)")
+    callback_url: Optional[str] = Field(None, description="Callback URL after payment (optional for card-to-card)")
 
 
 class PaymentInitiateResponse(BaseModel):
     """Response schema for payment initiation."""
-    payment_id: UUID
+    id: UUID  # Changed from payment_id to match frontend Payment interface
     authority: str
     redirect_url: str
     amount: Decimal

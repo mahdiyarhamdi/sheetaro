@@ -183,6 +183,29 @@ async def get_template_file(
     )
 
 
+@router.get(
+    "/files/receipts/{filename}",
+    summary="Get receipt image",
+    description="Download a payment receipt image",
+)
+async def get_receipt_file(
+    filename: str,
+) -> FileResponse:
+    """Get a receipt image file."""
+    file_path = UPLOAD_DIR / "receipts" / filename
+    
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found"
+        )
+    
+    return FileResponse(
+        path=str(file_path),
+        filename=filename,
+    )
+
+
 @router.post(
     "/fonts/upload",
     response_model=FontUploadResponse,

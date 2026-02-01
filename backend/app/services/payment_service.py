@@ -86,10 +86,14 @@ class PaymentService:
         if order.user_id != user_id:
             raise ValueError("Access denied")
         
+        # Determine payment type (default to FULL order payment if not specified)
+        payment_type = payment_data.type if payment_data.type else PaymentType.VALIDATION
+        
         # Get amount based on payment type
-        amount = self._get_payment_amount(order, payment_data.type)
+        amount = self._get_payment_amount(order, payment_type)
         if amount <= 0:
-            raise ValueError("Invalid payment amount")
+            # If no specific amount for type, use total price
+            amount = order.total_price
         
         # Generate authority (in real implementation, call PSP API)
         authority = f"A{uuid4().hex[:32]}"
@@ -98,10 +102,10 @@ class PaymentService:
         payment = await self.repository.create(
             order_id=order.id,
             user_id=user_id,
-            payment_type=payment_data.type,
+            payment_type=payment_type,
             amount=amount,
             authority=authority,
-            description=f"پرداخت {payment_data.type.value} برای سفارش {order.id}",
+            description=f"پرداخت برای سفارش {order.id}",
         )
         
         log_event(
@@ -110,14 +114,14 @@ class PaymentService:
             order_id=str(order.id),
             user_id=str(user_id),
             amount=str(amount),
-            type=payment_data.type.value,
+            type=payment_type.value,
         )
         
         # Generate redirect URL (mock)
         redirect_url = f"{MOCK_PSP_URL}{authority}"
         
         return PaymentInitiateResponse(
-            payment_id=payment.id,
+            id=payment.id,
             authority=authority,
             redirect_url=redirect_url,
             amount=amount,

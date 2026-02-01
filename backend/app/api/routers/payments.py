@@ -1,10 +1,14 @@
 """Payment API router."""
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
-from uuid import UUID
+from uuid import UUID, uuid4
+from pathlib import Path
 
-from app.api.deps import get_db, AuthenticatedUser, require_admin_by_query
+from app.api.deps import (
+    get_db, AuthenticatedUser, require_admin_by_query,
+    get_user_id_from_token_or_query
+)
 from app.core.rate_limit import limiter, RateLimits
 from app.schemas.payment import (
     PaymentInitiate, PaymentInitiateResponse, PaymentCallback,
@@ -12,6 +16,13 @@ from app.schemas.payment import (
     ReceiptUpload, PaymentApprove, PaymentReject
 )
 from app.services.payment_service import PaymentService
+from app.services.file_service import UPLOAD_DIR
+
+# Upload directory for receipts
+RECEIPT_UPLOAD_DIR = UPLOAD_DIR / "receipts"
+RECEIPT_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+MAX_RECEIPT_SIZE = 5 * 1024 * 1024  # 5MB
+ALLOWED_RECEIPT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/jpg"}
 
 router = APIRouter()
 
@@ -27,7 +38,7 @@ router = APIRouter()
 async def initiate_payment(
     request: Request,
     payment_data: PaymentInitiate,
-    user_id: UUID = Query(..., description="User ID"),
+    user_id: UUID = Depends(get_user_id_from_token_or_query),
     db: AsyncSession = Depends(get_db),
 ) -> PaymentInitiateResponse:
     """Initiate a payment."""
@@ -145,17 +156,44 @@ async def get_payment_summary(
 async def upload_receipt(
     request: Request,
     payment_id: UUID,
-    receipt_data: ReceiptUpload,
-    user_id: UUID = Query(..., description="User ID"),
+    receipt: UploadFile = File(..., description="Receipt image file"),
+    user_id: UUID = Depends(get_user_id_from_token_or_query),
     db: AsyncSession = Depends(get_db),
 ) -> PaymentOut:
     """Upload receipt for card-to-card payment."""
+    # Validate file type
+    if receipt.content_type not in ALLOWED_RECEIPT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="فرمت فایل نامعتبر است. فقط JPEG، PNG و WebP مجاز هستند."
+        )
+    
+    # Read and validate file size
+    content = await receipt.read()
+    if len(content) > MAX_RECEIPT_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"حجم فایل بیش از {MAX_RECEIPT_SIZE / 1024 / 1024:.0f} مگابایت است."
+        )
+    
+    # Generate unique filename
+    ext = Path(receipt.filename or "receipt.jpg").suffix or ".jpg"
+    filename = f"{uuid4().hex}{ext}"
+    filepath = RECEIPT_UPLOAD_DIR / filename
+    
+    # Save file
+    with open(filepath, "wb") as f:
+        f.write(content)
+    
+    # Generate URL
+    receipt_image_url = f"/files/receipts/{filename}"
+    
     service = PaymentService(db)
     try:
         return await service.upload_receipt(
             payment_id=payment_id,
             user_id=user_id,
-            receipt_image_url=receipt_data.receipt_image_url,
+            receipt_image_url=receipt_image_url,
         )
     except ValueError as e:
         raise HTTPException(
