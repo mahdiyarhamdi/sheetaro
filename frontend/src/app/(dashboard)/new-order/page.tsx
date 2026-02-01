@@ -192,7 +192,7 @@ export default function NewOrderPage() {
         if (selectedValue && attr.options) {
           const option = attr.options.find((o) => o.value === selectedValue);
           if (option) {
-            price += Number(option.extra_price) || 0;
+            price += Number(option.price_modifier) || 0;
           }
         }
       });
@@ -316,12 +316,12 @@ export default function NewOrderPage() {
 
     createOrder({
       data: {
-        category_id: orderData.category_id,
+      category_id: orderData.category_id,
         design_plan: designPlan,
         selected_attributes: selectedAttributes,
         quantity: orderData.quantity,
         validation_requested: orderData.wants_validation,
-        template_id: orderData.template_id,
+      template_id: orderData.template_id,
       },
       userId: user.id,
     }, {
@@ -399,31 +399,31 @@ export default function NewOrderPage() {
                   {attr.options && attr.options.length > 0 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {attr.options.map((option) => {
-                        const extraPrice = Number(option.extra_price) || 0;
+                        const extraPrice = Number(option.price_modifier) || 0;
                         return (
-                          <button
-                            key={option.id}
-                            type="button"
-                            onClick={() =>
-                              setOrderData({
-                                ...orderData,
-                                attributes: { ...orderData.attributes, [attr.id]: option.value },
-                              })
-                            }
-                            className={cn(
-                              "p-3 rounded-lg border text-sm text-right transition-all",
-                              orderData.attributes[attr.id] === option.value
-                                ? "border-primary bg-primary-50 text-primary"
-                                : "border-border hover:border-primary/30"
-                            )}
-                          >
-                            <span className="block font-medium">{option.label_fa}</span>
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() =>
+                            setOrderData({
+                              ...orderData,
+                              attributes: { ...orderData.attributes, [attr.id]: option.value },
+                            })
+                          }
+                          className={cn(
+                            "p-3 rounded-lg border text-sm text-right transition-all",
+                            orderData.attributes[attr.id] === option.value
+                              ? "border-primary bg-primary-50 text-primary"
+                              : "border-border hover:border-primary/30"
+                          )}
+                        >
+                          <span className="block font-medium">{option.label_fa}</span>
                             {extraPrice > 0 && (
                               <Badge variant="secondary" className="mt-1 text-xs">
                                 +{formatPrice(extraPrice)}
                               </Badge>
-                            )}
-                          </button>
+                          )}
+                        </button>
                         );
                       })}
                     </div>
@@ -1048,8 +1048,8 @@ export default function NewOrderPage() {
                   )}
                   
                   <div className="flex items-center justify-between pt-2 border-t border-border text-lg">
-                    <span className="font-semibold">مبلغ کل</span>
-                    <span className="font-bold text-primary">{formatPrice(totalPrice)}</span>
+                  <span className="font-semibold">مبلغ کل</span>
+                  <span className="font-bold text-primary">{formatPrice(totalPrice)}</span>
                   </div>
                 </div>
               </CardContent>

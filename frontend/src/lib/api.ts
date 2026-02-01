@@ -203,7 +203,7 @@ export interface AttributeOption {
   id: string;
   label_fa: string;
   value: string;
-  extra_price: number;
+  price_modifier: number;
 }
 
 export const catalogApi = {
