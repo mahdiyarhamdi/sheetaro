@@ -186,7 +186,7 @@ async def upload_receipt(
         f.write(content)
     
     # Generate URL
-    receipt_image_url = f"/files/receipts/{filename}"
+    receipt_image_url = f"/api/v1/files/receipts/{filename}"
     
     service = PaymentService(db)
     try:
