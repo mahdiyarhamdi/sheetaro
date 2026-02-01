@@ -203,6 +203,35 @@ async def upload_receipt(
 
 
 @router.post(
+    "/payments/{payment_id}/upload-receipt-url",
+    response_model=PaymentOut,
+    summary="Upload payment receipt URL (bot)",
+    description="Upload receipt image URL for card-to-card payment (used by Telegram bot)",
+)
+@limiter.limit(RateLimits.RECEIPT_UPLOAD)
+async def upload_receipt_url(
+    request: Request,
+    payment_id: UUID,
+    receipt_data: ReceiptUpload,
+    user_id: UUID = Depends(get_user_id_from_token_or_query),
+    db: AsyncSession = Depends(get_db),
+) -> PaymentOut:
+    """Upload receipt URL for card-to-card payment (bot endpoint)."""
+    service = PaymentService(db)
+    try:
+        return await service.upload_receipt(
+            payment_id=payment_id,
+            user_id=user_id,
+            receipt_image_url=receipt_data.receipt_image_url,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post(
     "/payments/{payment_id}/approve",
     response_model=PaymentOut,
     summary="Approve payment (admin)",

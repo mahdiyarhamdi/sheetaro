@@ -238,11 +238,11 @@ class APIClient:
         user_id: str,
         receipt_image_url: str,
     ) -> Optional[Dict[str, Any]]:
-        """Upload receipt for card-to-card payment."""
+        """Upload receipt URL for card-to-card payment."""
         client = await self._get_client()
         try:
             response = await client.post(
-                f"/api/v1/payments/{payment_id}/upload-receipt",
+                f"/api/v1/payments/{payment_id}/upload-receipt-url",
                 json={"receipt_image_url": receipt_image_url},
                 params={"user_id": user_id}
             )
@@ -1039,6 +1039,66 @@ class APIClient:
                 return {"success": False, "message": "خطا در تأیید کد"}
         except httpx.HTTPError as e:
             logger.error(f"Error verifying telegram link: {e}")
+            return None
+    
+    # ==================== Validation APIs ====================
+    
+    async def get_pending_validations(
+        self,
+        admin_id: str,
+        status: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> Optional[Dict[str, Any]]:
+        """Get validation requests (admin only)."""
+        client = await self._get_client()
+        try:
+            params = {"admin_id": admin_id, "page": page, "page_size": page_size}
+            if status:
+                params["status"] = status
+            response = await client.get("/api/v1/admin/validations", params=params)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error getting validations: {e}")
+            return None
+    
+    async def approve_validation(
+        self,
+        order_id: str,
+        admin_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Approve validation for an order (admin only)."""
+        client = await self._get_client()
+        try:
+            response = await client.post(
+                f"/api/v1/admin/validations/{order_id}/approve",
+                params={"admin_id": admin_id}
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error approving validation: {e}")
+            return None
+    
+    async def reject_validation(
+        self,
+        order_id: str,
+        admin_id: str,
+        comment: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Reject validation with correction comment (admin only)."""
+        client = await self._get_client()
+        try:
+            response = await client.post(
+                f"/api/v1/admin/validations/{order_id}/reject",
+                json={"comment": comment},
+                params={"admin_id": admin_id}
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error rejecting validation: {e}")
             return None
 
 
