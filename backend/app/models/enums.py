@@ -35,6 +35,12 @@ class DesignPlan(str, Enum):
 
 class OrderStatus(str, Enum):
     """Order status values."""
+    # Payment statuses
+    PENDING_PAYMENT = "PENDING_PAYMENT"  # Waiting for receipt upload
+    PAYMENT_UPLOADED = "PAYMENT_UPLOADED"  # Receipt uploaded, awaiting admin approval
+    PAYMENT_APPROVED = "PAYMENT_APPROVED"  # Payment approved by admin
+    PAYMENT_REJECTED = "PAYMENT_REJECTED"  # Payment rejected by admin
+    # Order processing statuses
     PENDING = "PENDING"
     AWAITING_VALIDATION = "AWAITING_VALIDATION"
     NEEDS_ACTION = "NEEDS_ACTION"

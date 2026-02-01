@@ -133,14 +133,10 @@ class OrderService:
             validation_requested=order_data.validation_requested,
         )
         
-        # Determine initial status
-        initial_status = OrderStatus.PENDING
-        if order_data.validation_requested:
-            initial_status = OrderStatus.AWAITING_VALIDATION
-        elif order_data.design_plan in [DesignPlan.SEMI_PRIVATE, DesignPlan.PRIVATE]:
-            initial_status = OrderStatus.DESIGNING
-        
-        prices['status'] = initial_status
+        # All orders start with PENDING_PAYMENT status
+        # After payment is approved, the order will transition to the appropriate next status
+        # based on validation_requested and design_plan
+        prices['status'] = OrderStatus.PENDING_PAYMENT
         
         # Create order
         order = await self.repository.create(user_id, order_data, prices)

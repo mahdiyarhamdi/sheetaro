@@ -6,7 +6,7 @@ import Image from "next/image";
 import { useCategories, useCategoryAttributes, useCategoryPlans, usePlanTemplates, usePlanQuestionnaire, useTemplatePlaceholders, useTemplatePreview } from "@/hooks/useCatalog";
 import { useOrders } from "@/hooks/useOrders";
 import { useAuth } from "@/hooks/useAuth";
-import { filesApi, PlaceholderImageUploadResponse } from "@/lib/api";
+import { filesApi, paymentsApi, PlaceholderImageUploadResponse } from "@/lib/api";
 import {
   Card,
   CardHeader,
@@ -35,6 +35,8 @@ import {
   LayoutTemplate,
   ShieldCheck,
   AlertTriangle,
+  Copy,
+  X,
 } from "lucide-react";
 import { cn, formatPrice, toPersianNumber } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -44,9 +46,10 @@ type BaseStep = "category" | "attributes" | "plan";
 type PublicPlanStep = "template" | "placeholders" | "validation";
 type SemiPrivateStep = "questionnaire" | "validation";
 type PrivateStep = "upload" | "validation";
+type PaymentStep = "payment";
 type FinalStep = "summary";
 
-type OrderStep = BaseStep | PublicPlanStep | SemiPrivateStep | PrivateStep | FinalStep;
+type OrderStep = BaseStep | PublicPlanStep | SemiPrivateStep | PrivateStep | PaymentStep | FinalStep;
 
 interface PlaceholderValue {
   type: "IMAGE" | "TEXT";
@@ -89,6 +92,19 @@ export default function NewOrderPage() {
     quantity: 1,
   });
   const [uploadingImage, setUploadingImage] = useState<string | null>(null);
+  
+  // Payment receipt state
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Bank card info (should come from API/settings)
+  const bankInfo = {
+    cardNumber: "6037-9979-1234-5678",
+    cardHolder: "شرکت شیتارو",
+    bank: "بانک ملی",
+  };
 
   // Fetch data
   const { data: categories, isLoading: isLoadingCategories } = useCategories();
@@ -139,7 +155,8 @@ export default function NewOrderPage() {
     if (!selectedPlan) {
       return [
         ...baseSteps,
-        { id: "summary" as OrderStep, label: "تأیید نهایی", icon: CreditCard },
+        { id: "summary" as OrderStep, label: "خلاصه سفارش", icon: FileText },
+        { id: "payment" as OrderStep, label: "پرداخت", icon: CreditCard },
       ];
     }
 
@@ -166,7 +183,8 @@ export default function NewOrderPage() {
     return [
       ...baseSteps,
       ...planSpecificSteps,
-      { id: "summary" as OrderStep, label: "تأیید نهایی", icon: CreditCard },
+      { id: "summary" as OrderStep, label: "خلاصه سفارش", icon: FileText },
+      { id: "payment" as OrderStep, label: "پرداخت", icon: CreditCard },
     ];
   };
 
@@ -262,6 +280,8 @@ export default function NewOrderPage() {
         return true; // Always can proceed from validation step
       case "summary":
         return true;
+      case "payment":
+        return !!receiptFile; // Must upload receipt to proceed
       default:
         return true;
     }
@@ -301,49 +321,96 @@ export default function NewOrderPage() {
     }
   };
 
-  const handleSubmit = () => {
+  const handleReceiptSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setReceiptFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setReceiptPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleCopyCard = async () => {
+    await navigator.clipboard.writeText(bankInfo.cardNumber.replace(/-/g, ""));
+    setCopied(true);
+    toast.success("شماره کارت کپی شد");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSubmit = async () => {
     if (!user?.id) {
       toast.error("لطفاً ابتدا وارد شوید");
       return;
     }
 
-    // Map plan characteristics to design_plan enum
-    let designPlan: "PUBLIC" | "SEMI_PRIVATE" | "PRIVATE" | "OWN_DESIGN" = "PUBLIC";
-    if (selectedPlan) {
-      if (selectedPlan.has_templates) {
-        designPlan = "PUBLIC";
-      } else if (selectedPlan.has_questionnaire) {
-        designPlan = "SEMI_PRIVATE";
-      } else if (selectedPlan.has_file_upload) {
-        designPlan = "PRIVATE";
-      }
+    if (!receiptFile) {
+      toast.error("لطفاً فیش واریزی را آپلود کنید");
+      return;
     }
 
-    // Convert attributes to the backend format
-    const selectedAttributes = Object.entries(orderData.attributes).map(([attrId, optionValue]) => {
-      const attr = attributes?.find(a => a.id === attrId);
-      const option = attr?.options?.find(o => o.value === optionValue);
-      return {
-        attribute_id: attrId,
-        option_id: option?.id || optionValue,
-      };
-    });
+    setIsSubmitting(true);
 
-    createOrder({
-      data: {
-      category_id: orderData.category_id,
-        design_plan: designPlan,
-        selected_attributes: selectedAttributes,
-        quantity: orderData.quantity,
-        validation_requested: orderData.wants_validation,
-      template_id: orderData.template_id,
-      },
-      userId: user.id,
-    }, {
-      onSuccess: (data) => {
-        router.push(`/orders/${data.data.id}`);
-      },
-    });
+    try {
+      // Map plan characteristics to design_plan enum
+      let designPlan: "PUBLIC" | "SEMI_PRIVATE" | "PRIVATE" | "OWN_DESIGN" = "PUBLIC";
+      if (selectedPlan) {
+        if (selectedPlan.has_templates) {
+          designPlan = "PUBLIC";
+        } else if (selectedPlan.has_questionnaire) {
+          designPlan = "SEMI_PRIVATE";
+        } else if (selectedPlan.has_file_upload) {
+          designPlan = "PRIVATE";
+        }
+      }
+
+      // Convert attributes to the backend format
+      const selectedAttributes = Object.entries(orderData.attributes).map(([attrId, optionValue]) => {
+        const attr = attributes?.find(a => a.id === attrId);
+        const option = attr?.options?.find(o => o.value === optionValue);
+        return {
+          attribute_id: attrId,
+          option_id: option?.id || optionValue,
+        };
+      });
+
+      // Step 1: Create order
+      const orderResponse = await new Promise<{ data: { id: string } }>((resolve, reject) => {
+        createOrder({
+          data: {
+            category_id: orderData.category_id,
+            design_plan: designPlan,
+            selected_attributes: selectedAttributes,
+            quantity: orderData.quantity,
+            validation_requested: orderData.wants_validation,
+            template_id: orderData.template_id,
+          },
+          userId: user.id,
+        }, {
+          onSuccess: resolve,
+          onError: reject,
+        });
+      });
+
+      const orderId = orderResponse.data.id;
+
+      // Step 2: Initiate payment
+      const paymentResponse = await paymentsApi.initiate(orderId);
+      const paymentId = paymentResponse.data.id;
+
+      // Step 3: Upload receipt
+      await paymentsApi.uploadReceipt(paymentId, receiptFile);
+
+      toast.success("سفارش با موفقیت ثبت شد. رسید پرداخت در حال بررسی است.");
+      router.push(`/orders/${orderId}`);
+    } catch (error) {
+      console.error("Error submitting order:", error);
+      toast.error("خطا در ثبت سفارش. لطفاً دوباره تلاش کنید.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const renderStepContent = () => {
@@ -1089,6 +1156,122 @@ export default function NewOrderPage() {
           </div>
         );
 
+      case "payment":
+        return (
+          <div className="space-y-6">
+            <p className="text-muted">لطفاً مبلغ سفارش را به شماره کارت زیر واریز کرده و رسید را آپلود کنید:</p>
+            
+            {/* Amount */}
+            <div className="text-center p-4 bg-primary-50 rounded-xl">
+              <p className="text-sm text-muted mb-1">مبلغ قابل پرداخت</p>
+              <p className="text-3xl font-bold text-primary">
+                {formatPrice(totalPrice)}
+              </p>
+            </div>
+
+            {/* Bank card info */}
+            <Card>
+              <CardContent className="py-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">شماره کارت</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-lg" dir="ltr">
+                      {bankInfo.cardNumber}
+                    </span>
+                    <button
+                      onClick={handleCopyCard}
+                      className="p-1.5 hover:bg-accent rounded-lg transition-colors"
+                    >
+                      {copied ? (
+                        <Check className="w-4 h-4 text-success" />
+                      ) : (
+                        <Copy className="w-4 h-4 text-muted" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">صاحب حساب</span>
+                  <span className="font-medium">{bankInfo.cardHolder}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">بانک</span>
+                  <span className="font-medium">{bankInfo.bank}</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Receipt upload */}
+            <div>
+              <p className="text-sm font-medium text-foreground mb-2">
+                آپلود رسید پرداخت <span className="text-danger">*</span>
+              </p>
+              <div
+                className={cn(
+                  "border-2 border-dashed rounded-xl p-6 text-center transition-colors",
+                  receiptPreview
+                    ? "border-success bg-success-light"
+                    : "border-border hover:border-primary/30"
+                )}
+              >
+                <input
+                  type="file"
+                  id="receipt-file"
+                  className="hidden"
+                  accept="image/*"
+                  onChange={handleReceiptSelect}
+                />
+                
+                {receiptPreview ? (
+                  <div className="relative">
+                    <Image
+                      src={receiptPreview}
+                      alt="Receipt preview"
+                      width={200}
+                      height={200}
+                      className="mx-auto rounded-lg object-contain max-h-48"
+                    />
+                    <button
+                      onClick={() => {
+                        setReceiptFile(null);
+                        setReceiptPreview(null);
+                      }}
+                      className="absolute top-0 right-1/2 translate-x-[100px] p-1 bg-danger text-white rounded-full"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    <p className="text-sm text-muted mt-2">{receiptFile?.name}</p>
+                  </div>
+                ) : (
+                  <label htmlFor="receipt-file" className="cursor-pointer">
+                    <ImageIcon className="w-12 h-12 mx-auto text-muted mb-2" />
+                    <p className="font-medium text-foreground">
+                      تصویر رسید را انتخاب کنید
+                    </p>
+                    <p className="text-sm text-muted mt-1">
+                      فرمت‌های مجاز: JPG, PNG
+                    </p>
+                  </label>
+                )}
+              </div>
+            </div>
+
+            {/* Warning */}
+            <div className="p-4 bg-warning-light rounded-xl">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-foreground">توجه</p>
+                  <p className="text-sm text-muted mt-1">
+                    پس از آپلود رسید، سفارش شما ثبت شده و رسید توسط تیم ما بررسی خواهد شد.
+                    نتیجه بررسی از طریق پیامک اطلاع‌رسانی می‌شود.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
       default:
         return null;
     }
@@ -1156,21 +1339,22 @@ export default function NewOrderPage() {
           </Button>
 
           <div className="flex items-center gap-2">
-            {unitPrice > 0 && (
+            {unitPrice > 0 && currentStep !== "payment" && (
               <span className="text-sm text-muted hidden sm:block">
                 {orderData.quantity > 1 && `${orderData.quantity} عدد × `}
                 مبلغ: <strong className="text-primary">{formatPrice(totalPrice)}</strong>
               </span>
             )}
             
-            {currentStep === "summary" ? (
+            {currentStep === "payment" ? (
               <Button
                 variant="primary"
                 onClick={handleSubmit}
-                isLoading={isCreatingOrder}
+                isLoading={isSubmitting || isCreatingOrder}
+                disabled={!receiptFile}
                 rightIcon={<Check className="w-4 h-4" />}
               >
-                ثبت سفارش
+                ثبت سفارش و ارسال رسید
               </Button>
             ) : (
               <Button

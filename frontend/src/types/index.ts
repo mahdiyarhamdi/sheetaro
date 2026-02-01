@@ -37,16 +37,23 @@ export interface PaginatedResponse<T> {
   page_size: number;
 }
 
-// Order status type
+// Order status type (matches backend OrderStatus enum)
 export type OrderStatus =
-  | "pending_payment"
-  | "payment_uploaded"
-  | "payment_approved"
-  | "payment_rejected"
-  | "in_progress"
-  | "design_ready"
-  | "completed"
-  | "cancelled";
+  // Payment statuses
+  | "PENDING_PAYMENT"
+  | "PAYMENT_UPLOADED"
+  | "PAYMENT_APPROVED"
+  | "PAYMENT_REJECTED"
+  // Order processing statuses
+  | "PENDING"
+  | "AWAITING_VALIDATION"
+  | "NEEDS_ACTION"
+  | "DESIGNING"
+  | "READY_FOR_PRINT"
+  | "PRINTING"
+  | "SHIPPED"
+  | "DELIVERED"
+  | "CANCELLED";
 
 // Payment status type
 export type PaymentStatus =

@@ -31,14 +31,18 @@ export default function DashboardPage() {
 
   const stats = {
     total: total,
-    pending: orders.filter((o) => o.status === "pending_payment").length,
+    pending: orders.filter((o) => o.status === "PENDING_PAYMENT" || o.status === "PAYMENT_REJECTED").length,
     inProgress: orders.filter(
       (o) =>
-        o.status === "payment_approved" ||
-        o.status === "in_progress" ||
-        o.status === "payment_uploaded"
+        o.status === "PAYMENT_APPROVED" ||
+        o.status === "PAYMENT_UPLOADED" ||
+        o.status === "AWAITING_VALIDATION" ||
+        o.status === "DESIGNING" ||
+        o.status === "READY_FOR_PRINT" ||
+        o.status === "PRINTING" ||
+        o.status === "SHIPPED"
     ).length,
-    completed: orders.filter((o) => o.status === "completed").length,
+    completed: orders.filter((o) => o.status === "DELIVERED").length,
   };
 
   return (
@@ -207,12 +211,12 @@ export default function DashboardPage() {
                     <div className="flex items-center gap-4">
                       <Badge
                         variant={
-                          order.status === "completed"
+                          order.status === "DELIVERED" || order.status === "PAYMENT_APPROVED"
                             ? "success"
-                            : order.status === "payment_rejected" ||
-                              order.status === "cancelled"
+                            : order.status === "PAYMENT_REJECTED" ||
+                              order.status === "CANCELLED"
                             ? "danger"
-                            : order.status === "pending_payment"
+                            : order.status === "PENDING_PAYMENT" || order.status === "PENDING" || order.status === "NEEDS_ACTION"
                             ? "warning"
                             : "info"
                         }

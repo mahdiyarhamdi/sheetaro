@@ -98,14 +98,24 @@ export default function OrderDetailPage() {
 
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
-      case "completed":
-      case "payment_approved":
+      case "DELIVERED":
+      case "PAYMENT_APPROVED":
         return "success";
-      case "payment_rejected":
-      case "cancelled":
+      case "PAYMENT_REJECTED":
+      case "CANCELLED":
         return "danger";
-      case "pending_payment":
+      case "PENDING_PAYMENT":
+      case "PENDING":
+      case "NEEDS_ACTION":
         return "warning";
+      case "PAYMENT_UPLOADED":
+      case "AWAITING_VALIDATION":
+      case "SHIPPED":
+        return "info";
+      case "DESIGNING":
+      case "READY_FOR_PRINT":
+      case "PRINTING":
+        return "primary";
       default:
         return "info";
     }
@@ -113,13 +123,14 @@ export default function OrderDetailPage() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "completed":
-      case "payment_approved":
+      case "DELIVERED":
+      case "PAYMENT_APPROVED":
         return CheckCircle;
-      case "payment_rejected":
-      case "cancelled":
+      case "PAYMENT_REJECTED":
+      case "CANCELLED":
         return XCircle;
-      case "pending_payment":
+      case "PENDING_PAYMENT":
+      case "PENDING":
         return Clock;
       default:
         return Package;
@@ -230,7 +241,7 @@ export default function OrderDetailPage() {
             </span>
           </div>
 
-          {order.status === "pending_payment" && (
+          {order.status === "PENDING_PAYMENT" && (
             <div className="bg-warning-light rounded-xl p-4 mb-4">
               <div className="flex items-start gap-3">
                 <Clock className="w-5 h-5 text-warning shrink-0 mt-0.5" />
@@ -244,7 +255,7 @@ export default function OrderDetailPage() {
             </div>
           )}
 
-          {order.status === "payment_uploaded" && (
+          {order.status === "PAYMENT_UPLOADED" && (
             <div className="bg-info-light rounded-xl p-4 mb-4">
               <div className="flex items-start gap-3">
                 <FileText className="w-5 h-5 text-info shrink-0 mt-0.5" />
@@ -258,7 +269,7 @@ export default function OrderDetailPage() {
             </div>
           )}
 
-          {order.status === "payment_approved" && (
+          {order.status === "PAYMENT_APPROVED" && (
             <div className="bg-success-light rounded-xl p-4 mb-4">
               <div className="flex items-start gap-3">
                 <CheckCircle className="w-5 h-5 text-success shrink-0 mt-0.5" />
@@ -272,7 +283,7 @@ export default function OrderDetailPage() {
             </div>
           )}
 
-          {order.status === "payment_rejected" && (
+          {order.status === "PAYMENT_REJECTED" && (
             <div className="bg-danger-light rounded-xl p-4 mb-4">
               <div className="flex items-start gap-3">
                 <XCircle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
@@ -287,7 +298,7 @@ export default function OrderDetailPage() {
           )}
         </CardContent>
 
-        {(order.status === "pending_payment" || order.status === "payment_rejected") && (
+        {(order.status === "PENDING_PAYMENT" || order.status === "PAYMENT_REJECTED") && (
           <CardFooter>
             <Button
               variant="primary"

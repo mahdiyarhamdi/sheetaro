@@ -177,10 +177,24 @@ class PaymentService:
         
         # If total paid >= total price, move order forward
         if summary['total_paid'] >= order.total_price:
-            # Determine next status based on current status
-            if order.status == OrderStatus.PENDING:
+            # Determine next status based on current status and order configuration
+            if order.status in [OrderStatus.PENDING_PAYMENT, OrderStatus.PAYMENT_UPLOADED]:
+                # First set to PAYMENT_APPROVED
+                status_update = OrderStatusUpdate(status=OrderStatus.PAYMENT_APPROVED)
+                await self.order_repo.update_status(order_id, status_update)
+                
+                log_event(
+                    event_type="order.status_change",
+                    order_id=str(order_id),
+                    new_status=OrderStatus.PAYMENT_APPROVED.value,
+                    reason="payment_approved",
+                )
+                
+                # Then determine next workflow status
                 if order.validation_requested:
                     new_status = OrderStatus.AWAITING_VALIDATION
+                elif order.design_plan.value in ['SEMI_PRIVATE', 'PRIVATE']:
+                    new_status = OrderStatus.DESIGNING
                 else:
                     new_status = OrderStatus.READY_FOR_PRINT
                 
@@ -268,6 +282,19 @@ class PaymentService:
             user_id=str(user_id),
         )
         
+        # Update order status to PAYMENT_UPLOADED
+        order = await self.order_repo.get_by_id(payment.order_id)
+        if order and order.status in [OrderStatus.PENDING_PAYMENT, OrderStatus.PAYMENT_REJECTED]:
+            status_update = OrderStatusUpdate(status=OrderStatus.PAYMENT_UPLOADED)
+            await self.order_repo.update_status(payment.order_id, status_update)
+            
+            log_event(
+                event_type="order.status_change",
+                order_id=str(payment.order_id),
+                new_status=OrderStatus.PAYMENT_UPLOADED.value,
+                reason="receipt_uploaded",
+            )
+        
         return PaymentOut.model_validate(updated_payment)
     
     async def approve_payment(
@@ -343,6 +370,17 @@ class PaymentService:
             order_id=str(payment.order_id),
             admin_id=str(admin_id),
             reason=reason,
+        )
+        
+        # Update order status to PAYMENT_REJECTED
+        status_update = OrderStatusUpdate(status=OrderStatus.PAYMENT_REJECTED)
+        await self.order_repo.update_status(payment.order_id, status_update)
+        
+        log_event(
+            event_type="order.status_change",
+            order_id=str(payment.order_id),
+            new_status=OrderStatus.PAYMENT_REJECTED.value,
+            reason="payment_rejected",
         )
         
         return PaymentOut.model_validate(updated_payment)

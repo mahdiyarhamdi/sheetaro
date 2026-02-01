@@ -17,14 +17,19 @@ import { formatPrice, formatDate, orderStatusLabels, toPersianNumber } from "@/l
 
 const statusOptions = [
   { value: "", label: "همه وضعیت‌ها" },
-  { value: "pending_payment", label: "در انتظار پرداخت" },
-  { value: "payment_uploaded", label: "رسید ارسال شده" },
-  { value: "payment_approved", label: "پرداخت تأیید شده" },
-  { value: "payment_rejected", label: "پرداخت رد شده" },
-  { value: "in_progress", label: "در حال انجام" },
-  { value: "design_ready", label: "طراحی آماده" },
-  { value: "completed", label: "تکمیل شده" },
-  { value: "cancelled", label: "لغو شده" },
+  // Payment statuses
+  { value: "PENDING_PAYMENT", label: "در انتظار پرداخت" },
+  { value: "PAYMENT_UPLOADED", label: "رسید ارسال شده" },
+  { value: "PAYMENT_APPROVED", label: "پرداخت تأیید شده" },
+  { value: "PAYMENT_REJECTED", label: "پرداخت رد شده" },
+  // Order processing statuses
+  { value: "AWAITING_VALIDATION", label: "در انتظار اعتبارسنجی" },
+  { value: "DESIGNING", label: "در حال طراحی" },
+  { value: "READY_FOR_PRINT", label: "آماده چاپ" },
+  { value: "PRINTING", label: "در حال چاپ" },
+  { value: "SHIPPED", label: "ارسال شده" },
+  { value: "DELIVERED", label: "تحویل شده" },
+  { value: "CANCELLED", label: "لغو شده" },
 ];
 
 export default function OrdersPage() {
@@ -42,13 +47,20 @@ export default function OrdersPage() {
 
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
-      case "completed":
+      case "DELIVERED":
+      case "PAYMENT_APPROVED":
         return "success";
-      case "payment_rejected":
-      case "cancelled":
+      case "PAYMENT_REJECTED":
+      case "CANCELLED":
         return "danger";
-      case "pending_payment":
+      case "PENDING_PAYMENT":
+      case "PENDING":
+      case "NEEDS_ACTION":
         return "warning";
+      case "DESIGNING":
+      case "READY_FOR_PRINT":
+      case "PRINTING":
+        return "primary";
       default:
         return "info";
     }
