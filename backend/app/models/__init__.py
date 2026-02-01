@@ -21,7 +21,7 @@ from app.models.settings import SystemSettings, SettingKeys
 
 # Dynamic category models
 from app.models.category import Category
-from app.models.attribute import CategoryAttribute, AttributeOption, AttributeInputType
+from app.models.attribute import CategoryAttribute, AttributeOption, AttributeInputType, AttributePriceType
 from app.models.design_plan import CategoryDesignPlan
 from app.models.question_section import QuestionSection
 from app.models.design_question import DesignQuestion, QuestionOption, QuestionInputType
@@ -54,6 +54,7 @@ __all__ = [
     "CategoryAttribute",
     "AttributeOption",
     "AttributeInputType",
+    "AttributePriceType",
     "CategoryDesignPlan",
     "QuestionSection",
     "DesignQuestion",

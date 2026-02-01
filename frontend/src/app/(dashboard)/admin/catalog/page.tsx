@@ -90,11 +90,13 @@ interface PlanFormData {
 }
 
 type AttributeInputType = "SELECT" | "MULTI_SELECT" | "NUMBER" | "TEXT";
+type AttributePriceType = "FIXED" | "MULTIPLIER";
 
 interface AttributeFormData {
   slug: string;
   name_fa: string;
   input_type: AttributeInputType;
+  price_type: AttributePriceType;
   is_required: boolean;
   min_value?: number;
   max_value?: number;
@@ -221,6 +223,7 @@ export default function CatalogManagementPage() {
     slug: "",
     name_fa: "",
     input_type: "SELECT",
+    price_type: "FIXED",
     is_required: true,
     min_value: undefined,
     max_value: undefined,
@@ -904,6 +907,7 @@ export default function CatalogManagementPage() {
       slug: "",
       name_fa: "",
       input_type: "SELECT",
+      price_type: "FIXED",
       is_required: true,
       min_value: undefined,
       max_value: undefined,
@@ -920,6 +924,7 @@ export default function CatalogManagementPage() {
       slug: attribute.slug || "",
       name_fa: attribute.name_fa || "",
       input_type: attribute.input_type || "SELECT",
+      price_type: attribute.price_type || "FIXED",
       is_required: attribute.is_required ?? true,
       min_value: attribute.min_value,
       max_value: attribute.max_value,
@@ -1838,11 +1843,14 @@ export default function CatalogManagementPage() {
                           </div>
                           <div>
                             <p className="font-medium text-foreground">{attr.name_fa}</p>
-                            <div className="flex items-center gap-2 text-xs text-muted">
+                            <div className="flex items-center gap-2 text-xs text-muted flex-wrap">
                               <span className="px-2 py-0.5 rounded bg-accent">
                                 {attr.input_type === "SELECT" ? "انتخابی تکی" : 
                                  attr.input_type === "MULTI_SELECT" ? "چند انتخابی" :
                                  attr.input_type === "NUMBER" ? "عددی" : "متنی"}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded ${attr.price_type === "MULTIPLIER" ? "bg-warning/20 text-warning" : "bg-primary/10 text-primary"}`}>
+                                {attr.price_type === "MULTIPLIER" ? "ضریبی" : "ثابت"}
                               </span>
                               <span>{attr.is_required ? "الزامی" : "اختیاری"}</span>
                               {attr.options?.length > 0 ? (
@@ -1921,11 +1929,15 @@ export default function CatalogManagementPage() {
                                   <div className="flex items-center gap-3">
                                     {opt.price_modifier !== 0 && (
                                       <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                        opt.price_modifier > 0 
-                                          ? "bg-success-light text-success" 
-                                          : "bg-danger-light text-danger"
+                                        attr.price_type === "MULTIPLIER"
+                                          ? "bg-warning/20 text-warning"
+                                          : opt.price_modifier > 0 
+                                            ? "bg-success-light text-success" 
+                                            : "bg-danger-light text-danger"
                                       }`}>
-                                        {opt.price_modifier > 0 ? "+" : ""}{formatPrice(opt.price_modifier)}
+                                        {attr.price_type === "MULTIPLIER" 
+                                          ? `×${toPersianNumber(opt.price_modifier.toFixed(2))}`
+                                          : `${opt.price_modifier > 0 ? "+" : ""}${formatPrice(opt.price_modifier)}`}
                                       </span>
                                     )}
                                     <button
@@ -2655,20 +2667,41 @@ export default function CatalogManagementPage() {
             hint="این شناسه برای شناسایی ویژگی در سیستم استفاده می‌شود"
           />
 
-          <div className="w-full">
-            <label className="block text-sm font-medium text-foreground mb-1.5">
-              نوع ورودی
-            </label>
-            <select
-              className="w-full px-3 py-2 rounded-lg border border-border bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-              value={attributeForm.input_type}
-              onChange={(e) => setAttributeForm({ ...attributeForm, input_type: e.target.value as AttributeInputType })}
-            >
-              <option value="SELECT">انتخابی تکی (SELECT)</option>
-              <option value="MULTI_SELECT">چند انتخابی (MULTI_SELECT)</option>
-              <option value="NUMBER">عددی (NUMBER)</option>
-              <option value="TEXT">متنی (TEXT)</option>
-            </select>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="w-full">
+              <label className="block text-sm font-medium text-foreground mb-1.5">
+                نوع ورودی
+              </label>
+              <select
+                className="w-full px-3 py-2 rounded-lg border border-border bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                value={attributeForm.input_type}
+                onChange={(e) => setAttributeForm({ ...attributeForm, input_type: e.target.value as AttributeInputType })}
+              >
+                <option value="SELECT">انتخابی تکی (SELECT)</option>
+                <option value="MULTI_SELECT">چند انتخابی (MULTI_SELECT)</option>
+                <option value="NUMBER">عددی (NUMBER)</option>
+                <option value="TEXT">متنی (TEXT)</option>
+              </select>
+            </div>
+
+            <div className="w-full">
+              <label className="block text-sm font-medium text-foreground mb-1.5">
+                نوع قیمت‌گذاری
+              </label>
+              <select
+                className="w-full px-3 py-2 rounded-lg border border-border bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                value={attributeForm.price_type}
+                onChange={(e) => setAttributeForm({ ...attributeForm, price_type: e.target.value as AttributePriceType })}
+              >
+                <option value="FIXED">ثابت (جمع با قیمت پایه)</option>
+                <option value="MULTIPLIER">ضریبی (ضرب در قیمت پایه)</option>
+              </select>
+              <p className="text-xs text-muted mt-1">
+                {attributeForm.price_type === "FIXED" 
+                  ? "قیمت نهایی = قیمت پایه + مقدار" 
+                  : "قیمت نهایی = قیمت پایه × ضریب"}
+              </p>
+            </div>
           </div>
 
           {attributeForm.input_type === "NUMBER" && (
@@ -2761,15 +2794,25 @@ export default function CatalogManagementPage() {
             hint="این مقدار برای پردازش سیستمی استفاده می‌شود"
           />
 
-          <Input
-            label="تغییر قیمت (تومان)"
-            type="number"
-            placeholder="0"
-            value={optionForm.price_modifier || ""}
-            onChange={(e) => setOptionForm({ ...optionForm, price_modifier: parseInt(e.target.value) || 0 })}
-            dir="ltr"
-            hint="مقدار مثبت به قیمت پایه اضافه و مقدار منفی از آن کم می‌شود"
-          />
+          {(() => {
+            const selectedAttr = attributes?.find((a: any) => a.id === selectedAttributeId);
+            const isMultiplier = selectedAttr?.price_type === "MULTIPLIER";
+            return (
+              <Input
+                label={isMultiplier ? "ضریب قیمت" : "تغییر قیمت (تومان)"}
+                type="number"
+                placeholder={isMultiplier ? "1.5" : "0"}
+                step={isMultiplier ? "0.1" : "1"}
+                value={optionForm.price_modifier || ""}
+                onChange={(e) => setOptionForm({ ...optionForm, price_modifier: parseFloat(e.target.value) || 0 })}
+                dir="ltr"
+                hint={isMultiplier 
+                  ? "ضریب قیمت پایه. مثال: ۱.۵ یعنی ۱۵۰٪ قیمت پایه"
+                  : "مقدار مثبت به قیمت پایه اضافه و مقدار منفی از آن کم می‌شود"
+                }
+              />
+            );
+          })()}
 
           <Input
             label="ترتیب نمایش"

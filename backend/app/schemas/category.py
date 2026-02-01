@@ -5,7 +5,7 @@ from typing import Optional, List
 from uuid import UUID
 from pydantic import BaseModel, Field
 
-from app.models.attribute import AttributeInputType
+from app.models.attribute import AttributeInputType, AttributePriceType
 from app.models.design_question import QuestionInputType
 from app.models.order_step import StepType
 from app.models.design_template import PlaceholderType
@@ -97,6 +97,7 @@ class AttributeBase(BaseModel):
     slug: str = Field(..., max_length=50)
     name_fa: str = Field(..., max_length=100)
     input_type: AttributeInputType
+    price_type: AttributePriceType = AttributePriceType.FIXED
     is_required: bool = True
     min_value: Optional[int] = None
     max_value: Optional[int] = None
@@ -115,6 +116,7 @@ class AttributeUpdate(BaseModel):
     slug: Optional[str] = Field(None, max_length=50)
     name_fa: Optional[str] = Field(None, max_length=100)
     input_type: Optional[AttributeInputType] = None
+    price_type: Optional[AttributePriceType] = None
     is_required: Optional[bool] = None
     min_value: Optional[int] = None
     max_value: Optional[int] = None

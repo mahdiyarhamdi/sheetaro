@@ -184,26 +184,41 @@ export default function NewOrderPage() {
     return Number(selectedPlan?.price) || 0;
   }, [selectedPlan]);
 
-  const attributesPrice = useMemo(() => {
-    let price = 0;
+  // Calculate attributes price based on price_type (FIXED vs MULTIPLIER)
+  const { fixedAttributesPrice, multiplierTotal } = useMemo(() => {
+    let fixedPrice = 0;
+    let multiplier = 1; // Start with base multiplier of 1
+    
     if (attributes) {
       attributes.forEach((attr) => {
         const selectedValue = orderData.attributes[attr.id];
         if (selectedValue && attr.options) {
           const option = attr.options.find((o) => o.value === selectedValue);
           if (option) {
-            price += Number(option.price_modifier) || 0;
+            const modifier = Number(option.price_modifier) || 0;
+            if (attr.price_type === "MULTIPLIER") {
+              // Multiply the multiplier (e.g., 1.5 = 150%)
+              multiplier *= modifier;
+            } else {
+              // FIXED: add to fixed price
+              fixedPrice += modifier;
+            }
           }
         }
       });
     }
-    return price;
+    return { fixedAttributesPrice: fixedPrice, multiplierTotal: multiplier };
   }, [attributes, orderData.attributes]);
+  
+  // For backward compatibility
+  const attributesPrice = fixedAttributesPrice;
 
-  // Calculate unit price (price per item - base + attributes only)
+  // Calculate unit price (price per item)
+  // Formula: (base_price × multiplier) + fixed_attributes
   const unitPrice = useMemo(() => {
-    return basePrice + attributesPrice;
-  }, [basePrice, attributesPrice]);
+    const multipliedBase = Math.round(basePrice * multiplierTotal);
+    return multipliedBase + fixedAttributesPrice;
+  }, [basePrice, multiplierTotal, fixedAttributesPrice]);
 
   // Calculate total price:
   // (unit price × quantity) + design price (once) + validation fee (once, if requested)
@@ -399,7 +414,8 @@ export default function NewOrderPage() {
                   {attr.options && attr.options.length > 0 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {attr.options.map((option) => {
-                        const extraPrice = Number(option.price_modifier) || 0;
+                        const modifier = Number(option.price_modifier) || 0;
+                        const isMultiplier = attr.price_type === "MULTIPLIER";
                         return (
                         <button
                           key={option.id}
@@ -418,10 +434,12 @@ export default function NewOrderPage() {
                           )}
                         >
                           <span className="block font-medium">{option.label_fa}</span>
-                            {extraPrice > 0 && (
-                              <Badge variant="secondary" className="mt-1 text-xs">
-                                +{formatPrice(extraPrice)}
-                              </Badge>
+                          {modifier > 0 && (
+                            <Badge variant={isMultiplier ? "warning" : "success"} className="mt-1 text-xs">
+                              {isMultiplier 
+                                ? `×${toPersianNumber(modifier.toFixed(2))}` 
+                                : `+${formatPrice(modifier)}`}
+                            </Badge>
                           )}
                         </button>
                         );
@@ -1013,10 +1031,24 @@ export default function NewOrderPage() {
                     <span>{formatPrice(basePrice)}</span>
                   </div>
                   
-                  {attributesPrice > 0 && (
+                  {multiplierTotal !== 1 && (
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted">هزینه ویژگی‌ها</span>
-                      <span>{formatPrice(attributesPrice)}</span>
+                      <span className="text-muted">ضریب ویژگی‌ها</span>
+                      <span>×{toPersianNumber(multiplierTotal.toFixed(2))}</span>
+                    </div>
+                  )}
+                  
+                  {multiplierTotal !== 1 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted">قیمت پایه × ضریب</span>
+                      <span>{formatPrice(Math.round(basePrice * multiplierTotal))}</span>
+                    </div>
+                  )}
+                  
+                  {fixedAttributesPrice > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted">هزینه ثابت ویژگی‌ها</span>
+                      <span>+{formatPrice(fixedAttributesPrice)}</span>
                     </div>
                   )}
                   

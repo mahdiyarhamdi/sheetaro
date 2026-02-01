@@ -190,12 +190,15 @@ export interface Category {
   is_active: boolean;
 }
 
+export type AttributePriceType = "FIXED" | "MULTIPLIER";
+
 export interface Attribute {
   id: string;
   category_id: string;
   name_fa: string;
   slug: string;
   input_type: string;
+  price_type: AttributePriceType;
   options?: AttributeOption[];
 }
 
@@ -312,6 +315,8 @@ export interface FontVariant {
   weight: number;
   style: string;
   file_url?: string;
+  file_woff?: string;
+  file_woff2?: string;
 }
 
 export interface SystemFont {

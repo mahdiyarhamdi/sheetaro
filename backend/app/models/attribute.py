@@ -16,6 +16,12 @@ class AttributeInputType(str, PyEnum):
     MULTI_SELECT = "MULTI_SELECT"  # Multiple selection from options
     NUMBER = "NUMBER"  # Numeric input (e.g., quantity)
     TEXT = "TEXT"  # Free text input
+
+
+class AttributePriceType(str, PyEnum):
+    """Price types for attributes."""
+    FIXED = "FIXED"  # Fixed price added to base price
+    MULTIPLIER = "MULTIPLIER"  # Multiplier applied to base price
     
 
 class CategoryAttribute(Base):
@@ -28,6 +34,7 @@ class CategoryAttribute(Base):
     slug = Column(String(50), nullable=False)  # e.g., "size", "material"
     name_fa = Column(String(100), nullable=False)  # Persian name
     input_type = Column(ENUM(AttributeInputType, name='attributeinputtype', create_type=False), nullable=False)
+    price_type = Column(ENUM(AttributePriceType, name='attributepricetype', create_type=False), default=AttributePriceType.FIXED, nullable=False)
     is_required = Column(Boolean, default=True, nullable=False)
     min_value = Column(Integer, nullable=True)  # For NUMBER type
     max_value = Column(Integer, nullable=True)  # For NUMBER type
