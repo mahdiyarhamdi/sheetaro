@@ -1,6 +1,6 @@
 """Payment schemas."""
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_serializer
 from datetime import datetime
 from uuid import UUID
 from decimal import Decimal
@@ -30,6 +30,11 @@ class PaymentInitiateResponse(BaseModel):
     authority: str
     redirect_url: str
     amount: Decimal
+    
+    @field_serializer('amount')
+    def serialize_amount(self, value: Decimal) -> int:
+        """Serialize amount as integer."""
+        return int(value)
 
 
 class PaymentCallback(BaseModel):
@@ -69,6 +74,11 @@ class PaymentOut(BaseModel):
     updated_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
+    
+    @field_serializer('amount')
+    def serialize_amount(self, value: Decimal) -> int:
+        """Serialize amount as integer (no decimals for Iranian currency)."""
+        return int(value)
 
 
 class ReceiptUpload(BaseModel):
@@ -77,13 +87,13 @@ class ReceiptUpload(BaseModel):
 
 
 class PaymentApprove(BaseModel):
-    """Schema for approving a payment (admin)."""
-    admin_id: UUID = Field(..., description="Admin user ID who approves")
+    """Schema for approving a payment (admin). Deprecated - admin_id comes from JWT."""
+    admin_id: Optional[UUID] = Field(None, description="Admin user ID who approves (deprecated, comes from JWT)")
 
 
 class PaymentReject(BaseModel):
     """Schema for rejecting a payment (admin)."""
-    admin_id: UUID = Field(..., description="Admin user ID who rejects")
+    admin_id: Optional[UUID] = Field(None, description="Admin user ID who rejects (deprecated, comes from JWT)")
     reason: str = Field(..., max_length=500, description="Reason for rejection")
 
 
@@ -108,4 +118,9 @@ class PaymentSummary(BaseModel):
     total_paid: Decimal
     total_pending: Decimal
     payments: list[PaymentOut]
+    
+    @field_serializer('total_paid', 'total_pending')
+    def serialize_amounts(self, value: Decimal) -> int:
+        """Serialize amounts as integers."""
+        return int(value)
 

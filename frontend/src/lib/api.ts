@@ -404,12 +404,26 @@ export const plansApi = {
 export interface Payment {
   id: string;
   order_id: string;
+  user_id: string;
+  type: string;
   amount: number;
   status: string;
-  receipt_url?: string;
-  admin_note?: string;
+  transaction_id?: string;
+  authority?: string;
+  ref_id?: string;
+  card_pan?: string;
+  description?: string;
+  receipt_image_url?: string;
+  rejection_reason?: string;
+  approved_by?: string;
+  approved_at?: string;
+  paid_at?: string;
   created_at: string;
   updated_at: string;
+  // Extended fields for pending payments
+  order_short_id?: string;
+  customer_name?: string;
+  customer_telegram_id?: number;
   order?: Order;
 }
 
@@ -427,7 +441,7 @@ export const paymentsApi = {
 
   // Admin endpoints
   getPending: (params?: { page?: number; page_size?: number }) =>
-    api.get<{ items: Payment[]; total: number }>("/payments/pending", { params }),
+    api.get<{ items: Payment[]; total: number }>("/payments/pending-approval", { params }),
 
   approve: (paymentId: string) =>
     api.post<Payment>(`/payments/${paymentId}/approve`),

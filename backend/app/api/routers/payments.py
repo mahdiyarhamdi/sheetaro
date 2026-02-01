@@ -6,14 +6,14 @@ from uuid import UUID, uuid4
 from pathlib import Path
 
 from app.api.deps import (
-    get_db, AuthenticatedUser, require_admin_by_query,
+    get_db, AuthenticatedUser, require_admin_by_query, require_admin_hybrid,
     get_user_id_from_token_or_query
 )
 from app.core.rate_limit import limiter, RateLimits
 from app.schemas.payment import (
     PaymentInitiate, PaymentInitiateResponse, PaymentCallback,
     PaymentOut, PaymentListResponse, PaymentSummary,
-    ReceiptUpload, PaymentApprove, PaymentReject
+    ReceiptUpload, PaymentReject
 )
 from app.services.payment_service import PaymentService
 from app.services.file_service import UPLOAD_DIR
@@ -83,7 +83,7 @@ async def get_pending_approval(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     db: AsyncSession = Depends(get_db),
-    admin_user: AuthenticatedUser = Depends(require_admin_by_query),
+    admin_user: AuthenticatedUser = Depends(require_admin_hybrid),
 ) -> PaymentListResponse:
     """Get payments pending approval (admin only)."""
     service = PaymentService(db)
@@ -210,9 +210,8 @@ async def upload_receipt(
 )
 async def approve_payment(
     payment_id: UUID,
-    approve_data: PaymentApprove,
     db: AsyncSession = Depends(get_db),
-    admin_user: AuthenticatedUser = Depends(require_admin_by_query),
+    admin_user: AuthenticatedUser = Depends(require_admin_hybrid),
 ) -> PaymentOut:
     """Approve payment (admin only)."""
     service = PaymentService(db)
@@ -238,7 +237,7 @@ async def reject_payment(
     payment_id: UUID,
     reject_data: PaymentReject,
     db: AsyncSession = Depends(get_db),
-    admin_user: AuthenticatedUser = Depends(require_admin_by_query),
+    admin_user: AuthenticatedUser = Depends(require_admin_hybrid),
 ) -> PaymentOut:
     """Reject payment (admin only)."""
     service = PaymentService(db)

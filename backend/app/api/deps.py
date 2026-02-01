@@ -227,6 +227,115 @@ async def require_admin_by_query(
     )
 
 
+async def require_admin_hybrid(
+    authorization: Optional[str] = Header(None),
+    admin_id: Optional[UUID] = Query(None, description="Admin user ID (for bot)"),
+    db: AsyncSession = Depends(get_db),
+) -> AuthenticatedUser:
+    """
+    Require admin role using either JWT token or admin_id query param.
+    Supports both web frontend (JWT) and bot (query param).
+    """
+    from app.repositories.user_repository import UserRepository
+    repo = UserRepository(db)
+    
+    # 1. Try JWT token first if Authorization header exists
+    if authorization and authorization.lower().startswith("bearer "):
+        try:
+            parts = authorization.split()
+            if len(parts) == 2:
+                token = parts[1]
+                payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+                
+                if payload.get("type") != "access":
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="توکن نامعتبر است",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+                
+                token_user_id = payload.get("sub")
+                if not token_user_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="توکن نامعتبر است",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+                
+                # Check expiration
+                exp = payload.get("exp")
+                if exp and datetime.fromtimestamp(exp, tz=timezone.utc) < datetime.now(timezone.utc):
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="توکن منقضی شده است",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+                
+                # Get user and verify admin role
+                user = await repo.get_by_id(UUID(token_user_id))
+                if not user:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="کاربر یافت نشد",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+                
+                if not user.is_active:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="حساب کاربری غیرفعال شده است",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+                
+                if user.role != UserRole.ADMIN:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="دسترسی ادمین لازم است",
+                    )
+                
+                return AuthenticatedUser(
+                    user_id=user.id,
+                    telegram_id=user.telegram_id,
+                    role=user.role,
+                    username=user.username,
+                )
+                
+        except JWTError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="توکن نامعتبر است",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    
+    # 2. Fall back to query param (for bot)
+    if admin_id:
+        user = await repo.get_by_id(admin_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Admin user not found",
+            )
+        
+        if user.role != UserRole.ADMIN:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin access required",
+            )
+        
+        return AuthenticatedUser(
+            user_id=user.id,
+            telegram_id=user.telegram_id,
+            role=user.role,
+            username=user.username,
+        )
+    
+    # 3. Neither provided - error
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="احراز هویت لازم است. توکن یا admin_id ارسال کنید.",
+    )
+
+
 async def require_print_shop_by_query(
     printshop_id: UUID = Query(..., description="Print shop user ID"),
     db: AsyncSession = Depends(get_db),
@@ -474,6 +583,7 @@ __all__ = [
     "require_validator",
     "require_print_shop",
     "require_admin_by_query",
+    "require_admin_hybrid",
     "require_print_shop_by_query",
     "get_current_admin_user",
     # JWT token-based auth

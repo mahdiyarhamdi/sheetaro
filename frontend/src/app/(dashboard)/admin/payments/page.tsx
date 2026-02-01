@@ -213,10 +213,10 @@ export default function AdminPaymentsPage() {
             {/* Receipt image */}
             <div>
               <p className="text-sm font-medium text-foreground mb-2">تصویر رسید</p>
-              {selectedPayment.receipt_url ? (
+              {selectedPayment.receipt_image_url ? (
                 <div className="relative aspect-video bg-accent rounded-xl overflow-hidden">
                   <Image
-                    src={selectedPayment.receipt_url}
+                    src={selectedPayment.receipt_image_url}
                     alt="Receipt"
                     fill
                     className="object-contain"
