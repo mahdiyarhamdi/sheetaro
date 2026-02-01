@@ -200,20 +200,23 @@ export default function NewOrderPage() {
     return price;
   }, [attributes, orderData.attributes]);
 
-  // Calculate unit price (price per item - without validation fee)
+  // Calculate unit price (price per item - base + attributes only)
   const unitPrice = useMemo(() => {
-    return basePrice + planPrice + attributesPrice;
-  }, [basePrice, planPrice, attributesPrice]);
+    return basePrice + attributesPrice;
+  }, [basePrice, attributesPrice]);
 
-  // Calculate total price (unit price * quantity)
-  // Calculate total price: (unit price * quantity) + validation fee (if requested)
+  // Calculate total price:
+  // (unit price × quantity) + design price (once) + validation fee (once, if requested)
   const totalPrice = useMemo(() => {
     let total = unitPrice * orderData.quantity;
+    // Design price is added once (not multiplied by quantity)
+    total += planPrice;
+    // Validation fee is added once (not multiplied by quantity)
     if (orderData.wants_validation) {
       total += VALIDATION_PRICE;
     }
     return total;
-  }, [unitPrice, orderData.quantity, orderData.wants_validation]);
+  }, [unitPrice, orderData.quantity, planPrice, orderData.wants_validation]);
 
   const canProceed = () => {
     switch (currentStep) {
@@ -1010,13 +1013,6 @@ export default function NewOrderPage() {
                     <span>{formatPrice(basePrice)}</span>
                   </div>
                   
-                  {planPrice > 0 && (
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted">هزینه طراحی ({selectedPlan?.name_fa})</span>
-                      <span>{formatPrice(planPrice)}</span>
-                    </div>
-                  )}
-                  
                   {attributesPrice > 0 && (
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted">هزینه ویژگی‌ها</span>
@@ -1033,9 +1029,16 @@ export default function NewOrderPage() {
                 {/* Total Calculation */}
                 <div className="py-2 space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted">جمع ({orderData.quantity} عدد)</span>
+                    <span className="text-muted">جمع چاپ ({orderData.quantity} عدد × {formatPrice(unitPrice)})</span>
                     <span>{formatPrice(unitPrice * orderData.quantity)}</span>
                   </div>
+                  
+                  {planPrice > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted">هزینه طراحی ({selectedPlan?.name_fa})</span>
+                      <span>{formatPrice(planPrice)}</span>
+                    </div>
+                  )}
                   
                   {orderData.wants_validation && (
                     <div className="flex items-center justify-between text-sm">

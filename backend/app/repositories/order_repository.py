@@ -24,6 +24,16 @@ class OrderRepository:
         order_dict['user_id'] = user_id
         order_dict.update(prices)
         
+        # Convert UUID objects in selected_attributes to strings for JSONB serialization
+        if 'selected_attributes' in order_dict and order_dict['selected_attributes']:
+            order_dict['selected_attributes'] = [
+                {
+                    key: str(value) if isinstance(value, UUID) else value
+                    for key, value in attr.items()
+                }
+                for attr in order_dict['selected_attributes']
+            ]
+        
         order = Order(**order_dict)
         self.db.add(order)
         await self.db.flush()
