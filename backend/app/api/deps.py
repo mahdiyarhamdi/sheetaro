@@ -374,6 +374,94 @@ async def require_admin_token(
     return current_user
 
 
+# ============== Hybrid Authentication (JWT + Query Param) ==============
+
+async def get_user_id_from_token_or_query(
+    authorization: Optional[str] = Header(None),
+    user_id: Optional[UUID] = Query(None, description="User ID (for bot)"),
+    db: AsyncSession = Depends(get_db),
+) -> UUID:
+    """
+    Get user ID from JWT token or query parameter.
+    
+    Supports both authentication methods:
+    1. JWT Token (Authorization: Bearer ...) - for web frontend
+    2. Query parameter (user_id=...) - for bot API
+    
+    Returns the user ID. Raises 401 if neither is provided or invalid.
+    """
+    # 1. Try JWT token first if Authorization header exists
+    if authorization and authorization.lower().startswith("bearer "):
+        try:
+            parts = authorization.split()
+            if len(parts) == 2:
+                token = parts[1]
+                payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+                
+                if payload.get("type") != "access":
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="توکن نامعتبر است",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+                
+                token_user_id = payload.get("sub")
+                if not token_user_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="توکن نامعتبر است",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+                
+                # Check expiration
+                exp = payload.get("exp")
+                if exp and datetime.fromtimestamp(exp, tz=timezone.utc) < datetime.now(timezone.utc):
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="توکن منقضی شده است",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+                
+                # Verify user exists and is active
+                result = await db.execute(
+                    select(User).where(User.id == UUID(token_user_id))
+                )
+                user = result.scalar_one_or_none()
+                
+                if not user:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="کاربر یافت نشد",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+                
+                if not user.is_active:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="حساب کاربری غیرفعال شده است",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+                
+                return user.id
+                
+        except JWTError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="توکن نامعتبر است",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    
+    # 2. Fall back to query parameter (for bot)
+    if user_id:
+        return user_id
+    
+    # 3. Neither provided - error
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="احراز هویت لازم است. توکن یا user_id ارسال کنید.",
+    )
+
+
 # Re-export get_db from database module
 __all__ = [
     "get_db",
@@ -392,5 +480,7 @@ __all__ = [
     "get_token_from_header",
     "get_current_user_from_token",
     "require_admin_token",
+    # Hybrid auth (JWT + query param)
+    "get_user_id_from_token_or_query",
 ]
 

@@ -12,6 +12,7 @@ from app.api.deps import (
     require_admin,
     require_staff,
     require_print_shop_by_query,
+    get_user_id_from_token_or_query,
 )
 from app.schemas.order import (
     OrderCreate, OrderUpdate, OrderStatusUpdate,
@@ -28,11 +29,11 @@ router = APIRouter()
     response_model=OrderOut,
     status_code=status.HTTP_201_CREATED,
     summary="Create order",
-    description="Create a new print order",
+    description="Create a new print order. Supports JWT token (web) or user_id query param (bot).",
 )
 async def create_order(
     order_data: OrderCreate,
-    user_id: UUID = Query(..., description="User ID (from bot)"),
+    user_id: UUID = Depends(get_user_id_from_token_or_query),
     db: AsyncSession = Depends(get_db),
 ) -> OrderOut:
     """Create a new order."""
@@ -50,13 +51,13 @@ async def create_order(
     "/orders",
     response_model=OrderListResponse,
     summary="List user orders",
-    description="Get list of orders for a user",
+    description="Get list of orders for a user. Supports JWT token (web) or user_id query param (bot).",
 )
 async def list_orders(
-    user_id: UUID = Query(..., description="User ID"),
     status_filter: Optional[OrderStatus] = Query(None, alias="status", description="Filter by status"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    user_id: UUID = Depends(get_user_id_from_token_or_query),
     db: AsyncSession = Depends(get_db),
 ) -> OrderListResponse:
     """List orders for a user."""
