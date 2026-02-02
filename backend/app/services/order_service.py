@@ -59,7 +59,7 @@ class OrderService:
         self.category_repo = CategoryRepository(db)
         self.user_repo = UserRepository(db)
     
-    def _calculate_prices(
+    async def _calculate_prices(
         self,
         category_base_price: Decimal,
         selected_attributes: List[SelectedAttributeItem],
@@ -83,12 +83,31 @@ class OrderService:
         design_price = DESIGN_PRICES.get(design_plan, Decimal('0'))
         validation_price = VALIDATION_PRICE if validation_requested else Decimal('0')
         
-        # Calculate attributes price from selected options
-        attributes_price = sum(attr.price_modifier for attr in selected_attributes)
+        # Calculate attributes prices - separate FIXED and MULTIPLIER types
+        fixed_attributes_price = Decimal('0')
+        multiplier = Decimal('1')
         
-        # Base price + attributes price
+        for attr_item in selected_attributes:
+            # Get attribute from database to check its price_type
+            attribute = await self.category_repo.get_attribute_by_id(attr_item.attribute_id)
+            if attribute:
+                modifier = Decimal(str(attr_item.price_modifier))
+                if attribute.price_type.value == "MULTIPLIER":
+                    # Multiplier is applied to base price (e.g., 1.5 = 150%)
+                    multiplier *= modifier
+                else:
+                    # FIXED: add to fixed price
+                    fixed_attributes_price += modifier
+        
+        # Calculate unit price: (base_price × multiplier) + fixed_attributes
         base_price = category_base_price
-        print_price = (base_price + attributes_price) * quantity
+        unit_price = (base_price * multiplier) + fixed_attributes_price
+        
+        # Total attributes price for record keeping
+        attributes_price = int(unit_price - base_price)
+        
+        # Print price = unit price × quantity
+        print_price = unit_price * quantity
         
         total_price = design_price + validation_price + print_price
         
@@ -125,7 +144,7 @@ class OrderService:
             raise ValueError("Design file is required for OWN_DESIGN plan")
         
         # Calculate prices
-        prices = self._calculate_prices(
+        prices = await self._calculate_prices(
             category_base_price=Decimal(str(category.base_price)),
             selected_attributes=order_data.selected_attributes,
             quantity=order_data.quantity,
