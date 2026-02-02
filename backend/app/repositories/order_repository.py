@@ -24,6 +24,9 @@ class OrderRepository:
         order_dict['user_id'] = user_id
         order_dict.update(prices)
         
+        # Remove plan_id as it's not a field in the Order model (used only for price calculation)
+        order_dict.pop('plan_id', None)
+        
         # Convert UUID objects in selected_attributes to strings for JSONB serialization
         if 'selected_attributes' in order_dict and order_dict['selected_attributes']:
             order_dict['selected_attributes'] = [

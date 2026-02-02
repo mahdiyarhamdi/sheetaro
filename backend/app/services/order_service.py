@@ -66,6 +66,7 @@ class OrderService:
         quantity: int,
         design_plan: DesignPlan,
         validation_requested: bool,
+        plan_id: Optional[UUID] = None,
     ) -> dict:
         """Calculate order prices based on category and selected attributes.
         
@@ -75,12 +76,24 @@ class OrderService:
             quantity: Number of units ordered.
             design_plan: Selected design plan type.
             validation_requested: Whether validation was requested.
+            plan_id: Optional plan ID to fetch actual price from database.
         
         Returns:
             Dictionary with base_price, attributes_price, design_price, 
             validation_price, print_price, total_price, and max_revisions.
         """
-        design_price = DESIGN_PRICES.get(design_plan, Decimal('0'))
+        # Get design price from database if plan_id provided, otherwise use fallback
+        design_price = Decimal('0')
+        max_revisions_from_plan = None
+        if plan_id:
+            plan = await self.category_repo.get_plan_by_id(plan_id)
+            if plan:
+                design_price = Decimal(str(plan.price))
+                max_revisions_from_plan = plan.max_revisions
+        else:
+            # Fallback to hardcoded prices if no plan_id
+            design_price = DESIGN_PRICES.get(design_plan, Decimal('0'))
+        
         validation_price = VALIDATION_PRICE if validation_requested else Decimal('0')
         
         # Calculate attributes prices - separate FIXED and MULTIPLIER types
@@ -90,14 +103,17 @@ class OrderService:
         for attr_item in selected_attributes:
             # Get attribute from database to check its price_type
             attribute = await self.category_repo.get_attribute_by_id(attr_item.attribute_id)
-            if attribute:
-                modifier = Decimal(str(attr_item.price_modifier))
-                if attribute.price_type.value == "MULTIPLIER":
-                    # Multiplier is applied to base price (e.g., 1.5 = 150%)
-                    multiplier *= modifier
-                else:
-                    # FIXED: add to fixed price
-                    fixed_attributes_price += modifier
+            if attribute and attr_item.option_id:
+                # Get the ACTUAL price_modifier from database, not from request
+                option = await self.category_repo.get_option_by_id(attr_item.option_id)
+                if option:
+                    modifier = Decimal(str(option.price_modifier))
+                    if attribute.price_type.value == "MULTIPLIER":
+                        # Multiplier is applied to base price (e.g., 1.5 = 150%)
+                        multiplier *= modifier
+                    else:
+                        # FIXED: add to fixed price
+                        fixed_attributes_price += modifier
         
         # Calculate unit price: (base_price × multiplier) + fixed_attributes
         base_price = category_base_price
@@ -111,13 +127,15 @@ class OrderService:
         
         total_price = design_price + validation_price + print_price
         
-        # Set max revisions based on plan
-        max_revisions = None
-        if design_plan == DesignPlan.SEMI_PRIVATE:
-            max_revisions = 3
-        elif design_plan == DesignPlan.PUBLIC:
-            max_revisions = 0
-        # Private plan has unlimited (None)
+        # Set max revisions - prefer value from database plan if available
+        max_revisions = max_revisions_from_plan
+        if max_revisions is None:
+            # Fallback to enum-based defaults
+            if design_plan == DesignPlan.SEMI_PRIVATE:
+                max_revisions = 3
+            elif design_plan == DesignPlan.PUBLIC:
+                max_revisions = 0
+            # Private plan has unlimited (None)
         
         return {
             'base_price': base_price,
@@ -150,6 +168,7 @@ class OrderService:
             quantity=order_data.quantity,
             design_plan=order_data.design_plan,
             validation_requested=order_data.validation_requested,
+            plan_id=order_data.plan_id,
         )
         
         # All orders start with PENDING_PAYMENT status

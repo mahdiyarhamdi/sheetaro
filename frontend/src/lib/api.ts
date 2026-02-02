@@ -195,6 +195,7 @@ export interface SelectedAttributeItem {
 export interface CreateOrderRequest {
   category_id: string;
   design_plan: DesignPlanType;
+  plan_id?: string;
   selected_attributes: SelectedAttributeItem[];
   quantity: number;
   validation_requested?: boolean;

@@ -29,6 +29,7 @@ class OrderBase(BaseModel):
 
 class OrderCreate(OrderBase):
     """Schema for creating an order."""
+    plan_id: Optional[UUID] = Field(None, description="Design plan ID from database")
     design_file_url: Optional[str] = Field(None, max_length=500, description="Design file URL (for OWN_DESIGN)")
     validation_requested: bool = Field(default=False, description="Request design validation")
     

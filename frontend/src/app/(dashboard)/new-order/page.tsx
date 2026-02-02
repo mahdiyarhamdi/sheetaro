@@ -382,6 +382,7 @@ export default function NewOrderPage() {
           data: {
             category_id: orderData.category_id,
             design_plan: designPlan,
+            plan_id: orderData.plan_id, // Send actual plan_id to get correct price from database
             selected_attributes: selectedAttributes,
             quantity: orderData.quantity,
             validation_requested: orderData.wants_validation,
