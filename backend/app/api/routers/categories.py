@@ -21,7 +21,7 @@ from app.schemas.category import (
     ApplyLogoRequest, ApplyLogoResponse,
     PlaceholderCreate, PlaceholderUpdate, PlaceholderOut, PlaceholderReorderRequest,
     TemplatePreviewRequest, TemplatePreviewResponse,
-    ProcessedDesignOut, ProcessedDesignCreate, ProcessedDesignWithTemplate,
+    ProcessedDesignOut, ProcessedDesignCreate, ProcessedDesignWithTemplate, ProcessedDesignCreateWithPlaceholders,
     StepTemplateCreate, StepTemplateUpdate, StepTemplateOut,
     QuestionAnswerOut, QuestionAnswerCreate, SubmitAnswersRequest,
 )
@@ -965,26 +965,29 @@ async def get_order_designs(
 @answers_router.post("/{order_id}/design", response_model=ProcessedDesignOut, status_code=status.HTTP_201_CREATED)
 async def create_order_design(
     order_id: UUID,
-    data: ProcessedDesignCreate,
+    data: ProcessedDesignCreateWithPlaceholders,
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    """Process a template with logo and save as order design."""
+    """Process a template with placeholder values and save as order design."""
     repo = CategoryRepository(db)
     
-    # Get template
-    template = await repo.get_template_by_id(data.template_id)
+    # Get template with placeholders
+    template = await repo.get_template_with_placeholders(data.template_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
     
-    # Process template with logo
+    # Process template with placeholder data
     template_service = TemplateService(repository=repo)
     base_url = str(request.base_url).rstrip('/')
     
+    # Convert placeholder values to dict format expected by service
+    placeholder_data = [pv.model_dump() for pv in data.placeholder_values]
+    
     try:
-        result = await template_service.process_and_save_design(
+        result = await template_service.generate_and_save_design(
             template=template,
-            logo_url=data.logo_url,
+            placeholder_data=placeholder_data,
             order_id=str(order_id),
             base_url=base_url,
         )

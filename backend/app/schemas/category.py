@@ -632,6 +632,19 @@ class ProcessedDesignCreate(BaseModel):
     logo_url: str = Field(..., max_length=500)
 
 
+class PlaceholderValueItem(BaseModel):
+    """Single placeholder value for design generation."""
+    placeholder_id: str = Field(..., description="Placeholder ID")
+    image_url: Optional[str] = Field(None, description="Image URL for IMAGE type placeholders")
+    text_value: Optional[str] = Field(None, description="Text value for TEXT type placeholders")
+
+
+class ProcessedDesignCreateWithPlaceholders(BaseModel):
+    """Schema for creating a processed design with placeholder values."""
+    template_id: UUID = Field(..., description="Template ID to use")
+    placeholder_values: List[PlaceholderValueItem] = Field(..., description="Placeholder values")
+
+
 class ProcessedDesignOut(ProcessedDesignBase):
     """Schema for processed design response."""
     id: UUID

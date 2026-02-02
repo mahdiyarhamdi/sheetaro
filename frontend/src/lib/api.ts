@@ -147,6 +147,27 @@ export interface OrdersListResponse {
   page_size: number;
 }
 
+export interface PlaceholderValueItem {
+  placeholder_id: string;
+  image_url?: string;
+  text_value?: string;
+}
+
+export interface SaveOrderDesignRequest {
+  template_id: string;
+  placeholder_values: PlaceholderValueItem[];
+}
+
+export interface ProcessedDesignResponse {
+  id: string;
+  order_id: string;
+  template_id: string;
+  logo_url: string;
+  preview_url: string;
+  final_url: string;
+  created_at: string;
+}
+
 export const ordersApi = {
   list: (params?: { page?: number; page_size?: number; status?: string }) =>
     api.get<OrdersListResponse>("/orders", { params }),
@@ -158,6 +179,10 @@ export const ordersApi = {
 
   updateStatus: (id: string, status: string) =>
     api.patch<Order>(`/orders/${id}/status`, { status }),
+
+  // Save order design with placeholder values
+  saveDesign: (orderId: string, data: SaveOrderDesignRequest) =>
+    api.post<ProcessedDesignResponse>(`/orders/${orderId}/design`, data),
 };
 
 export type DesignPlanType = "PUBLIC" | "SEMI_PRIVATE" | "PRIVATE" | "OWN_DESIGN";
@@ -622,6 +647,32 @@ export interface TemplateData {
   updated_at: string;
 }
 
+// ============ Validation Types ============
+
+export type ValidationStatus = "PENDING" | "PASSED" | "FAILED";
+
+export interface ValidationRequest {
+  id: string;
+  user_id: string;
+  user_name?: string;
+  user_phone?: string;
+  category_name?: string;
+  plan_name?: string;
+  template_name?: string;
+  validation_status?: ValidationStatus;
+  total_price: number;
+  validation_price: number;
+  created_at: string;
+  design_preview_url?: string;
+}
+
+export interface ValidationListResponse {
+  items: ValidationRequest[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export const adminApi = {
   // Dashboard stats
   getStats: () => api.get<AdminStats>("/admin/stats"),
@@ -791,6 +842,20 @@ export const adminApi = {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
+
+  // ============ Validation Management API ============
+
+  // Get pending validations
+  getValidations: (params?: { status?: ValidationStatus; page?: number; page_size?: number }) =>
+    api.get<ValidationListResponse>("/admin/validations", { params }),
+
+  // Approve validation
+  approveValidation: (orderId: string) =>
+    api.post(`/admin/validations/${orderId}/approve`),
+
+  // Reject validation
+  rejectValidation: (orderId: string, comment: string) =>
+    api.post(`/admin/validations/${orderId}/reject`, { comment }),
 };
 
 // Error helper

@@ -1224,4 +1224,57 @@ class TemplateService:
             
         except Exception as e:
             raise ValueError(f"Error generating preview: {str(e)}")
+    
+    async def generate_and_save_design(
+        self,
+        template: DesignTemplate,
+        placeholder_data: List[dict],
+        order_id: str,
+        base_url: str = "",
+    ) -> dict:
+        """
+        Generate a preview with placeholder data and save as ProcessedDesign.
+        
+        Args:
+            template: DesignTemplate with placeholders relationship loaded
+            placeholder_data: List of dicts with placeholder_id and image_url/text_value
+            order_id: Order ID to associate with the design
+            base_url: Base URL for serving files
+            
+        Returns:
+            dict with preview_url, final_url, design_id, width, height
+        """
+        # Generate the preview
+        result = await self.generate_preview(template, placeholder_data, base_url)
+        
+        # For processed designs, we also create a "final" version
+        # For now, use the same file as final (can be enhanced later for high-res)
+        final_url = result["preview_url"]
+        
+        # Get the primary image URL from placeholder_data for logo_url field
+        # (backwards compatibility - use first image placeholder as logo_url)
+        logo_url = ""
+        for data in placeholder_data:
+            if data.get("image_url"):
+                logo_url = data["image_url"]
+                break
+        
+        # If no image placeholder, use a placeholder string
+        if not logo_url:
+            logo_url = "text-only-design"
+        
+        # Save to database if repository is available
+        if self.repository and order_id:
+            from uuid import UUID
+            design = await self.repository.create_processed_design(
+                order_id=UUID(order_id),
+                template_id=template.id,
+                logo_url=logo_url,
+                preview_url=result["preview_url"],
+                final_url=final_url,
+            )
+            result["design_id"] = str(design.id)
+            result["final_url"] = final_url
+        
+        return result
 

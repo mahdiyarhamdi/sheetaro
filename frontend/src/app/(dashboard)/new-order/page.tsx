@@ -6,7 +6,7 @@ import Image from "next/image";
 import { useCategories, useCategoryAttributes, useCategoryPlans, usePlanTemplates, usePlanQuestionnaire, useTemplatePlaceholders, useTemplatePreview } from "@/hooks/useCatalog";
 import { useOrders } from "@/hooks/useOrders";
 import { useAuth } from "@/hooks/useAuth";
-import { filesApi, paymentsApi, PlaceholderImageUploadResponse } from "@/lib/api";
+import { filesApi, paymentsApi, ordersApi, PlaceholderImageUploadResponse } from "@/lib/api";
 import {
   Card,
   CardHeader,
@@ -396,11 +396,27 @@ export default function NewOrderPage() {
 
       const orderId = orderResponse.data.id;
 
-      // Step 2: Initiate payment
+      // Step 2: Save design with placeholder values (if template-based order)
+      if (orderData.template_id && Object.keys(orderData.placeholder_values).length > 0) {
+        const placeholderValues = Object.entries(orderData.placeholder_values).map(
+          ([placeholderId, value]) => ({
+            placeholder_id: placeholderId,
+            image_url: value.type === "IMAGE" ? value.value : undefined,
+            text_value: value.type === "TEXT" ? value.value : undefined,
+          })
+        );
+
+        await ordersApi.saveDesign(orderId, {
+          template_id: orderData.template_id,
+          placeholder_values: placeholderValues,
+        });
+      }
+
+      // Step 3: Initiate payment
       const paymentResponse = await paymentsApi.initiate(orderId);
       const paymentId = paymentResponse.data.id;
 
-      // Step 3: Upload receipt
+      // Step 4: Upload receipt
       await paymentsApi.uploadReceipt(paymentId, receiptFile);
 
       toast.success("سفارش با موفقیت ثبت شد. رسید پرداخت در حال بررسی است.");
