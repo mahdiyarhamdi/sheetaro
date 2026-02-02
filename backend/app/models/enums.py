@@ -62,6 +62,7 @@ class ValidationStatus(str, Enum):
 
 class PaymentType(str, Enum):
     """Payment types."""
+    FULL = "FULL"  # Full order payment
     VALIDATION = "VALIDATION"
     DESIGN = "DESIGN"
     FIX = "FIX"

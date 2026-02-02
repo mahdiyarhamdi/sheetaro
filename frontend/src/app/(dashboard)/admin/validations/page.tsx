@@ -344,7 +344,9 @@ export default function AdminValidationsPage() {
               {selectedValidation.design_preview_url ? (
                 <div className="relative aspect-video bg-accent rounded-xl overflow-hidden">
                   <img
-                    src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005'}${selectedValidation.design_preview_url.startsWith('/api/v1') ? selectedValidation.design_preview_url : '/api/v1' + selectedValidation.design_preview_url}`}
+                    src={selectedValidation.design_preview_url.startsWith('http') 
+                      ? selectedValidation.design_preview_url 
+                      : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005'}${selectedValidation.design_preview_url.startsWith('/api/v1') ? selectedValidation.design_preview_url : '/api/v1' + selectedValidation.design_preview_url}`}
                     alt="Design Preview"
                     className="w-full h-full object-contain"
                   />

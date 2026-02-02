@@ -60,7 +60,9 @@ class PaymentService:
     
     def _get_payment_amount(self, order, payment_type: PaymentType) -> Decimal:
         """Get payment amount based on type."""
-        if payment_type == PaymentType.VALIDATION:
+        if payment_type == PaymentType.FULL:
+            return order.total_price
+        elif payment_type == PaymentType.VALIDATION:
             return order.validation_price
         elif payment_type == PaymentType.DESIGN:
             return order.design_price
@@ -87,7 +89,7 @@ class PaymentService:
             raise ValueError("Access denied")
         
         # Determine payment type (default to FULL order payment if not specified)
-        payment_type = payment_data.type if payment_data.type else PaymentType.VALIDATION
+        payment_type = payment_data.type if payment_data.type else PaymentType.FULL
         
         # Get amount based on payment type
         amount = self._get_payment_amount(order, payment_type)
