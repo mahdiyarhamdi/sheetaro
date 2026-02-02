@@ -24,6 +24,9 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:3005",
   },
+  
+  // Next.js 14 supports path aliases from tsconfig.json natively
+  // No webpack customization needed
 };
 
 export default nextConfig;

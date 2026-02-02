@@ -17,7 +17,7 @@ import {
   clearTokens,
   getAccessToken,
   getUser as getStoredUser,
-} from "@/lib/auth";
+} from "../lib/auth";
 
 export function useAuth() {
   const router = useRouter();

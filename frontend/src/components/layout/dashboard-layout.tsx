@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { Header } from "./header";
 import { Sidebar } from "./sidebar";
 import { Footer } from "./footer";
-import { isAuthenticated } from "@/lib/auth";
+import { isAuthenticated } from "../../lib/auth";
 import { PageLoading } from "@/components/ui";
 
 interface DashboardLayoutProps {

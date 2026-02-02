@@ -16,9 +16,10 @@ import {
   X,
   MessageCircle,
   Type,
+  CheckSquare,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { isAdmin } from "@/lib/auth";
+import { isAdmin } from "../../lib/auth";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -42,6 +43,7 @@ const customerNavItems: NavItem[] = [
 const adminNavItems: NavItem[] = [
   { href: "/admin", label: "داشبورد مدیریت", icon: BarChart3 },
   { href: "/admin/payments", label: "پرداخت‌ها", icon: CreditCard },
+  { href: "/admin/validations", label: "اعتبارسنجی‌ها", icon: CheckSquare },
   { href: "/admin/catalog", label: "مدیریت کاتالوگ", icon: FolderOpen },
   { href: "/admin/fonts", label: "مدیریت فونت‌ها", icon: Type },
   { href: "/admin/users", label: "کاربران", icon: Users },
