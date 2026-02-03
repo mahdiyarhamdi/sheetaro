@@ -215,11 +215,10 @@ export default function AdminPaymentsPage() {
               <p className="text-sm font-medium text-foreground mb-2">تصویر رسید</p>
               {selectedPayment.receipt_image_url ? (
                 <div className="relative aspect-video bg-accent rounded-xl overflow-hidden">
-                  <Image
-                    src={selectedPayment.receipt_image_url}
+                  <img
+                    src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005'}${selectedPayment.receipt_image_url.startsWith('/api/v1') ? selectedPayment.receipt_image_url : '/api/v1' + selectedPayment.receipt_image_url}`}
                     alt="Receipt"
-                    fill
-                    className="object-contain"
+                    className="w-full h-full object-contain"
                   />
                 </div>
               ) : (
