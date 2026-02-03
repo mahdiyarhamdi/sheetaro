@@ -36,3 +36,5 @@ export type { EmptyStateProps } from "./empty-state";
 export { ImageUpload } from "./image-upload";
 export type { ImageUploadProps } from "./image-upload";
 
+
+export { OptimizedImage } from "./optimized-image";

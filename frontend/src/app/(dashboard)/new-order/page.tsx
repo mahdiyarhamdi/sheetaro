@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
+import { OptimizedImage } from "@/components/ui";
 import { useCategories, useCategoryAttributes, useCategoryPlans, usePlanTemplates, usePlanQuestionnaire, useTemplatePlaceholders, useTemplatePreview } from "@/hooks/useCatalog";
 import { useOrders } from "@/hooks/useOrders";
 import { useAuth } from "@/hooks/useAuth";
@@ -635,7 +635,7 @@ export default function NewOrderPage() {
                     >
                       <div className="aspect-square relative bg-accent">
                         {template.preview_url ? (
-                          <Image
+                          <OptimizedImage
                           src={getFullImageUrl(template.preview_url) || ""}
                             alt={template.name_fa}
                             fill
@@ -688,14 +688,14 @@ export default function NewOrderPage() {
                     <CardContent>
                       <div className="aspect-square relative bg-accent rounded-lg overflow-hidden">
                         {previewUrl ? (
-                          <Image
+                          <OptimizedImage
                             src={getFullImageUrl(previewUrl) || ""}
                             alt="پیش‌نمایش"
                             fill
                             className="object-contain"
                           />
                         ) : selectedTemplate?.preview_url ? (
-                          <Image
+                          <OptimizedImage
                             src={getFullImageUrl(selectedTemplate.preview_url) || ""}
                             alt={selectedTemplate.name_fa}
                             fill
@@ -761,7 +761,7 @@ export default function NewOrderPage() {
                               </div>
                             ) : orderData.placeholder_values[placeholder.id]?.value ? (
                               <div className="relative">
-                                <Image
+                                <OptimizedImage
                                   src={getFullImageUrl(orderData.placeholder_values[placeholder.id].value) || ""}
                                   alt={placeholder.label_fa}
                                   width={100}
@@ -1241,7 +1241,7 @@ export default function NewOrderPage() {
                 
                 {receiptPreview ? (
                   <div className="relative">
-                    <Image
+                    <OptimizedImage
                       src={receiptPreview}
                       alt="Receipt preview"
                       width={200}
