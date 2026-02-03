@@ -779,9 +779,9 @@ async def approve_validation(
     order.validation_status = ValidationStatus.PASSED
     order.assigned_validator_id = current_user.id
     
-    # If order was awaiting validation, move it forward
+    # If order was awaiting validation, move it forward to ready for print
     if order.status == OrderStatus.AWAITING_VALIDATION:
-        order.status = OrderStatus.IN_PROGRESS
+        order.status = OrderStatus.READY_FOR_PRINT
     
     await db.commit()
     
