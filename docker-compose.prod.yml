@@ -14,6 +14,8 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - DEBUG=${DEBUG:-false}
+    volumes:
+      - sheetaro_uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -127,4 +129,6 @@ volumes:
     name: sheetaro_postgres_data
   sheetaro_redis_data:
     name: sheetaro_redis_data
+  sheetaro_uploads:
+    name: sheetaro_uploads
 
