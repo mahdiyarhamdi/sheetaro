@@ -65,6 +65,8 @@ services:
         condition: service_started
     networks:
       - sheetaro_network
+    extra_hosts:
+      - "51.89.47.244:host-gateway"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)}).on('error', () => process.exit(1))"]
