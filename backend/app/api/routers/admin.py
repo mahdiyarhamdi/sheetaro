@@ -7,12 +7,14 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
+from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 
 from app.api.deps import get_db, get_current_user_from_token, require_admin_token as require_admin
 from app.models.user import User
 from app.models.order import Order
 from app.models.payment import Payment
+from app.models.processed_design import ProcessedDesign
 from app.models.enums import UserRole, OrderStatus, PaymentStatus, ValidationStatus
 from app.services.user_service import UserService
 from app.schemas.user import UserOut
@@ -656,16 +658,23 @@ async def list_validation_requests(
     current_user: User = Depends(require_admin),
 ) -> ValidationListResponse:
     """List orders with validation requested. Admin only."""
-    from app.models.category import Category, DesignPlan as DesignPlanModel
-    from app.models.template import Template
-    from sqlalchemy.orm import selectinload
+    from app.models.category import Category
+    from sqlalchemy import or_
     
     query = select(Order).where(Order.validation_requested == True)
     count_query = select(func.count(Order.id)).where(Order.validation_requested == True)
     
     if status:
-        query = query.where(Order.validation_status == status)
-        count_query = count_query.where(Order.validation_status == status)
+        # PENDING should include NULL validation_status (new requests)
+        if status == ValidationStatus.PENDING:
+            status_filter = or_(
+                Order.validation_status == status,
+                Order.validation_status.is_(None)
+            )
+        else:
+            status_filter = Order.validation_status == status
+        query = query.where(status_filter)
+        count_query = count_query.where(status_filter)
     
     # Get total
     total_result = await db.execute(count_query)
@@ -692,21 +701,35 @@ async def list_validation_requests(
             if cat:
                 category_name = cat.name_fa
         
-        # Get plan info
+        # Get plan name from enum
         plan_name = None
-        if order.plan_id:
-            plan_result = await db.execute(select(DesignPlanModel).where(DesignPlanModel.id == order.plan_id))
-            plan = plan_result.scalar_one_or_none()
-            if plan:
-                plan_name = plan.name_fa
+        if order.design_plan:
+            plan_names = {
+                "PUBLIC": "عمومی",
+                "SEMI_PRIVATE": "نیمه خصوصی",
+                "PRIVATE": "خصوصی",
+                "OWN_DESIGN": "طرح اختصاصی",
+            }
+            plan_name = plan_names.get(order.design_plan.value, order.design_plan.value)
         
-        # Get template info
+        # Get design preview URL - check order.design_file_url first (for OWN_DESIGN),
+        # then check processed_designs table (for template-based orders)
+        design_preview_url = order.design_file_url
         template_name = None
-        if order.template_id:
-            tmpl_result = await db.execute(select(Template).where(Template.id == order.template_id))
-            tmpl = tmpl_result.scalar_one_or_none()
-            if tmpl:
-                template_name = tmpl.name_fa
+        if not design_preview_url:
+            pd_result = await db.execute(
+                select(ProcessedDesign)
+                .where(ProcessedDesign.order_id == order.id)
+                .options(selectinload(ProcessedDesign.template))
+                .order_by(ProcessedDesign.created_at.desc())
+                .limit(1)
+            )
+            processed = pd_result.scalar_one_or_none()
+            if processed:
+                design_preview_url = processed.preview_url
+                # Also get template name if available
+                if processed.template:
+                    template_name = processed.template.name_fa
         
         items.append(ValidationRequestResponse(
             id=str(order.id),
@@ -720,7 +743,7 @@ async def list_validation_requests(
             total_price=float(order.total_price) if order.total_price else 0,
             validation_price=float(order.validation_price) if order.validation_price else 0,
             created_at=order.created_at.isoformat(),
-            design_preview_url=order.design_file_url,
+            design_preview_url=design_preview_url,
         ))
     
     return ValidationListResponse(
@@ -798,7 +821,7 @@ async def reject_validation(
     order.admin_notes = data.comment  # Store the correction comment
     
     # Set status to needs revision
-    order.status = OrderStatus.REVISION_REQUESTED
+    order.status = OrderStatus.NEEDS_ACTION
     
     await db.commit()
     
