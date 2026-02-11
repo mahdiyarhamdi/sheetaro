@@ -95,6 +95,7 @@ export interface User {
   last_name?: string;
   telegram_id?: number | null;
   is_admin: boolean;
+  role?: string | null;
   phone_verified: boolean;
   web_linked: boolean;
   created_at: string;
@@ -857,6 +858,72 @@ export const adminApi = {
   // Reject validation
   rejectValidation: (orderId: string, comment: string) =>
     api.post(`/admin/validations/${orderId}/reject`, { comment }),
+
+  // ============ Print Shop API ============
+
+  // Print shop queue (READY_FOR_PRINT orders)
+  getPrintshopQueue: (params?: { page?: number; page_size?: number }) =>
+    api.get("/printshop/orders", { params }),
+
+  // Print shop's own assigned orders
+  getPrintshopMyOrders: (params?: { status?: string; page?: number; page_size?: number }) =>
+    api.get("/printshop/my-orders", { params }),
+
+  // Print shop order detail
+  getPrintshopOrderDetail: (orderId: string) =>
+    api.get(`/printshop/my-orders/${orderId}`),
+
+  // Accept order from queue
+  printshopAcceptOrder: (orderId: string) =>
+    api.post(`/printshop/accept/${orderId}`),
+
+  // Mark as printed
+  printshopCompleteOrder: (orderId: string) =>
+    api.post(`/printshop/orders/${orderId}/complete`),
+
+  // Ship order with tracking code
+  printshopShipOrder: (orderId: string, data: { tracking_code: string; shipping_notes?: string }) =>
+    api.post(`/printshop/orders/${orderId}/ship`, data),
+
+  // Print shop stats
+  getPrintshopStats: () =>
+    api.get("/printshop/stats"),
+
+  // Print shop settlements
+  getPrintshopSettlements: (params?: { page?: number; page_size?: number }) =>
+    api.get("/printshop/settlements", { params }),
+
+  // ============ Admin Print Shop Management API ============
+
+  // List all print shops
+  getAdminPrintshops: (params?: { is_active?: boolean; page?: number; page_size?: number }) =>
+    api.get("/admin/printshops", { params }),
+
+  // Get print shop stats (admin)
+  getAdminPrintshopStats: (printshopId: string) =>
+    api.get(`/admin/printshops/${printshopId}/stats`),
+
+  // Get print shop orders (admin)
+  getAdminPrintshopOrders: (printshopId: string, params?: { status?: string; page?: number; page_size?: number }) =>
+    api.get(`/admin/printshops/${printshopId}/orders`, { params }),
+
+  // Reassign print shop
+  reassignPrintshop: (orderId: string, newPrintshopId?: string) =>
+    api.post(`/admin/orders/${orderId}/reassign-printshop`, null, {
+      params: newPrintshopId ? { new_printshop_id: newPrintshopId } : {},
+    }),
+
+  // Admin settlements
+  getAdminSettlements: (params?: { printshop_id?: string; status?: string; page?: number; page_size?: number }) =>
+    api.get("/admin/settlements", { params }),
+
+  // Mark settlement as paid
+  markSettlementPaid: (settlementId: string) =>
+    api.post(`/admin/settlements/${settlementId}/pay`),
+
+  // Get SLA compliance report
+  getPrintshopSlaReport: () =>
+    api.get("/admin/printshop-sla"),
 };
 
 // Error helper

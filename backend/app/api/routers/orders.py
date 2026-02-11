@@ -11,7 +11,6 @@ from app.api.deps import (
     get_current_user,
     require_admin,
     require_staff,
-    require_print_shop_by_query,
     get_user_id_from_token_or_query,
 )
 from app.schemas.order import (
@@ -171,52 +170,6 @@ async def cancel_order(
             detail=str(e)
         )
 
-
-# Print shop endpoints
-@router.get(
-    "/printshop/orders",
-    response_model=OrderListResponse,
-    summary="Get print shop queue",
-    description="Get orders ready for printing (Print shop/Staff only)",
-)
-async def get_printshop_queue(
-    page: int = Query(1, ge=1, description="Page number"),
-    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
-    db: AsyncSession = Depends(get_db),
-    staff_user: AuthenticatedUser = Depends(require_staff),
-) -> OrderListResponse:
-    """Get orders ready for print shop (staff only)."""
-    service = OrderService(db)
-    return await service.get_printshop_queue(page=page, page_size=page_size)
-
-
-@router.post(
-    "/printshop/accept/{order_id}",
-    response_model=OrderOut,
-    summary="Accept order",
-    description="Accept order by print shop (Print shop only)",
-)
-async def accept_order(
-    order_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    printshop_user: AuthenticatedUser = Depends(require_print_shop_by_query),
-) -> OrderOut:
-    """Accept order by print shop (print shop only)."""
-    service = OrderService(db)
-    try:
-        order = await service.accept_order_by_printshop(order_id, printshop_user.user_id)
-        if not order:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Order with id {order_id} not found or not available"
-            )
-        return order
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-
-
+# NOTE: Print shop endpoints moved to app/api/routers/printshop.py
 
 

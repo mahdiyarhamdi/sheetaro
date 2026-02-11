@@ -57,6 +57,12 @@ from handlers.customer_templates import (
     handle_template_callback,
 )
 
+# Import print shop flow handlers
+from handlers.flows.printshop_flow import handle_printshop_callback
+
+# Import admin flow validation callback handler
+from handlers.flows.admin_flow import handle_validation_callback
+
 # Load environment variables
 load_dotenv()
 
@@ -135,6 +141,20 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_template_callback, pattern="^retry_logo$"))
     application.add_handler(CallbackQueryHandler(handle_template_callback, pattern="^order_back_tpl$"))
     
+    # ============== Print Shop Callback Handlers ==============
+    async def ps_callback_router(update: Update, context):
+        """Route print shop callbacks."""
+        await handle_printshop_callback(update, context)
+
+    application.add_handler(CallbackQueryHandler(ps_callback_router, pattern="^ps_"))
+
+    # ============== Validation Callback Handlers ==============
+    async def validation_callback_router(update: Update, context):
+        """Route validation callbacks."""
+        await handle_validation_callback(update, context)
+
+    application.add_handler(CallbackQueryHandler(validation_callback_router, pattern="^(review_validation_|approve_validation_|reject_validation_|back_to_validations_list)"))
+
     # ============== Central Text Router ==============
     # This handles all text messages and routes them to the appropriate flow
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, route_text_input))

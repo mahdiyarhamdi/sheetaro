@@ -35,6 +35,11 @@ class BreadcrumbPath(Enum):
     PAYMENTS_PENDING = ("🔧 پنل مدیریت", "💳 پرداخت‌ها")
     PAYMENT_REVIEW = ("🔧 پنل مدیریت", "💳 پرداخت‌ها", "بررسی")
     
+    # Validation paths
+    VALIDATIONS_PENDING = ("🔧 پنل مدیریت", "✅ اعتبارسنجی‌ها")
+    VALIDATION_REVIEW = ("🔧 پنل مدیریت", "✅ اعتبارسنجی‌ها", "بررسی")
+    VALIDATION_REJECT = ("🔧 پنل مدیریت", "✅ اعتبارسنجی‌ها", "رد")
+    
     # Admin management paths
     ADMIN_MANAGEMENT = ("🔧 پنل مدیریت", "👥 مدیران")
     ADMIN_INFO = ("🔧 پنل مدیریت", "👥 مدیران")  # + admin name

@@ -90,6 +90,7 @@ class UserResponse(BaseModel):
     last_name: str | None
     telegram_id: int | None
     is_admin: bool
+    role: str | None = None
     phone_verified: bool
     web_linked: bool
     created_at: datetime

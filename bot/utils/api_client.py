@@ -1101,6 +1101,179 @@ class APIClient:
             logger.error(f"Error rejecting validation: {e}")
             return None
 
+    # ==================== Print Shop APIs ====================
+
+    async def get_printshop_queue(
+        self,
+        printshop_id: str,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> Optional[Dict[str, Any]]:
+        """Get orders ready for printing."""
+        client = await self._get_client()
+        try:
+            response = await client.get(
+                "/api/v1/printshop/orders",
+                params={"printshop_id": printshop_id, "page": page, "page_size": page_size},
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error getting printshop queue: {e}")
+            return None
+
+    async def get_printshop_my_orders(
+        self,
+        printshop_id: str,
+        status: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> Optional[Dict[str, Any]]:
+        """Get print shop's assigned orders."""
+        client = await self._get_client()
+        try:
+            params: Dict[str, Any] = {
+                "printshop_id": printshop_id,
+                "page": page,
+                "page_size": page_size,
+            }
+            if status:
+                params["status"] = status
+            response = await client.get("/api/v1/printshop/my-orders", params=params)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error getting printshop orders: {e}")
+            return None
+
+    async def get_printshop_order_detail(
+        self,
+        printshop_id: str,
+        order_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Get single order detail for print shop."""
+        client = await self._get_client()
+        try:
+            response = await client.get(
+                f"/api/v1/printshop/my-orders/{order_id}",
+                params={"printshop_id": printshop_id},
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error getting printshop order detail: {e}")
+            return None
+
+    async def printshop_accept_order(
+        self,
+        printshop_id: str,
+        order_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Accept an order from the queue."""
+        client = await self._get_client()
+        try:
+            response = await client.post(
+                f"/api/v1/printshop/accept/{order_id}",
+                params={"printshop_id": printshop_id},
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error accepting order: {e}")
+            return None
+
+    async def printshop_complete_order(
+        self,
+        printshop_id: str,
+        order_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Mark order as printed."""
+        client = await self._get_client()
+        try:
+            response = await client.post(
+                f"/api/v1/printshop/orders/{order_id}/complete",
+                params={"printshop_id": printshop_id},
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error completing order: {e}")
+            return None
+
+    async def printshop_ship_order(
+        self,
+        printshop_id: str,
+        order_id: str,
+        tracking_code: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Mark order as shipped with tracking code."""
+        client = await self._get_client()
+        try:
+            response = await client.post(
+                f"/api/v1/printshop/orders/{order_id}/ship",
+                json={"tracking_code": tracking_code},
+                params={"printshop_id": printshop_id},
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error shipping order: {e}")
+            return None
+
+    async def get_printshop_stats(
+        self,
+        printshop_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Get print shop dashboard statistics."""
+        client = await self._get_client()
+        try:
+            response = await client.get(
+                "/api/v1/printshop/stats",
+                params={"printshop_id": printshop_id},
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error getting printshop stats: {e}")
+            return None
+
+    async def get_printshop_settlements(
+        self,
+        printshop_id: str,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> Optional[Dict[str, Any]]:
+        """Get print shop settlement history."""
+        client = await self._get_client()
+        try:
+            response = await client.get(
+                "/api/v1/printshop/settlements",
+                params={"printshop_id": printshop_id, "page": page, "page_size": page_size},
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error getting printshop settlements: {e}")
+            return None
+
+    async def get_printshop_telegram_ids(self) -> List[int]:
+        """Get print shop telegram IDs from database via API."""
+        client = await self._get_client()
+        try:
+            response = await client.get(
+                "/api/v1/admin/printshops",
+                params={"is_active": True, "page": 1, "page_size": 100},
+            )
+            response.raise_for_status()
+            data = response.json()
+            return [
+                u['telegram_id'] for u in data.get('items', [])
+                if u.get('telegram_id')
+            ]
+        except httpx.HTTPError as e:
+            logger.error(f"Error getting printshop telegram IDs: {e}")
+            return []
+
 
 # Singleton instance for easy import
 api_client = APIClient()

@@ -39,6 +39,7 @@ docker-compose up --build
 | `REFRESH_TOKEN_EXPIRE_DAYS` | JWT refresh token expiry | No | `30` |
 | `OTP_EXPIRE_MINUTES` | OTP code expiry for Telegram linking | No | `5` |
 | `OTP_LENGTH` | OTP code length | No | `6` |
+| `UPLOAD_DIR` | File upload directory | No | `/app/uploads` |
 
 ## API Endpoints
 
@@ -79,8 +80,14 @@ docker-compose up --build
 - `POST /orders/{id}/cancel` - Cancel order
 
 ### Print Shop (`/api/v1/printshop`)
-- `GET /printshop/orders` - Get orders ready for printing
-- `POST /printshop/accept/{id}` - Accept order
+- `GET /printshop/orders` - Get queue of orders ready for printing (READY_FOR_PRINT)
+- `GET /printshop/my-orders` - Get orders assigned to this print shop (filter by status)
+- `GET /printshop/my-orders/{id}` - Get detail of an assigned order
+- `POST /printshop/accept/{id}` - Accept order from queue (sets status to PRINTING)
+- `POST /printshop/orders/{id}/complete` - Mark order as printed (PRINTING → PRINTED)
+- `POST /printshop/orders/{id}/ship` - Ship order with tracking code (PRINTED → SHIPPED)
+- `GET /printshop/stats` - Get print shop dashboard statistics
+- `GET /printshop/settlements` - Get settlement/commission history
 
 ### Payments (`/api/v1/payments`)
 - `POST /payments/initiate` - Initiate payment
@@ -143,6 +150,13 @@ docker-compose up --build
 - `POST /admin/orders/{id}/assign` - Assign order to designer/validator/printshop
 - `GET /admin/payments` - List all payments with filters
 - `POST /admin/payments/{id}/verify` - Verify or reject payment
+- `GET /admin/printshops` - List all print shop users
+- `GET /admin/printshops/{id}/stats` - Get print shop performance stats
+- `GET /admin/printshops/{id}/orders` - Get print shop order history
+- `POST /admin/orders/{id}/reassign-printshop` - Reassign order to another print shop
+- `GET /admin/settlements` - List all settlements
+- `POST /admin/settlements/{id}/pay` - Mark settlement as paid
+- `GET /admin/printshop-sla` - Get SLA compliance report for all print shops
 
 ### Categories (`/api/v1/categories`) - Dynamic Product Catalog
 - `GET /categories` - List all categories
@@ -274,6 +288,14 @@ python -m pytest tests/ -v -k "auth"
 | Integration Tests | `tests/integration/` | API endpoint tests with database |
 | E2E Tests | `tests/e2e/` | Full flow tests (order creation, payment, etc.) |
 
+### Print Shop Tests
+
+| File | Description |
+|------|-------------|
+| `tests/unit/test_printshop_service.py` | OrderService print shop methods (accept, complete, ship, stats, queue) |
+| `tests/integration/test_printshop_api.py` | Print shop API endpoints (queue, accept, my-orders, complete, ship, stats, settlements) |
+| `tests/integration/test_admin_printshop_api.py` | Admin print shop management endpoints (list, stats, orders, reassign, settlements, SLA) |
+
 ### Dynamic Template Builder Tests
 
 | File | Description |
@@ -313,6 +335,7 @@ backend/
 │   ├── repositories/       # Database operations (CRUD)
 │   ├── schemas/            # Pydantic schemas (input/output)
 │   ├── services/           # Business logic
+│   ├── tasks/              # Background tasks (SLA enforcement)
 │   ├── utils/
 │   │   └── logger.py       # Structured JSON logging
 │   ├── exceptions.py       # Custom exception classes
@@ -337,9 +360,11 @@ backend/
 
 ### Order Status Flow
 ```
-PENDING → AWAITING_VALIDATION → NEEDS_ACTION → DESIGNING → READY_FOR_PRINT → PRINTING → SHIPPED → DELIVERED
-                                                              ↓
-                                                          CANCELLED
+PENDING_PAYMENT → PAYMENT_UPLOADED → PAYMENT_APPROVED → PENDING → AWAITING_VALIDATION → NEEDS_ACTION → DESIGNING
+                       ↓                                                                                    ↓
+                  PAYMENT_REJECTED                                                                   READY_FOR_PRINT
+                                                                                                         ↓
+                                                                              CANCELLED ← PRINTING → PRINTED → SHIPPED → DELIVERED
 ```
 
 ### Payment Status Flow (Card-to-Card)
@@ -413,5 +438,5 @@ For Telegram bot integration, `user_id` query parameter is used.
 
 ---
 
-**Last Updated**: 2026-01-31
+**Last Updated**: 2026-02-11
 

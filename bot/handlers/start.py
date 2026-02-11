@@ -47,13 +47,17 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     # Store user role in context for menu display
     is_admin = False
+    is_printshop = False
     if result:
         logger.info(f"User saved: telegram_id={user.id}, username={user.username}, role={result.get('role')}")
-        is_admin = result.get('role') == 'ADMIN'
+        role = result.get('role', 'CUSTOMER')
+        is_admin = role == 'ADMIN'
+        is_printshop = role == 'PRINT_SHOP'
         context.user_data['is_admin'] = is_admin
-        context.user_data['user_role'] = result.get('role', 'CUSTOMER')
+        context.user_data['is_printshop'] = is_printshop
+        context.user_data['user_role'] = role
         context.user_data['user_id'] = result.get('id')
-        logger.info(f"is_admin set to: {is_admin}")
+        logger.info(f"is_admin={is_admin}, is_printshop={is_printshop}")
     else:
         logger.warning(f"Failed to get user data from API for telegram_id={user.id}")
     
@@ -71,7 +75,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     await update.message.reply_text(
         welcome_message,
-        reply_markup=get_main_menu_keyboard(is_admin=is_admin)
+        reply_markup=get_main_menu_keyboard(is_admin=is_admin, is_printshop=is_printshop)
     )
 
 

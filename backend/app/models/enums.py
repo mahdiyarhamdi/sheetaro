@@ -47,9 +47,16 @@ class OrderStatus(str, Enum):
     DESIGNING = "DESIGNING"
     READY_FOR_PRINT = "READY_FOR_PRINT"
     PRINTING = "PRINTING"
+    PRINTED = "PRINTED"  # Print completed, awaiting shipment
     SHIPPED = "SHIPPED"
     DELIVERED = "DELIVERED"
     CANCELLED = "CANCELLED"
+
+
+class SettlementStatus(str, Enum):
+    """Settlement status values."""
+    PENDING = "PENDING"
+    PAID = "PAID"
 
 
 class ValidationStatus(str, Enum):

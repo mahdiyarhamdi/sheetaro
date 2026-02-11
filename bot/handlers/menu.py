@@ -94,6 +94,19 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return
     
+    # ============== Print Shop Panel ==============
+    if "پنل چاپخانه" in text:
+        is_printshop = context.user_data.get('is_printshop', False)
+        if not is_printshop and not is_admin:
+            await update.message.reply_text(
+                "شما به این بخش دسترسی ندارید."
+            )
+            return
+
+        from handlers.flows.printshop_flow import show_printshop_menu
+        await show_printshop_menu(update, context)
+        return
+
     # ============== Admin Panel ==============
     if "پنل مدیریت" in text or "مدیریت" in text:
         if not is_admin:
@@ -107,7 +120,8 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
         return
     
     # ============== Unknown ==============
+    is_printshop = context.user_data.get('is_printshop', False)
     await update.message.reply_text(
         "لطفا از منوی زیر استفاده کنید:",
-        reply_markup=get_main_menu_keyboard(is_admin)
+        reply_markup=get_main_menu_keyboard(is_admin, is_printshop)
     )

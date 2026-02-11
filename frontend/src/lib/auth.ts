@@ -79,6 +79,14 @@ export function isAdmin(): boolean {
 }
 
 /**
+ * Checks if the user is a print shop
+ */
+export function isPrintShop(): boolean {
+  const user = getUser();
+  return user?.role === "PRINT_SHOP";
+}
+
+/**
  * Logs out the user
  */
 export function logout(): void {

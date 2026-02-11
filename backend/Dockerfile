@@ -5,12 +5,13 @@ WORKDIR /app
 # Create fonts directory
 RUN mkdir -p /app/fonts
 
-# Install system dependencies for libraqm (complex text layout for Persian/Arabic)
+# Install system dependencies for libraqm (complex text layout for Persian/Arabic) and curl for healthcheck
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libraqm-dev \
     libfribidi-dev \
     libharfbuzz-dev \
     pkg-config \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies

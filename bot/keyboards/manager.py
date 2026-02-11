@@ -10,11 +10,12 @@ from typing import List, Optional
 
 # ============== Reply Keyboards ==============
 
-def get_main_menu_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
+def get_main_menu_keyboard(is_admin: bool = False, is_printshop: bool = False) -> ReplyKeyboardMarkup:
     """Get the main menu keyboard.
     
     Args:
         is_admin: Whether to show admin panel button
+        is_printshop: Whether to show print shop panel button
         
     Returns:
         ReplyKeyboardMarkup for main menu
@@ -24,6 +25,9 @@ def get_main_menu_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
         ["👤 پروفایل", "🔍 رهگیری سفارش"],
         ["📞 پشتیبانی", "ℹ️ راهنما"]
     ]
+    
+    if is_printshop:
+        keyboard.append(["🏭 پنل چاپخانه"])
     
     if is_admin:
         keyboard.append(["🔧 پنل مدیریت"])
@@ -35,7 +39,9 @@ def get_admin_menu_keyboard() -> ReplyKeyboardMarkup:
     """Get the admin panel menu keyboard."""
     keyboard = [
         ["💳 پرداخت‌های در انتظار تأیید"],
+        ["✅ اعتبارسنجی‌های در انتظار"],
         ["📂 مدیریت کاتالوگ"],
+        ["🏭 مدیریت چاپخانه‌ها"],
         ["⚙️ تنظیمات کارت بانکی"],
         ["👥 مدیریت مدیران"],
         ["🔙 بازگشت به منو"]

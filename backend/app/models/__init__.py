@@ -10,6 +10,7 @@ from app.models.enums import (
     PaymentType,
     PaymentStatus,
     SubscriptionPlan,
+    SettlementStatus,
 )
 from app.models.user import User
 from app.models.order import Order
@@ -29,6 +30,7 @@ from app.models.design_template import DesignTemplate, TemplatePlaceholder, Plac
 from app.models.processed_design import ProcessedDesign
 from app.models.order_step import OrderStepTemplate, OrderStep, StepType
 from app.models.question_answer import QuestionAnswer
+from app.models.settlement import Settlement
 from app.models.system_font import SystemFont
 
 __all__ = [
@@ -49,6 +51,8 @@ __all__ = [
     "PaymentType",
     "PaymentStatus",
     "SubscriptionPlan",
+    "SettlementStatus",
+    "Settlement",
     # Dynamic category models
     "Category",
     "CategoryAttribute",

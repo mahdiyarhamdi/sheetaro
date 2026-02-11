@@ -52,7 +52,7 @@ MAX_TEMPLATE_IMAGE_SIZE = 20 * 1024 * 1024
 MAX_FONT_FILE_SIZE = 10 * 1024 * 1024
 
 # Upload directory
-UPLOAD_DIR = Path("/app/uploads")
+UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", "/app/uploads"))
 
 
 class FileService:

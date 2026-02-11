@@ -8,6 +8,7 @@ os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://sheetaro:sheetaro@lo
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/1")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing-only")
 os.environ.setdefault("DEBUG", "true")
+os.environ.setdefault("UPLOAD_DIR", "/tmp/sheetaro_test_uploads")
 
 import asyncio
 import pytest
@@ -49,13 +50,19 @@ BEGIN
         CREATE TYPE designplan AS ENUM ('PUBLIC', 'SEMI_PRIVATE', 'PRIVATE', 'OWN_DESIGN');
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'orderstatus') THEN
-        CREATE TYPE orderstatus AS ENUM ('PENDING', 'AWAITING_VALIDATION', 'NEEDS_ACTION', 'DESIGNING', 'READY_FOR_PRINT', 'PRINTING', 'SHIPPED', 'DELIVERED', 'CANCELLED');
+        CREATE TYPE orderstatus AS ENUM ('PENDING_PAYMENT', 'PAYMENT_UPLOADED', 'PAYMENT_APPROVED', 'PAYMENT_REJECTED', 'PENDING', 'AWAITING_VALIDATION', 'NEEDS_ACTION', 'DESIGNING', 'READY_FOR_PRINT', 'PRINTING', 'PRINTED', 'SHIPPED', 'DELIVERED', 'CANCELLED');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'settlementstatus') THEN
+        CREATE TYPE settlementstatus AS ENUM ('PENDING', 'PAID');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'attributepricetype') THEN
+        CREATE TYPE attributepricetype AS ENUM ('FIXED', 'MULTIPLIER');
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'validationstatus') THEN
         CREATE TYPE validationstatus AS ENUM ('PENDING', 'PASSED', 'FAILED', 'FIXED');
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'paymenttype') THEN
-        CREATE TYPE paymenttype AS ENUM ('VALIDATION', 'DESIGN', 'FIX', 'PRINT', 'SUBSCRIPTION');
+        CREATE TYPE paymenttype AS ENUM ('FULL', 'VALIDATION', 'DESIGN', 'FIX', 'PRINT', 'SUBSCRIPTION');
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'paymentstatus') THEN
         CREATE TYPE paymentstatus AS ENUM ('PENDING', 'AWAITING_APPROVAL', 'SUCCESS', 'FAILED');
@@ -65,7 +72,7 @@ BEGIN
     END IF;
     -- Dynamic category system enums
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'attributeinputtype') THEN
-        CREATE TYPE attributeinputtype AS ENUM ('TEXT', 'SELECT', 'NUMBER', 'BOOLEAN');
+        CREATE TYPE attributeinputtype AS ENUM ('SELECT', 'MULTI_SELECT', 'NUMBER', 'TEXT');
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'designplantype') THEN
         CREATE TYPE designplantype AS ENUM ('PUBLIC', 'SEMI_PRIVATE', 'PRIVATE', 'OWN_DESIGN');
@@ -715,4 +722,72 @@ async def test_order(db_session, regular_web_user, test_category_for_order):
 async def test_payment(db_session, test_order, regular_web_user):
     """Create a test payment for admin tests."""
     return await create_test_payment(db_session, test_order, regular_web_user)
+
+
+# ==================== Print Shop Testing Fixtures ====================
+
+async def create_test_printshop_user(db_session: AsyncSession, data: dict = None):
+    """Create a test print shop user."""
+    from app.models.user import User
+
+    user_data = data or {
+        "phone_number": "09129999999",
+        "password_hash": get_password_hash("printshop123"),
+        "first_name": "PrintShop",
+        "last_name": "Owner",
+        "full_name": "PrintShop Owner",
+        "role": UserRole.PRINT_SHOP,
+        "phone_verified": True,
+        "web_linked": False,
+        "is_active": True,
+        "city": "Tehran",
+    }
+
+    if isinstance(user_data.get("role"), str):
+        user_data["role"] = UserRole(user_data["role"])
+
+    user = User(**user_data)
+    db_session.add(user)
+    await db_session.flush()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def printshop_user(db_session):
+    """Create a print shop user for testing."""
+    return await create_test_printshop_user(db_session)
+
+
+@pytest_asyncio.fixture
+async def printshop_token(printshop_user):
+    """Get access token for print shop user."""
+    return create_admin_token(str(printshop_user.id))
+
+
+@pytest_asyncio.fixture
+async def printshop_headers(printshop_token):
+    """Get authorization headers for print shop requests."""
+    return {"Authorization": f"Bearer {printshop_token}"}
+
+
+@pytest_asyncio.fixture
+async def ready_for_print_order(db_session, regular_web_user, test_category_for_order):
+    """Create a test order with READY_FOR_PRINT status."""
+    from app.models.enums import OrderStatus
+    return await create_test_order(db_session, regular_web_user, test_category_for_order, {
+        "status": OrderStatus.READY_FOR_PRINT,
+        "shipping_address": "Tehran, Valiasr Street",
+    })
+
+
+@pytest_asyncio.fixture
+async def printing_order(db_session, regular_web_user, test_category_for_order, printshop_user):
+    """Create a test order with PRINTING status assigned to print shop."""
+    from app.models.enums import OrderStatus
+    return await create_test_order(db_session, regular_web_user, test_category_for_order, {
+        "status": OrderStatus.PRINTING,
+        "assigned_printshop_id": printshop_user.id,
+        "shipping_address": "Tehran, Valiasr Street",
+    })
 

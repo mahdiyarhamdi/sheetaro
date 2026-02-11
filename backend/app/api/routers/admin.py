@@ -15,9 +15,12 @@ from app.models.user import User
 from app.models.order import Order
 from app.models.payment import Payment
 from app.models.processed_design import ProcessedDesign
-from app.models.enums import UserRole, OrderStatus, PaymentStatus, ValidationStatus
+from app.models.settlement import Settlement
+from app.models.enums import UserRole, OrderStatus, PaymentStatus, ValidationStatus, SettlementStatus
 from app.services.user_service import UserService
+from app.services.order_service import OrderService
 from app.schemas.user import UserOut
+from app.schemas.order import PrintShopStats, SettlementOut
 
 router = APIRouter(prefix="/api/v1/admin", tags=["Admin"])
 
@@ -831,5 +834,243 @@ async def reject_validation(
         "validation_status": order.validation_status.value,
         "comment": data.comment,
         "message": "درخواست اصلاح ثبت شد"
+    }
+
+
+# ============== Print Shop Management ==============
+
+@router.get("/printshops")
+async def list_printshops(
+    is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> dict:
+    """List all print shop users. Admin only."""
+    query = select(User).where(User.role == UserRole.PRINT_SHOP)
+    count_query = select(func.count(User.id)).where(User.role == UserRole.PRINT_SHOP)
+
+    if is_active is not None:
+        query = query.where(User.is_active == is_active)
+        count_query = count_query.where(User.is_active == is_active)
+
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    query = query.order_by(User.created_at.desc())
+    query = query.offset((page - 1) * page_size).limit(page_size)
+
+    result = await db.execute(query)
+    printshops = result.scalars().all()
+
+    return {
+        "items": [UserOut.model_validate(u).model_dump() for u in printshops],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+@router.get("/printshops/{printshop_id}/stats", response_model=PrintShopStats)
+async def get_printshop_stats(
+    printshop_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> PrintShopStats:
+    """Get performance stats for a specific print shop. Admin only."""
+    service = OrderService(db)
+    return await service.get_printshop_stats(printshop_id)
+
+
+@router.get("/printshops/{printshop_id}/orders")
+async def get_printshop_orders(
+    printshop_id: UUID,
+    status_filter: Optional[OrderStatus] = Query(None, alias="status"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> dict:
+    """Get order history for a specific print shop. Admin only."""
+    service = OrderService(db)
+    result = await service.get_printshop_my_orders(
+        printshop_id=printshop_id,
+        status_filter=status_filter,
+        page=page,
+        page_size=page_size,
+    )
+    return result.model_dump()
+
+
+@router.post("/orders/{order_id}/reassign-printshop")
+async def reassign_printshop(
+    order_id: UUID,
+    new_printshop_id: Optional[UUID] = Query(None, description="New print shop ID (None to unassign)"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> dict:
+    """Reassign order to a different print shop or unassign. Admin only."""
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalar_one_or_none()
+
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="سفارش یافت نشد"
+        )
+
+    if new_printshop_id:
+        # Verify the new printshop exists and has the right role
+        ps_result = await db.execute(select(User).where(User.id == new_printshop_id))
+        printshop = ps_result.scalar_one_or_none()
+        if not printshop or printshop.role != UserRole.PRINT_SHOP:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="چاپخانه مورد نظر یافت نشد"
+            )
+        order.assigned_printshop_id = new_printshop_id
+        order.status = OrderStatus.PRINTING
+    else:
+        # Unassign and return to queue
+        order.assigned_printshop_id = None
+        order.status = OrderStatus.READY_FOR_PRINT
+        order.accepted_at = None
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "order_id": str(order_id),
+        "assigned_printshop_id": str(order.assigned_printshop_id) if order.assigned_printshop_id else None,
+        "status": order.status.value,
+    }
+
+
+@router.get("/settlements")
+async def list_all_settlements(
+    printshop_id: Optional[UUID] = Query(None, description="Filter by print shop"),
+    status_filter: Optional[str] = Query(None, alias="status", description="Filter by status (PENDING/PAID)"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> dict:
+    """List all settlements. Admin only."""
+    query = select(Settlement)
+    count_query = select(func.count(Settlement.id))
+
+    conditions = []
+    if printshop_id:
+        conditions.append(Settlement.printshop_id == printshop_id)
+    if status_filter:
+        conditions.append(Settlement.status == SettlementStatus(status_filter))
+
+    if conditions:
+        query = query.where(and_(*conditions))
+        count_query = count_query.where(and_(*conditions))
+
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    query = query.order_by(Settlement.period_end.desc())
+    query = query.offset((page - 1) * page_size).limit(page_size)
+
+    result = await db.execute(query)
+    settlements = result.scalars().all()
+
+    return {
+        "items": [
+            {
+                "id": str(s.id),
+                "printshop_id": str(s.printshop_id),
+                "period_start": s.period_start.isoformat(),
+                "period_end": s.period_end.isoformat(),
+                "total_orders": s.total_orders,
+                "total_revenue": float(s.total_revenue),
+                "platform_commission": float(s.platform_commission),
+                "net_amount": float(s.net_amount),
+                "status": s.status.value,
+                "paid_at": s.paid_at.isoformat() if s.paid_at else None,
+                "created_at": s.created_at.isoformat(),
+            }
+            for s in settlements
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+@router.post("/settlements/{settlement_id}/pay")
+async def mark_settlement_paid(
+    settlement_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> dict:
+    """Mark a settlement as paid. Admin only."""
+    result = await db.execute(select(Settlement).where(Settlement.id == settlement_id))
+    settlement = result.scalar_one_or_none()
+
+    if not settlement:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="تسویه‌حساب یافت نشد"
+        )
+
+    if settlement.status == SettlementStatus.PAID:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="این تسویه‌حساب قبلاً پرداخت شده"
+        )
+
+    settlement.status = SettlementStatus.PAID
+    settlement.paid_at = datetime.utcnow()
+    await db.commit()
+
+    return {
+        "success": True,
+        "settlement_id": str(settlement_id),
+        "status": "PAID",
+    }
+
+
+@router.get("/printshop-sla")
+async def get_printshop_sla_report(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> dict:
+    """Get SLA compliance report for all print shops. Admin only."""
+    from sqlalchemy import extract as sa_extract
+
+    # Get all print shops
+    ps_result = await db.execute(
+        select(User).where(User.role == UserRole.PRINT_SHOP, User.is_active == True)
+    )
+    printshops = ps_result.scalars().all()
+
+    report = []
+    for ps in printshops:
+        service = OrderService(db)
+        stats = await service.get_printshop_stats(ps.id)
+        report.append({
+            "printshop_id": str(ps.id),
+            "printshop_name": f"{ps.first_name} {ps.last_name or ''}".strip(),
+            "total_orders": stats.total_orders,
+            "in_progress": stats.in_progress_orders,
+            "avg_print_time_hours": stats.avg_print_time_hours,
+            "avg_ship_time_hours": stats.avg_ship_time_hours,
+            "sla_compliance_percent": stats.sla_compliance_percent,
+        })
+
+    # Queue size
+    queue_result = await db.execute(
+        select(func.count(Order.id)).where(Order.status == OrderStatus.READY_FOR_PRINT)
+    )
+    queue_size = queue_result.scalar() or 0
+
+    return {
+        "queue_size": queue_size,
+        "printshops": report,
     }
 

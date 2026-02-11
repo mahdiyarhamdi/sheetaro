@@ -17,6 +17,7 @@ FLOW_PROFILE = "profile"
 FLOW_TRACKING = "tracking"
 FLOW_QUESTIONNAIRE = "questionnaire"
 FLOW_TEMPLATES = "templates"
+FLOW_PRINT_SHOP = "print_shop"
 
 
 def set_flow(
@@ -245,5 +246,17 @@ TEMPLATE_STEPS = {
     'logo_upload': 'logo_upload',
     'design_preview': 'design_preview',
     'confirmation': 'design_confirmation',
+}
+
+# Print shop flow steps
+PRINT_SHOP_STEPS = {
+    'menu': 'printshop_menu',
+    'order_queue': 'printshop_order_queue',
+    'order_detail': 'printshop_order_detail',
+    'my_orders': 'printshop_my_orders',
+    'my_order_detail': 'printshop_my_order_detail',
+    'enter_tracking': 'printshop_enter_tracking',
+    'stats': 'printshop_stats',
+    'settlements': 'printshop_settlements',
 }
 

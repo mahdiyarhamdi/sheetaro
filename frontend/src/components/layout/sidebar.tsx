@@ -17,9 +17,13 @@ import {
   MessageCircle,
   Type,
   CheckSquare,
+  Factory,
+  ClipboardList,
+  DollarSign,
+  Truck,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { isAdmin } from "../../lib/auth";
+import { isAdmin, isPrintShop } from "../../lib/auth";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -47,14 +51,24 @@ const adminNavItems: NavItem[] = [
   { href: "/admin/catalog", label: "مدیریت کاتالوگ", icon: FolderOpen },
   { href: "/admin/fonts", label: "مدیریت فونت‌ها", icon: Type },
   { href: "/admin/users", label: "کاربران", icon: Users },
+  { href: "/admin/printshops", label: "مدیریت چاپخانه‌ها", icon: Factory },
+];
+
+const printShopNavItems: NavItem[] = [
+  { href: "/printshop", label: "داشبورد چاپخانه", icon: Factory },
+  { href: "/printshop/orders", label: "صف سفارش‌ها", icon: ClipboardList },
+  { href: "/printshop/my-orders", label: "سفارش‌های من", icon: Truck },
+  { href: "/printshop/settlements", label: "تسویه‌حساب", icon: DollarSign },
 ];
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
   const [isUserAdmin, setIsUserAdmin] = useState(false);
+  const [isUserPrintShop, setIsUserPrintShop] = useState(false);
 
   useEffect(() => {
     setIsUserAdmin(isAdmin());
+    setIsUserPrintShop(isPrintShop());
   }, []);
 
   const isActiveLink = (href: string) => {
@@ -127,6 +141,34 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               ))}
             </ul>
           </div>
+
+          {/* Print Shop navigation */}
+          {isUserPrintShop && (
+            <div>
+              <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">
+                پنل چاپخانه
+              </h3>
+              <ul className="space-y-1">
+                {printShopNavItems.map((item) => (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      onClick={onClose}
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                        isActiveLink(item.href)
+                          ? "bg-primary-50 text-primary"
+                          : "text-muted hover:bg-accent hover:text-foreground"
+                      )}
+                    >
+                      <item.icon className="w-5 h-5" />
+                      <span>{item.label}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Admin navigation */}
           {isUserAdmin && (

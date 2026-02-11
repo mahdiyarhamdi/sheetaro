@@ -115,6 +115,59 @@ class PrintShopOrderOut(OrderOut):
     customer_name: Optional[str] = None
     customer_phone: Optional[str] = None
     customer_city: Optional[str] = None
+    customer_address: Optional[str] = None
+
+
+class PrintShopOrderListResponse(BaseModel):
+    """Response schema for print shop order list."""
+    items: list[PrintShopOrderOut]
+    total: int
+    page: int
+    page_size: int
+
+
+class PrintShopShipRequest(BaseModel):
+    """Schema for shipping an order with tracking code."""
+    tracking_code: str = Field(..., min_length=5, max_length=100, description="Shipping tracking code")
+    shipping_notes: Optional[str] = Field(None, max_length=500, description="Shipping notes")
+
+
+class PrintShopStats(BaseModel):
+    """Print shop dashboard statistics."""
+    total_orders: int = 0
+    pending_orders: int = 0         # READY_FOR_PRINT in queue
+    in_progress_orders: int = 0     # PRINTING
+    printed_orders: int = 0         # PRINTED
+    shipped_orders: int = 0         # SHIPPED
+    delivered_orders: int = 0       # DELIVERED
+    avg_print_time_hours: Optional[float] = None
+    avg_ship_time_hours: Optional[float] = None
+    sla_compliance_percent: Optional[float] = None
+
+
+class SettlementOut(BaseModel):
+    """Settlement output schema."""
+    id: UUID
+    printshop_id: UUID
+    period_start: str
+    period_end: str
+    total_orders: int
+    total_revenue: Decimal
+    platform_commission: Decimal
+    net_amount: Decimal
+    status: str
+    paid_at: Optional[datetime] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SettlementListResponse(BaseModel):
+    """Response schema for settlement list."""
+    items: list[SettlementOut]
+    total: int
+    page: int
+    page_size: int
 
 
 

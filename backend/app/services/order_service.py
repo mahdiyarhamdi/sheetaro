@@ -23,7 +23,8 @@ from app.repositories.category_repository import CategoryRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.order import (
     OrderCreate, OrderUpdate, OrderStatusUpdate, OrderAssign,
-    OrderOut, OrderListResponse, PrintShopOrderOut, SelectedAttributeItem
+    OrderOut, OrderListResponse, PrintShopOrderOut, PrintShopOrderListResponse,
+    PrintShopShipRequest, PrintShopStats, SelectedAttributeItem,
 )
 from app.models.enums import OrderStatus, DesignPlan, UserRole
 from app.utils.logger import log_event
@@ -231,27 +232,19 @@ class OrderService:
         self,
         page: int = 1,
         page_size: int = 20,
-    ) -> OrderListResponse:
+    ) -> PrintShopOrderListResponse:
         """Get orders ready for print shop."""
         page_size = min(page_size, 100)
         page = max(page, 1)
-        
+
         orders, total = await self.repository.get_ready_for_print(
             page=page,
             page_size=page_size,
         )
-        
-        # Convert to PrintShopOrderOut with customer info
-        items = []
-        for order in orders:
-            order_out = PrintShopOrderOut.model_validate(order)
-            if order.user:
-                order_out.customer_name = f"{order.user.first_name} {order.user.last_name or ''}".strip()
-                order_out.customer_phone = order.user.phone_number
-                order_out.customer_city = order.user.city
-            items.append(order_out)
-        
-        return OrderListResponse(
+
+        items = [self._to_printshop_order_out(o) for o in orders]
+
+        return PrintShopOrderListResponse(
             items=items,
             total=total,
             page=page,
@@ -336,7 +329,7 @@ class OrderService:
             return None
         
         # Can only cancel before printing starts
-        if order.status in [OrderStatus.PRINTING, OrderStatus.SHIPPED, OrderStatus.DELIVERED]:
+        if order.status in [OrderStatus.PRINTING, OrderStatus.PRINTED, OrderStatus.SHIPPED, OrderStatus.DELIVERED]:
             raise ValueError("Cannot cancel order after printing has started")
         
         status_update = OrderStatusUpdate(status=OrderStatus.CANCELLED)
@@ -350,6 +343,117 @@ class OrderService:
             )
             return OrderOut.model_validate(updated_order)
         return None
+
+    # ==================== Print Shop Methods ====================
+
+    def _to_printshop_order_out(self, order) -> PrintShopOrderOut:
+        """Convert an order with user relation to PrintShopOrderOut."""
+        order_out = PrintShopOrderOut.model_validate(order)
+        if order.user:
+            order_out.customer_name = f"{order.user.first_name} {order.user.last_name or ''}".strip()
+            order_out.customer_phone = order.user.phone_number
+            order_out.customer_city = order.user.city
+            order_out.customer_address = order.user.address
+        return order_out
+
+    async def get_printshop_my_orders(
+        self,
+        printshop_id: UUID,
+        status_filter: Optional[OrderStatus] = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> PrintShopOrderListResponse:
+        """Get orders assigned to a print shop."""
+        page_size = min(page_size, 100)
+        page = max(page, 1)
+
+        orders, total = await self.repository.get_printshop_my_orders(
+            printshop_id=printshop_id,
+            status_filter=status_filter,
+            page=page,
+            page_size=page_size,
+        )
+
+        items = [self._to_printshop_order_out(o) for o in orders]
+
+        return PrintShopOrderListResponse(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+
+    async def get_printshop_order_detail(
+        self,
+        order_id: UUID,
+        printshop_id: UUID,
+    ) -> Optional[PrintShopOrderOut]:
+        """Get a single order detail for print shop."""
+        order = await self.repository.get_by_id(order_id)
+        if not order:
+            return None
+        if order.assigned_printshop_id != printshop_id:
+            return None
+        return self._to_printshop_order_out(order)
+
+    async def complete_printing(
+        self,
+        order_id: UUID,
+        printshop_id: UUID,
+    ) -> Optional[OrderOut]:
+        """Mark order as printed by print shop."""
+        order = await self.repository.get_by_id(order_id)
+        if not order:
+            return None
+
+        if order.assigned_printshop_id != printshop_id:
+            raise ValueError("Order is not assigned to this print shop")
+
+        if order.status != OrderStatus.PRINTING:
+            raise ValueError(f"Cannot complete printing: order status is {order.status.value}")
+
+        updated = await self.repository.complete_printing(order_id)
+        if updated:
+            log_event(
+                event_type="order.print_completed",
+                order_id=str(order_id),
+                printshop_id=str(printshop_id),
+            )
+            return OrderOut.model_validate(updated)
+        return None
+
+    async def ship_order(
+        self,
+        order_id: UUID,
+        printshop_id: UUID,
+        tracking_code: str,
+    ) -> Optional[OrderOut]:
+        """Ship order with tracking code."""
+        order = await self.repository.get_by_id(order_id)
+        if not order:
+            return None
+
+        if order.assigned_printshop_id != printshop_id:
+            raise ValueError("Order is not assigned to this print shop")
+
+        if order.status != OrderStatus.PRINTED:
+            raise ValueError(f"Cannot ship: order status is {order.status.value}, must be PRINTED")
+
+        updated = await self.repository.ship_order(order_id, tracking_code)
+        if updated:
+            log_event(
+                event_type="order.shipped",
+                order_id=str(order_id),
+                printshop_id=str(printshop_id),
+                tracking_code=tracking_code,
+            )
+            return OrderOut.model_validate(updated)
+        return None
+
+    async def get_printshop_stats(self, printshop_id: UUID) -> PrintShopStats:
+        """Get dashboard statistics for a print shop."""
+        stats = await self.repository.get_printshop_stats(printshop_id)
+        return PrintShopStats(**stats)
 
 
 

@@ -107,3 +107,46 @@ def get_cancel_add_admin_keyboard() -> InlineKeyboardMarkup:
     ]
     return InlineKeyboardMarkup(keyboard)
 
+
+# ============== Validation Keyboards ==============
+
+def get_pending_validations_keyboard(validations: list) -> InlineKeyboardMarkup:
+    """Get inline keyboard for pending validations list."""
+    keyboard = []
+    
+    for validation in validations:
+        order_id = str(validation.get('id', ''))[:8]
+        user_name = validation.get('user_name', 'ناشناس')
+        category_name = validation.get('category_name', '')
+        
+        button_text = f"#{order_id}"
+        if category_name:
+            button_text += f" - {category_name}"
+        button_text += f" - {user_name}"
+        
+        keyboard.append([
+            InlineKeyboardButton(button_text, callback_data=f"review_validation_{validation['id']}")
+        ])
+    
+    keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_admin_menu")])
+    
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_validation_review_keyboard(order_id: str) -> InlineKeyboardMarkup:
+    """Get keyboard for reviewing a validation."""
+    keyboard = [
+        [InlineKeyboardButton("✅ تأیید اعتبارسنجی", callback_data=f"approve_validation_{order_id}")],
+        [InlineKeyboardButton("❌ رد و ارسال اصلاحیه", callback_data=f"reject_validation_{order_id}")],
+        [InlineKeyboardButton("🔙 بازگشت به لیست", callback_data="back_to_validations_list")],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_validation_reject_keyboard(order_id: str) -> InlineKeyboardMarkup:
+    """Get keyboard for validation rejection (cancel button)."""
+    keyboard = [
+        [InlineKeyboardButton("🔙 انصراف", callback_data=f"review_validation_{order_id}")],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+

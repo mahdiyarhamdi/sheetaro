@@ -880,6 +880,51 @@ The Telegram bot uses a **unified flow management** architecture:
 
 ---
 
-**Last Updated**: 2026-01-31
+## Print Shop Panel Architecture
+
+### Overview
+
+The Print Shop Panel is a dedicated module for managing print shop operations. It consists of:
+
+- **Backend**: Dedicated router (`/api/v1/printshop/*`) + admin endpoints for print shop management
+- **Bot**: Dedicated flow (`FLOW_PRINT_SHOP`) with keyboards and callback handlers
+- **Frontend**: Dashboard pages at `/printshop/*` and admin management at `/admin/printshops/*`
+
+### Order Lifecycle (Print Shop Perspective)
+
+```
+READY_FOR_PRINT → [Print Shop Accepts] → PRINTING → [Print Shop Completes] → PRINTED → [Print Shop Ships] → SHIPPED → DELIVERED
+                                            ↑ SLA: 30 min to accept
+```
+
+### Models
+
+- `Settlement` - Tracks print shop commissions per billing period
+- `SettlementStatus` - PENDING / PAID
+- `OrderStatus.PRINTED` - New status between PRINTING and SHIPPED
+
+### SLA Enforcement
+
+- Background task (`tasks/printshop_sla.py`) checks for stale READY_FOR_PRINT orders
+- Orders unaccepted after 30 minutes trigger admin notifications
+- Admin can manually reassign orders to another print shop
+
+### Key Files
+
+| Layer | File | Purpose |
+|-------|------|---------|
+| API | `api/routers/printshop.py` | Print shop queue, my-orders, accept, complete, ship, stats, settlements |
+| API | `api/routers/admin.py` | Admin: list printshops, stats, reassign, settlements, SLA report |
+| Model | `models/settlement.py` | Settlement ORM model |
+| Schema | `schemas/order.py` | PrintShopOrderOut, PrintShopStats, SettlementOut, etc. |
+| Task | `tasks/printshop_sla.py` | Background SLA enforcement |
+| Bot | `handlers/flows/printshop_flow.py` | Bot flow handlers |
+| Bot | `keyboards/printshop.py` | Inline/reply keyboards |
+| Frontend | `app/(dashboard)/printshop/` | Dashboard, queue, my-orders, settlements pages |
+| Frontend | `app/(dashboard)/admin/printshops/` | Admin print shop management pages |
+
+---
+
+**Last Updated**: 2026-02-11
 
 

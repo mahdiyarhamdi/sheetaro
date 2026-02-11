@@ -17,6 +17,8 @@ from utils.api_client import api_client
 from utils.notifications import (
     notify_customer_payment_approved,
     notify_customer_payment_rejected,
+    notify_customer_validation_approved,
+    notify_customer_validation_rejected,
 )
 from utils.breadcrumb import Breadcrumb, BreadcrumbPath, get_breadcrumb
 from keyboards.manager import get_admin_menu_keyboard
@@ -28,6 +30,9 @@ from keyboards.admin import (
     get_admin_info_keyboard,
     get_confirm_remove_admin_keyboard,
     get_cancel_add_admin_keyboard,
+    get_pending_validations_keyboard,
+    get_validation_review_keyboard,
+    get_validation_reject_keyboard,
 )
 from utils.helpers import get_user_menu_keyboard
 
@@ -35,7 +40,8 @@ logger = logging.getLogger(__name__)
 
 # Conversation states
 (ADMIN_MENU, PENDING_LIST, PAYMENT_REVIEW, AWAITING_REJECT_REASON,
- ADMIN_MANAGEMENT, ADMIN_INFO, AWAITING_NEW_ADMIN_ID) = range(7)
+ ADMIN_MANAGEMENT, ADMIN_INFO, AWAITING_NEW_ADMIN_ID,
+ VALIDATIONS_LIST, VALIDATION_REVIEW, AWAITING_VALIDATION_REJECT_COMMENT) = range(10)
 
 
 async def is_admin(telegram_id: int) -> bool:
@@ -82,6 +88,9 @@ async def handle_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     if "پرداخت‌های در انتظار" in text:
         return await show_pending_payments(update, context)
+    
+    if "اعتبارسنجی" in text:
+        return await show_pending_validations(update, context)
     
     if "تنظیمات کارت" in text:
         # This will be handled by admin_settings handler
@@ -678,6 +687,315 @@ async def refresh_admin_list(query, context: ContextTypes.DEFAULT_TYPE) -> int:
     return ADMIN_MANAGEMENT
 
 
+# ==================== Validation Handlers ====================
+
+async def show_pending_validations(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show list of validations awaiting review."""
+    user = await api_client.get_user(update.effective_user.id)
+    if not user:
+        await update.message.reply_text(
+            "خطا در دریافت اطلاعات کاربر.",
+            reply_markup=get_user_menu_keyboard(context)
+        )
+        return ConversationHandler.END
+    
+    result = await api_client.get_pending_validations(
+        admin_id=user['id'],
+        status='PENDING',
+        page=1,
+        page_size=20,
+    )
+    
+    # Set breadcrumb
+    bc = get_breadcrumb(context)
+    bc.set_path(BreadcrumbPath.VALIDATIONS_PENDING)
+    
+    if not result or not result.get('items'):
+        msg = bc.format_message("✅ هیچ اعتبارسنجی در انتظار بررسی نیست.")
+        await update.message.reply_text(msg, reply_markup=get_admin_menu_keyboard())
+        return ADMIN_MENU
+    
+    validations = result['items']
+    context.user_data['pending_validations'] = validations
+    
+    msg_text = (
+        f"✅ اعتبارسنجی‌های در انتظار ({result['total']} مورد):\n\n"
+        "برای بررسی روی هر مورد کلیک کنید:"
+    )
+    msg = bc.format_message(msg_text)
+    
+    await update.message.reply_text(msg, reply_markup=get_pending_validations_keyboard(validations))
+    return VALIDATIONS_LIST
+
+
+async def handle_validations_list_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle validations list callbacks."""
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data
+    bc = get_breadcrumb(context)
+    
+    if data == "back_to_admin_menu":
+        bc.set_path(BreadcrumbPath.ADMIN_MENU)
+        msg = bc.format_message("🔧 پنل مدیریت\n\nیکی را انتخاب کنید:")
+        
+        await query.message.edit_text("بازگشت به منوی مدیریت...")
+        await query.message.reply_text(msg, reply_markup=get_admin_menu_keyboard())
+        return ADMIN_MENU
+    
+    if data.startswith("review_validation_"):
+        order_id = data[18:]  # Remove "review_validation_" prefix
+        
+        # Find validation from cached list
+        validations = context.user_data.get('pending_validations', [])
+        validation = next((v for v in validations if v['id'] == order_id), None)
+        
+        if not validation:
+            bc.set_path(BreadcrumbPath.VALIDATIONS_PENDING)
+            msg = bc.format_message("❌ سفارش یافت نشد.")
+            await query.message.edit_text(msg)
+            return VALIDATIONS_LIST
+        
+        context.user_data['current_validation'] = validation
+        
+        # Set breadcrumb
+        bc.set_path(BreadcrumbPath.VALIDATION_REVIEW)
+        
+        # Format validation details
+        user_name = validation.get('user_name', 'ناشناس')
+        user_phone = validation.get('user_phone', '-')
+        category = validation.get('category_name', '-')
+        plan = validation.get('plan_name', '-')
+        template = validation.get('template_name', '-')
+        total_price = validation.get('total_price', 0)
+        validation_price = validation.get('validation_price', 0)
+        
+        detail_text = (
+            f"📋 بررسی اعتبارسنجی\n\n"
+            f"🆔 شماره سفارش: #{order_id[:8]}\n"
+            f"👤 مشتری: {user_name}\n"
+            f"📱 شماره تماس: {user_phone}\n"
+            f"📁 دسته‌بندی: {category}\n"
+            f"📝 پلن طراحی: {plan}\n"
+            f"🎨 قالب: {template}\n"
+            f"💰 قیمت کل: {int(total_price):,} تومان\n"
+            f"💵 هزینه اعتبارسنجی: {int(validation_price):,} تومان\n"
+        )
+        msg = bc.format_message(detail_text)
+        
+        # Show design preview if available
+        preview_url = validation.get('design_preview_url')
+        if preview_url:
+            try:
+                base_url = api_client.base_url.rstrip('/')
+                if not preview_url.startswith('http'):
+                    if not preview_url.startswith('/api/v1'):
+                        preview_url = f"/api/v1{preview_url}"
+                    preview_url = f"{base_url}{preview_url}"
+                
+                await query.message.reply_photo(
+                    photo=preview_url,
+                    caption=msg,
+                    reply_markup=get_validation_review_keyboard(order_id)
+                )
+                await query.message.delete()
+                return VALIDATION_REVIEW
+            except Exception as e:
+                logger.error(f"Error sending design preview: {e}")
+                msg = bc.format_message(detail_text + "\n🖼 پیش‌نمایش موجود است (خطا در نمایش)\n")
+        
+        await query.message.edit_text(msg, reply_markup=get_validation_review_keyboard(order_id))
+        return VALIDATION_REVIEW
+    
+    return VALIDATIONS_LIST
+
+
+async def handle_validation_review_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle validation review callbacks."""
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data
+    bc = get_breadcrumb(context)
+    
+    if data == "back_to_validations_list":
+        validations = context.user_data.get('pending_validations', [])
+        bc.set_path(BreadcrumbPath.VALIDATIONS_PENDING)
+        
+        if validations:
+            msg = bc.format_message("✅ اعتبارسنجی‌های در انتظار:")
+            await query.message.edit_text(msg, reply_markup=get_pending_validations_keyboard(validations))
+        else:
+            msg = bc.format_message("✅ هیچ اعتبارسنجی در انتظار بررسی نیست.")
+            await query.message.edit_text(msg, reply_markup=get_pending_validations_keyboard([]))
+        return VALIDATIONS_LIST
+    
+    if data.startswith("approve_validation_"):
+        order_id = data[19:]  # Remove "approve_validation_" prefix
+        
+        user = await api_client.get_user(update.effective_user.id)
+        if not user:
+            bc.set_path(BreadcrumbPath.VALIDATION_REVIEW)
+            msg = bc.format_message("❌ خطا در دریافت اطلاعات.")
+            await query.message.edit_text(msg)
+            return VALIDATION_REVIEW
+        
+        # Get current validation info for notification
+        current_validation = context.user_data.get('current_validation', {})
+        
+        result = await api_client.approve_validation(
+            order_id=order_id,
+            admin_id=user['id'],
+        )
+        
+        if result:
+            bc.set_path(BreadcrumbPath.VALIDATIONS_PENDING)
+            msg = bc.format_message(
+                "✅ اعتبارسنجی با موفقیت تأیید شد.\n\n"
+                "پیام تأیید برای مشتری ارسال شد."
+            )
+            
+            # Notify customer
+            customer_telegram_id = current_validation.get('customer_telegram_id')
+            if customer_telegram_id:
+                await notify_customer_validation_approved(
+                    query.message.get_bot(),
+                    customer_telegram_id,
+                    order_id,
+                )
+            
+            # Refresh validations list
+            refresh_result = await api_client.get_pending_validations(
+                admin_id=user['id'],
+                status='PENDING',
+            )
+            validations = refresh_result.get('items', []) if refresh_result else []
+            context.user_data['pending_validations'] = validations
+            
+            await query.message.edit_text(msg, reply_markup=get_pending_validations_keyboard(validations))
+            return VALIDATIONS_LIST
+        else:
+            msg = bc.format_message("❌ خطا در تأیید اعتبارسنجی.")
+            await query.message.edit_text(msg, reply_markup=get_validation_review_keyboard(order_id))
+            return VALIDATION_REVIEW
+    
+    if data.startswith("reject_validation_"):
+        order_id = data[18:]  # Remove "reject_validation_" prefix
+        context.user_data['rejecting_validation_id'] = order_id
+        
+        bc.set_path(BreadcrumbPath.VALIDATION_REJECT)
+        msg = bc.format_message(
+            "📝 لطفاً موارد اصلاحی را وارد کنید:\n\n"
+            "(این پیام به مشتری ارسال خواهد شد)\n\n"
+            "حداقل ۱۰ کاراکتر بنویسید."
+        )
+        await query.message.edit_text(msg, reply_markup=get_validation_reject_keyboard(order_id))
+        return AWAITING_VALIDATION_REJECT_COMMENT
+    
+    return VALIDATION_REVIEW
+
+
+async def handle_validation_reject_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle validation reject comment input."""
+    comment = update.message.text.strip()
+    order_id = context.user_data.get('rejecting_validation_id')
+    
+    bc = get_breadcrumb(context)
+    
+    if not order_id:
+        bc.set_path(BreadcrumbPath.ADMIN_MENU)
+        msg = bc.format_message("❌ خطا: سفارش پیدا نشد.")
+        await update.message.reply_text(msg, reply_markup=get_admin_menu_keyboard())
+        return ADMIN_MENU
+    
+    if len(comment) < 10:
+        msg = bc.format_message("⚠️ لطفاً توضیحات کامل‌تری وارد کنید (حداقل ۱۰ کاراکتر):")
+        await update.message.reply_text(msg, reply_markup=get_validation_reject_keyboard(order_id))
+        return AWAITING_VALIDATION_REJECT_COMMENT
+    
+    user = await api_client.get_user(update.effective_user.id)
+    if not user:
+        msg = bc.format_message("❌ خطا در دریافت اطلاعات کاربر.")
+        await update.message.reply_text(msg, reply_markup=get_admin_menu_keyboard())
+        return ADMIN_MENU
+    
+    result = await api_client.reject_validation(order_id, user['id'], comment)
+    
+    if result:
+        # Notify customer
+        current_validation = context.user_data.get('current_validation', {})
+        customer_telegram_id = current_validation.get('customer_telegram_id')
+        if customer_telegram_id:
+            await notify_customer_validation_rejected(
+                update.get_bot(),
+                customer_telegram_id,
+                order_id,
+                comment,
+            )
+        
+        bc.set_path(BreadcrumbPath.VALIDATIONS_PENDING)
+        msg = bc.format_message("✅ اعتبارسنجی رد شد و پیام اصلاحیه برای مشتری ارسال شد.")
+        
+        # Get updated list
+        refresh_result = await api_client.get_pending_validations(admin_id=user['id'], status='PENDING')
+        validations = refresh_result.get('items', []) if refresh_result else []
+        context.user_data['pending_validations'] = validations
+        
+        await update.message.reply_text(msg, reply_markup=get_pending_validations_keyboard(validations))
+        return VALIDATIONS_LIST
+    else:
+        msg = bc.format_message("❌ خطا در ثبت رد اعتبارسنجی. لطفاً دوباره تلاش کنید.")
+        await update.message.reply_text(msg, reply_markup=get_validation_reject_keyboard(order_id))
+        return AWAITING_VALIDATION_REJECT_COMMENT
+
+
+async def handle_validation_reject_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle cancel during validation rejection."""
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data
+    bc = get_breadcrumb(context)
+    
+    if data.startswith("review_validation_"):
+        order_id = data[18:]
+        
+        # Find validation from cached list
+        validations = context.user_data.get('pending_validations', [])
+        validation = next((v for v in validations if v['id'] == order_id), None)
+        
+        if validation:
+            context.user_data['current_validation'] = validation
+            bc.set_path(BreadcrumbPath.VALIDATION_REVIEW)
+            
+            # Format validation details
+            user_name = validation.get('user_name', 'ناشناس')
+            category = validation.get('category_name', '-')
+            plan = validation.get('plan_name', '-')
+            total_price = validation.get('total_price', 0)
+            
+            detail_text = (
+                f"📋 بررسی اعتبارسنجی\n\n"
+                f"🆔 شماره سفارش: #{order_id[:8]}\n"
+                f"👤 مشتری: {user_name}\n"
+                f"📁 دسته‌بندی: {category}\n"
+                f"📝 پلن: {plan}\n"
+                f"💰 قیمت کل: {int(total_price):,} تومان\n"
+            )
+            msg = bc.format_message(detail_text)
+            
+            await query.message.edit_text(msg, reply_markup=get_validation_review_keyboard(order_id))
+            return VALIDATION_REVIEW
+    
+    # Fallback to validations list
+    validations = context.user_data.get('pending_validations', [])
+    bc.set_path(BreadcrumbPath.VALIDATIONS_PENDING)
+    msg = bc.format_message("✅ اعتبارسنجی‌های در انتظار:")
+    await query.message.edit_text(msg, reply_markup=get_pending_validations_keyboard(validations))
+    return VALIDATIONS_LIST
+
+
 # Create conversation handler
 admin_payments_conversation = ConversationHandler(
     entry_points=[
@@ -706,6 +1024,17 @@ admin_payments_conversation = ConversationHandler(
         AWAITING_NEW_ADMIN_ID: [
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_new_admin_id),
             CallbackQueryHandler(handle_add_admin_cancel),
+        ],
+        # Validation states
+        VALIDATIONS_LIST: [
+            CallbackQueryHandler(handle_validations_list_callback),
+        ],
+        VALIDATION_REVIEW: [
+            CallbackQueryHandler(handle_validation_review_callback),
+        ],
+        AWAITING_VALIDATION_REJECT_COMMENT: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_validation_reject_comment),
+            CallbackQueryHandler(handle_validation_reject_cancel),
         ],
     },
     fallbacks=[
