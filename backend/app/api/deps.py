@@ -195,6 +195,113 @@ async def require_print_shop(
     return current_user
 
 
+async def require_designer_hybrid(
+    authorization: Optional[str] = Header(None),
+    designer_id: Optional[UUID] = Query(None, description="Designer user ID (for bot)"),
+    db: AsyncSession = Depends(get_db),
+) -> AuthenticatedUser:
+    """
+    Require designer or admin role using either JWT token or designer_id query param.
+    Supports both web frontend (JWT) and bot (query param).
+    """
+    from app.repositories.user_repository import UserRepository
+    repo = UserRepository(db)
+
+    # 1. Try JWT token first
+    if authorization and authorization.lower().startswith("bearer "):
+        try:
+            parts = authorization.split()
+            if len(parts) == 2:
+                token = parts[1]
+                payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+
+                if payload.get("type") != "access":
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="توکن نامعتبر است",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+
+                token_user_id = payload.get("sub")
+                if not token_user_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="توکن نامعتبر است",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+
+                exp = payload.get("exp")
+                if exp and datetime.fromtimestamp(exp, tz=timezone.utc) < datetime.now(timezone.utc):
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="توکن منقضی شده است",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+
+                user = await repo.get_by_id(UUID(token_user_id))
+                if not user:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="کاربر یافت نشد",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+
+                if not user.is_active:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="حساب کاربری غیرفعال شده است",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+
+                if user.role not in [UserRole.DESIGNER, UserRole.ADMIN]:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="دسترسی طراح یا ادمین لازم است",
+                    )
+
+                return AuthenticatedUser(
+                    user_id=user.id,
+                    telegram_id=user.telegram_id,
+                    role=user.role,
+                    username=user.username,
+                )
+
+        except JWTError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="توکن نامعتبر است",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+    # 2. Fall back to query param (for bot)
+    if designer_id:
+        user = await repo.get_by_id(designer_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="کاربر طراح یافت نشد",
+            )
+
+        if user.role not in [UserRole.DESIGNER, UserRole.ADMIN]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="دسترسی طراح لازم است",
+            )
+
+        return AuthenticatedUser(
+            user_id=user.id,
+            telegram_id=user.telegram_id,
+            role=user.role,
+            username=user.username,
+        )
+
+    # 3. Neither provided
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="احراز هویت لازم است. توکن یا designer_id ارسال کنید.",
+    )
+
+
 async def require_admin_by_query(
     admin_id: UUID = Query(..., description="Admin user ID"),
     db: AsyncSession = Depends(get_db),
@@ -365,6 +472,113 @@ async def require_print_shop_by_query(
         telegram_id=user.telegram_id,
         role=user.role,
         username=user.username,
+    )
+
+
+async def require_print_shop_hybrid(
+    authorization: Optional[str] = Header(None),
+    printshop_id: Optional[UUID] = Query(None, description="Print shop user ID (for bot)"),
+    db: AsyncSession = Depends(get_db),
+) -> AuthenticatedUser:
+    """
+    Require print shop or admin role using either JWT token or printshop_id query param.
+    Supports both web frontend (JWT) and bot (query param).
+    """
+    from app.repositories.user_repository import UserRepository
+    repo = UserRepository(db)
+
+    # 1. Try JWT token first
+    if authorization and authorization.lower().startswith("bearer "):
+        try:
+            parts = authorization.split()
+            if len(parts) == 2:
+                token = parts[1]
+                payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+
+                if payload.get("type") != "access":
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="توکن نامعتبر است",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+
+                token_user_id = payload.get("sub")
+                if not token_user_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="توکن نامعتبر است",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+
+                exp = payload.get("exp")
+                if exp and datetime.fromtimestamp(exp, tz=timezone.utc) < datetime.now(timezone.utc):
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="توکن منقضی شده است",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+
+                user = await repo.get_by_id(UUID(token_user_id))
+                if not user:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="کاربر یافت نشد",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+
+                if not user.is_active:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="حساب کاربری غیرفعال شده است",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+
+                if user.role not in [UserRole.PRINT_SHOP, UserRole.ADMIN]:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="دسترسی چاپخانه یا ادمین لازم است",
+                    )
+
+                return AuthenticatedUser(
+                    user_id=user.id,
+                    telegram_id=user.telegram_id,
+                    role=user.role,
+                    username=user.username,
+                )
+
+        except JWTError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="توکن نامعتبر است",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+    # 2. Fall back to query param (for bot)
+    if printshop_id:
+        user = await repo.get_by_id(printshop_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="کاربر چاپخانه یافت نشد",
+            )
+
+        if user.role not in [UserRole.PRINT_SHOP, UserRole.ADMIN]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="دسترسی چاپخانه لازم است",
+            )
+
+        return AuthenticatedUser(
+            user_id=user.id,
+            telegram_id=user.telegram_id,
+            role=user.role,
+            username=user.username,
+        )
+
+    # 3. Neither provided
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="احراز هویت لازم است. توکن یا printshop_id ارسال کنید.",
     )
 
 
@@ -585,6 +799,7 @@ __all__ = [
     "require_admin_by_query",
     "require_admin_hybrid",
     "require_print_shop_by_query",
+    "require_print_shop_hybrid",
     "get_current_admin_user",
     # JWT token-based auth
     "get_token_from_header",

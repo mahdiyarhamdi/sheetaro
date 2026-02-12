@@ -79,11 +79,19 @@ export function isAdmin(): boolean {
 }
 
 /**
- * Checks if the user is a print shop
+ * Checks if the user is a designer (or admin, who also acts as a designer)
+ */
+export function isDesigner(): boolean {
+  const user = getUser();
+  return user?.role === "DESIGNER" || user?.role === "ADMIN";
+}
+
+/**
+ * Checks if the user is a print shop (or admin, who also acts as a print shop)
  */
 export function isPrintShop(): boolean {
   const user = getUser();
-  return user?.role === "PRINT_SHOP";
+  return user?.role === "PRINT_SHOP" || user?.role === "ADMIN";
 }
 
 /**

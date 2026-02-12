@@ -136,7 +136,7 @@ export function useAuth() {
     isLoadingUser: isCheckingAuth,
     isAuthenticated,
     isAdmin: user?.is_admin ?? false,
-    isPrintShop: user?.role === "PRINT_SHOP",
+    isPrintShop: user?.role === "PRINT_SHOP" || user?.role === "ADMIN",
     
     // Register
     register: registerMutation.mutate,

@@ -200,7 +200,8 @@ class PaymentService:
                 if order.validation_requested:
                     new_status = OrderStatus.AWAITING_VALIDATION
                 elif order.design_plan.value in ['SEMI_PRIVATE', 'PRIVATE']:
-                    new_status = OrderStatus.DESIGNING
+                    # Goes to designer queue; a designer must accept it
+                    new_status = OrderStatus.PENDING_DESIGNER
                 else:
                     new_status = OrderStatus.READY_FOR_PRINT
                 

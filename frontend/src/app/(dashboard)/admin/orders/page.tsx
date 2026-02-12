@@ -40,6 +40,7 @@ const ORDER_STATUSES = [
   { value: "PENDING", label: "در انتظار", color: "bg-warning-light text-warning", icon: Clock },
   { value: "AWAITING_VALIDATION", label: "در حال اعتبارسنجی", color: "bg-info-light text-info", icon: Eye },
   { value: "NEEDS_ACTION", label: "نیاز به اقدام", color: "bg-danger-light text-danger", icon: XCircle },
+  { value: "PENDING_DESIGNER", label: "صف طراحی", color: "bg-yellow-100 text-yellow-700", icon: Clock },
   { value: "DESIGNING", label: "در حال طراحی", color: "bg-primary-50 text-primary", icon: Palette },
   { value: "READY_FOR_PRINT", label: "آماده چاپ", color: "bg-success-light text-success", icon: CheckCircle },
   { value: "PRINTING", label: "در حال چاپ", color: "bg-primary-50 text-primary", icon: Printer },

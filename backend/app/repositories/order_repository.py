@@ -24,8 +24,10 @@ class OrderRepository:
         order_dict['user_id'] = user_id
         order_dict.update(prices)
         
-        # Remove plan_id as it's not a field in the Order model (used only for price calculation)
-        order_dict.pop('plan_id', None)
+        # Map plan_id -> design_plan_id (plan_id is the schema field, design_plan_id is the model column)
+        plan_id_value = order_dict.pop('plan_id', None)
+        if plan_id_value:
+            order_dict['design_plan_id'] = plan_id_value
         
         # Convert UUID objects in selected_attributes to strings for JSONB serialization
         if 'selected_attributes' in order_dict and order_dict['selected_attributes']:
@@ -215,6 +217,121 @@ class OrderRepository:
         )
         await self.db.flush()
         return await self.get_by_id(order_id)
+
+    # ==================== Designer Methods ====================
+
+    async def get_pending_designer_queue(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[Order], int]:
+        """Get orders in the designer queue (PENDING_DESIGNER, not yet assigned)."""
+        condition = (Order.status == OrderStatus.PENDING_DESIGNER)
+        query = select(Order).where(condition)
+        count_query = select(func.count(Order.id)).where(condition)
+
+        query = query.order_by(Order.created_at.asc())  # FIFO
+        offset = (page - 1) * page_size
+        query = query.offset(offset).limit(page_size)
+        query = query.options(selectinload(Order.user), selectinload(Order.category))
+
+        result = await self.db.execute(query)
+        orders = list(result.scalars().all())
+
+        count_result = await self.db.execute(count_query)
+        total = count_result.scalar() or 0
+
+        return orders, total
+
+    async def get_designer_orders(
+        self,
+        designer_id: UUID,
+        status_filter: Optional[OrderStatus] = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[Order], int]:
+        """Get orders assigned to a designer."""
+        base_condition = Order.assigned_designer_id == designer_id
+        query = select(Order).where(base_condition)
+        count_query = select(func.count(Order.id)).where(base_condition)
+
+        if status_filter:
+            query = query.where(Order.status == status_filter)
+            count_query = count_query.where(Order.status == status_filter)
+
+        query = query.order_by(Order.created_at.desc())
+        offset = (page - 1) * page_size
+        query = query.offset(offset).limit(page_size)
+        query = query.options(selectinload(Order.user), selectinload(Order.category))
+
+        result = await self.db.execute(query)
+        orders = list(result.scalars().all())
+
+        count_result = await self.db.execute(count_query)
+        total = count_result.scalar() or 0
+
+        return orders, total
+
+    async def get_designer_stats(self, designer_id: UUID) -> dict:
+        """Get aggregated stats for a designer."""
+        base_condition = Order.assigned_designer_id == designer_id
+
+        total_result = await self.db.execute(
+            select(func.count(Order.id)).where(base_condition)
+        )
+        total = total_result.scalar() or 0
+
+        designing_result = await self.db.execute(
+            select(func.count(Order.id)).where(
+                and_(base_condition, Order.status == OrderStatus.DESIGNING)
+            )
+        )
+        designing = designing_result.scalar() or 0
+
+        # Pending upload = DESIGNING status + no design_file_url yet
+        pending_upload_result = await self.db.execute(
+            select(func.count(Order.id)).where(
+                and_(
+                    base_condition,
+                    Order.status == OrderStatus.DESIGNING,
+                    Order.design_file_url.is_(None),
+                )
+            )
+        )
+        pending_upload = pending_upload_result.scalar() or 0
+
+        completed_result = await self.db.execute(
+            select(func.count(Order.id)).where(
+                and_(
+                    base_condition,
+                    Order.status.in_([
+                        OrderStatus.READY_FOR_PRINT,
+                        OrderStatus.AWAITING_VALIDATION,
+                        OrderStatus.PRINTING,
+                        OrderStatus.PRINTED,
+                        OrderStatus.SHIPPED,
+                        OrderStatus.DELIVERED,
+                    ]),
+                )
+            )
+        )
+        completed = completed_result.scalar() or 0
+
+        # Queue count (PENDING_DESIGNER, not assigned to anyone)
+        queue_result = await self.db.execute(
+            select(func.count(Order.id)).where(
+                Order.status == OrderStatus.PENDING_DESIGNER
+            )
+        )
+        queue_count = queue_result.scalar() or 0
+
+        return {
+            "total_assigned": total,
+            "in_progress": designing,
+            "pending_upload": pending_upload,
+            "completed": completed,
+            "queue_count": queue_count,
+        }
 
     # ==================== Print Shop Methods ====================
 

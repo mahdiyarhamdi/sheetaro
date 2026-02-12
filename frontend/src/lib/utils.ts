@@ -17,10 +17,15 @@ export function toPersianNumber(num: number | string): string {
 }
 
 /**
- * Formats a number as Persian currency (Toman)
+ * Formats a number as Persian currency (Toman) with thousand separators.
+ * e.g. 60000 -> "۶۰,۰۰۰ تومان"
  */
-export function formatPrice(price: number): string {
-  return `${toPersianNumber(price.toLocaleString("fa-IR"))} تومان`;
+export function formatPrice(price: number | string | null | undefined): string {
+  if (price == null) return "۰ تومان";
+  const num = typeof price === "string" ? parseFloat(price) : price;
+  if (isNaN(num)) return "۰ تومان";
+  const formatted = Math.round(num).toLocaleString("en-US"); // "60,000"
+  return `${toPersianNumber(formatted)} تومان`;
 }
 
 /**
@@ -118,6 +123,61 @@ export function getInitials(name: string): string {
 }
 
 /**
+ * Formats selected_attributes JSONB into human-readable labels.
+ * Input: [{attribute_name: "اندازه", value_name: "A4", ...}, ...]
+ * Output: ["A4", "گلاسه", "UV"]
+ */
+export function formatSelectedAttributes(
+  attrs?: Array<{ attribute_name?: string; value_name?: string; value?: string }> | null
+): string[] {
+  if (!attrs || !Array.isArray(attrs)) return [];
+  return attrs
+    .map((a) => a.value_name || a.value || "")
+    .filter(Boolean);
+}
+
+/**
+ * Returns Persian label for a DesignPlan enum value.
+ */
+export function getDesignPlanLabel(plan?: string | null): string {
+  if (!plan) return "";
+  const labels: Record<string, string> = {
+    PUBLIC: "قالب آماده",
+    SEMI_PRIVATE: "نیمه اختصاصی",
+    PRIVATE: "اختصاصی",
+    OWN_DESIGN: "طرح مشتری",
+  };
+  return labels[plan] || plan;
+}
+
+/**
+ * Returns Persian label + color for a payment status.
+ */
+export function getPaymentStatusInfo(status?: string | null): { label: string; color: string } {
+  if (!status) return { label: "نامشخص", color: "bg-gray-100 text-gray-600" };
+  const map: Record<string, { label: string; color: string }> = {
+    SUCCESS: { label: "پرداخت شده", color: "bg-green-100 text-green-700" },
+    AWAITING_APPROVAL: { label: "در انتظار تایید", color: "bg-yellow-100 text-yellow-700" },
+    PENDING: { label: "پرداخت نشده", color: "bg-red-100 text-red-700" },
+    FAILED: { label: "ناموفق", color: "bg-red-100 text-red-700" },
+  };
+  return map[status] || { label: status, color: "bg-gray-100 text-gray-600" };
+}
+
+/**
+ * Relative time in Persian (e.g. "۱۵ دقیقه پیش", "۲ ساعت پیش", "۳ روز پیش")
+ */
+export function timeAgo(date: string | Date | null | undefined): string {
+  if (!date) return "";
+  const d = typeof date === "string" ? new Date(date) : date;
+  const diff = Math.round((Date.now() - d.getTime()) / 1000);
+  if (diff < 60) return "لحظاتی پیش";
+  if (diff < 3600) return `${toPersianNumber(Math.round(diff / 60))} دقیقه پیش`;
+  if (diff < 86400) return `${toPersianNumber(Math.round(diff / 3600))} ساعت پیش`;
+  return `${toPersianNumber(Math.round(diff / 86400))} روز پیش`;
+}
+
+/**
  * Order status translations
  * Maps backend OrderStatus enum values to Persian labels
  */
@@ -131,6 +191,7 @@ export const orderStatusLabels: Record<string, string> = {
   PENDING: "در انتظار بررسی",
   AWAITING_VALIDATION: "در انتظار اعتبارسنجی",
   NEEDS_ACTION: "نیاز به اقدام",
+  PENDING_DESIGNER: "در صف طراحی",
   DESIGNING: "در حال طراحی",
   READY_FOR_PRINT: "آماده چاپ",
   PRINTING: "در حال چاپ",

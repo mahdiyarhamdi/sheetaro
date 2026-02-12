@@ -25,6 +25,8 @@ from app.schemas.order import (
     OrderCreate, OrderUpdate, OrderStatusUpdate, OrderAssign,
     OrderOut, OrderListResponse, PrintShopOrderOut, PrintShopOrderListResponse,
     PrintShopShipRequest, PrintShopStats, SelectedAttributeItem,
+    CustomerOrderDetailOut, EnrichedAttributeItem,
+    DesignerOrderOut, DesignerOrderListResponse, DesignerStats,
 )
 from app.models.enums import OrderStatus, DesignPlan, UserRole
 from app.utils.logger import log_event
@@ -163,13 +165,19 @@ class OrderService:
         if order_data.design_plan == DesignPlan.OWN_DESIGN and not order_data.design_file_url:
             raise ValueError("Design file is required for OWN_DESIGN plan")
         
+        # SEMI_PRIVATE and PRIVATE plans cannot have validation
+        # (design is created by designer, not uploaded by customer)
+        validation_requested = order_data.validation_requested
+        if order_data.design_plan in (DesignPlan.SEMI_PRIVATE, DesignPlan.PRIVATE):
+            validation_requested = False
+        
         # Calculate prices
         prices = await self._calculate_prices(
             category_base_price=Decimal(str(category.base_price)),
             selected_attributes=order_data.selected_attributes,
             quantity=order_data.quantity,
             design_plan=order_data.design_plan,
-            validation_requested=order_data.validation_requested,
+            validation_requested=validation_requested,
             plan_id=order_data.plan_id,
         )
         
@@ -203,6 +211,16 @@ class OrderService:
             return None
         
         return OrderOut.model_validate(order)
+
+    async def get_order_detail(self, order_id: UUID, user_id: Optional[UUID] = None) -> Optional[CustomerOrderDetailOut]:
+        """Get enriched order detail for the customer view."""
+        order = await self.repository.get_by_id(order_id)
+        if not order:
+            return None
+        if user_id and order.user_id != user_id:
+            return None
+
+        return await self._to_customer_order_detail(order)
     
     async def get_user_orders(
         self,
@@ -345,20 +363,65 @@ class OrderService:
             return OrderOut.model_validate(updated_order)
         return None
 
-    # ==================== Print Shop Methods ====================
+    # ==================== Enrichment Helpers ====================
 
-    async def _to_printshop_order_out(self, order) -> PrintShopOrderOut:
-        """Convert an order with user relation to PrintShopOrderOut, including design preview."""
-        order_out = PrintShopOrderOut.model_validate(order)
-        if order.user:
-            order_out.customer_name = f"{order.user.first_name} {order.user.last_name or ''}".strip()
-            order_out.customer_phone = order.user.phone_number
-            order_out.customer_city = order.user.city
-            order_out.customer_address = order.user.address
+    # Design plan Persian labels
+    DESIGN_PLAN_LABELS = {
+        DesignPlan.PUBLIC: "قالب آماده",
+        DesignPlan.SEMI_PRIVATE: "نیمه اختصاصی",
+        DesignPlan.PRIVATE: "اختصاصی",
+        DesignPlan.OWN_DESIGN: "طرح مشتری",
+    }
 
-        # Populate design preview/final URLs from ProcessedDesign
+    async def _enrich_attributes(self, raw_attrs) -> List[EnrichedAttributeItem]:
+        """Resolve attribute/option UUIDs to human-readable names."""
+        from app.models.attribute import CategoryAttribute, AttributeOption
+        from uuid import UUID as PyUUID
+
+        enriched = []
+        for attr_item in (raw_attrs or []):
+            attr_id = attr_item.get("attribute_id") if isinstance(attr_item, dict) else getattr(attr_item, "attribute_id", None)
+            opt_id = attr_item.get("option_id") if isinstance(attr_item, dict) else getattr(attr_item, "option_id", None)
+            raw_value = attr_item.get("value") if isinstance(attr_item, dict) else getattr(attr_item, "value", None)
+            raw_price = attr_item.get("price_modifier", 0) if isinstance(attr_item, dict) else getattr(attr_item, "price_modifier", 0)
+
+            attr_name = "ویژگی"
+            value_name = raw_value or "-"
+
+            if attr_id:
+                try:
+                    uid = PyUUID(str(attr_id)) if not isinstance(attr_id, PyUUID) else attr_id
+                    row = await self.db.execute(select(CategoryAttribute.name_fa).where(CategoryAttribute.id == uid))
+                    name = row.scalar_one_or_none()
+                    if name:
+                        attr_name = name
+                except Exception:
+                    pass
+
+            if opt_id:
+                try:
+                    uid = PyUUID(str(opt_id)) if not isinstance(opt_id, PyUUID) else opt_id
+                    row = await self.db.execute(select(AttributeOption.label_fa).where(AttributeOption.id == uid))
+                    label = row.scalar_one_or_none()
+                    if label:
+                        value_name = label
+                except Exception:
+                    pass
+
+            enriched.append(EnrichedAttributeItem(
+                attribute_name=attr_name,
+                value_name=value_name,
+                price=int(raw_price) if raw_price else 0,
+            ))
+        return enriched
+
+    async def _enrich_design_and_payment(self, order, order_out):
+        """Populate design preview/final URLs and payment status on an output schema."""
         from app.models.processed_design import ProcessedDesign
+        from app.models.design_template import DesignTemplate
+        from app.models.payment import Payment
 
+        # Design preview
         pd_result = await self.db.execute(
             select(ProcessedDesign)
             .where(ProcessedDesign.order_id == order.id)
@@ -369,10 +432,184 @@ class OrderService:
         if processed:
             order_out.design_preview_url = processed.preview_url
             order_out.design_final_url = processed.final_url
+            tmpl_result = await self.db.execute(
+                select(DesignTemplate.name_fa).where(DesignTemplate.id == processed.template_id)
+            )
+            tmpl_name = tmpl_result.scalar_one_or_none()
+            if tmpl_name:
+                order_out.template_name = tmpl_name
         elif order.design_file_url:
-            # OWN_DESIGN orders: design_file_url is the uploaded file
             order_out.design_preview_url = order.design_file_url
             order_out.design_final_url = order.design_file_url
+
+        # Payment status
+        pay_result = await self.db.execute(
+            select(Payment)
+            .where(Payment.order_id == order.id)
+            .order_by(Payment.created_at.desc())
+            .limit(1)
+        )
+        payment = pay_result.scalar_one_or_none()
+        if payment:
+            order_out.payment_status = payment.status.value
+            order_out.payment_paid_at = payment.paid_at or payment.approved_at
+
+    async def _to_customer_order_detail(self, order) -> CustomerOrderDetailOut:
+        """Convert an order to CustomerOrderDetailOut with enriched data."""
+        order_out = CustomerOrderDetailOut.model_validate(order)
+
+        # Category info
+        if order.category:
+            order_out.category_name = order.category.name_fa
+            order_out.category_icon = order.category.icon
+
+        # Design plan label
+        if order.design_plan:
+            order_out.design_plan_label = self.DESIGN_PLAN_LABELS.get(
+                order.design_plan, str(order.design_plan.value)
+            )
+
+        # Enriched attributes
+        order_out.enriched_attributes = await self._enrich_attributes(order.selected_attributes)
+
+        # Design preview + payment
+        await self._enrich_design_and_payment(order, order_out)
+
+        return order_out
+
+    # ==================== Designer Methods ====================
+
+    async def _to_designer_order_out(self, order) -> DesignerOrderOut:
+        """Convert an order to DesignerOrderOut with enriched data."""
+        order_out = DesignerOrderOut.model_validate(order)
+
+        # Customer info
+        if order.user:
+            order_out.customer_name = f"{order.user.first_name} {order.user.last_name or ''}".strip()
+            order_out.customer_phone = order.user.phone_number
+
+        # Category info
+        if order.category:
+            order_out.category_name = order.category.name_fa
+            order_out.category_icon = order.category.icon
+
+        # Design plan label
+        if order.design_plan:
+            order_out.design_plan_label = self.DESIGN_PLAN_LABELS.get(
+                order.design_plan, str(order.design_plan.value)
+            )
+
+        # Enriched attributes
+        order_out.enriched_attributes = await self._enrich_attributes(order.selected_attributes)
+
+        # Design preview + payment
+        await self._enrich_design_and_payment(order, order_out)
+
+        return order_out
+
+    async def get_designer_queue(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> DesignerOrderListResponse:
+        """Get unassigned orders waiting for designer acceptance."""
+        page_size = min(page_size, 100)
+        page = max(page, 1)
+
+        orders, total = await self.repository.get_pending_designer_queue(
+            page=page,
+            page_size=page_size,
+        )
+
+        items = [await self._to_designer_order_out(o) for o in orders]
+
+        return DesignerOrderListResponse(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+
+    async def get_designer_orders(
+        self,
+        designer_id: UUID,
+        status_filter: Optional[OrderStatus] = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> DesignerOrderListResponse:
+        """Get orders assigned to a designer."""
+        page_size = min(page_size, 100)
+        page = max(page, 1)
+
+        orders, total = await self.repository.get_designer_orders(
+            designer_id=designer_id,
+            status_filter=status_filter,
+            page=page,
+            page_size=page_size,
+        )
+
+        items = [await self._to_designer_order_out(o) for o in orders]
+
+        return DesignerOrderListResponse(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+
+    async def get_designer_order_detail(
+        self,
+        order_id: UUID,
+        designer_id: UUID,
+    ) -> Optional[DesignerOrderOut]:
+        """Get a single order detail for a designer."""
+        order = await self.repository.get_by_id(order_id)
+        if not order:
+            return None
+        # Designer can view orders they're assigned to, OR orders in the queue
+        if order.status == OrderStatus.PENDING_DESIGNER:
+            return await self._to_designer_order_out(order)
+        if order.assigned_designer_id != designer_id:
+            return None
+        return await self._to_designer_order_out(order)
+
+    async def get_designer_stats(self, designer_id: UUID) -> DesignerStats:
+        """Get dashboard statistics for a designer."""
+        stats = await self.repository.get_designer_stats(designer_id)
+        return DesignerStats(**stats)
+
+    # ==================== Print Shop Methods ====================
+
+    async def _to_printshop_order_out(self, order) -> PrintShopOrderOut:
+        """Convert an order with user relation to PrintShopOrderOut with all enriched data."""
+        order_out = PrintShopOrderOut.model_validate(order)
+
+        # --- Customer info ---
+        if order.user:
+            order_out.customer_name = f"{order.user.first_name} {order.user.last_name or ''}".strip()
+            order_out.customer_phone = order.user.phone_number
+            order_out.customer_city = order.user.city
+            order_out.customer_address = order.user.address
+
+        # --- Category info ---
+        if order.category:
+            order_out.category_name = order.category.name_fa
+            order_out.category_icon = order.category.icon
+
+        # --- Design plan label ---
+        if order.design_plan:
+            order_out.design_plan_label = self.DESIGN_PLAN_LABELS.get(
+                order.design_plan, str(order.design_plan.value)
+            )
+
+        # --- Admin notes ---
+        order_out.admin_notes = order.admin_notes
+
+        # --- Enriched attributes (shared helper) ---
+        order_out.enriched_attributes = await self._enrich_attributes(order.selected_attributes)
+
+        # --- Design preview + payment (shared helper) ---
+        await self._enrich_design_and_payment(order, order_out)
 
         return order_out
 

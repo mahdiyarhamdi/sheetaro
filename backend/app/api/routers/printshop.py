@@ -10,7 +10,7 @@ from app.api.deps import (
     get_db,
     AuthenticatedUser,
     require_print_shop,
-    require_print_shop_by_query,
+    require_print_shop_hybrid,
 )
 from app.schemas.order import (
     OrderOut,
@@ -38,7 +38,7 @@ async def get_printshop_queue(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     db: AsyncSession = Depends(get_db),
-    user: AuthenticatedUser = Depends(require_print_shop_by_query),
+    user: AuthenticatedUser = Depends(require_print_shop_hybrid),
 ) -> PrintShopOrderListResponse:
     """Get queue of orders ready for print shop."""
     service = OrderService(db)
@@ -56,7 +56,7 @@ async def get_my_orders(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     db: AsyncSession = Depends(get_db),
-    user: AuthenticatedUser = Depends(require_print_shop_by_query),
+    user: AuthenticatedUser = Depends(require_print_shop_hybrid),
 ) -> PrintShopOrderListResponse:
     """Get print shop's own assigned orders."""
     service = OrderService(db)
@@ -77,7 +77,7 @@ async def get_my_orders(
 async def get_order_detail(
     order_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: AuthenticatedUser = Depends(require_print_shop_by_query),
+    user: AuthenticatedUser = Depends(require_print_shop_hybrid),
 ) -> PrintShopOrderOut:
     """Get order detail for print shop."""
     service = OrderService(db)
@@ -99,7 +99,7 @@ async def get_order_detail(
 async def accept_order(
     order_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: AuthenticatedUser = Depends(require_print_shop_by_query),
+    user: AuthenticatedUser = Depends(require_print_shop_hybrid),
 ) -> OrderOut:
     """Accept order by print shop."""
     service = OrderService(db)
@@ -127,7 +127,7 @@ async def accept_order(
 async def complete_printing(
     order_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: AuthenticatedUser = Depends(require_print_shop_by_query),
+    user: AuthenticatedUser = Depends(require_print_shop_hybrid),
 ) -> OrderOut:
     """Mark order as printed."""
     service = OrderService(db)
@@ -156,7 +156,7 @@ async def ship_order(
     order_id: UUID,
     ship_data: PrintShopShipRequest,
     db: AsyncSession = Depends(get_db),
-    user: AuthenticatedUser = Depends(require_print_shop_by_query),
+    user: AuthenticatedUser = Depends(require_print_shop_hybrid),
 ) -> OrderOut:
     """Ship order with tracking code."""
     service = OrderService(db)
@@ -187,7 +187,7 @@ async def ship_order(
 )
 async def get_stats(
     db: AsyncSession = Depends(get_db),
-    user: AuthenticatedUser = Depends(require_print_shop_by_query),
+    user: AuthenticatedUser = Depends(require_print_shop_hybrid),
 ) -> PrintShopStats:
     """Get print shop dashboard statistics."""
     service = OrderService(db)
@@ -204,7 +204,7 @@ async def get_settlements(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     db: AsyncSession = Depends(get_db),
-    user: AuthenticatedUser = Depends(require_print_shop_by_query),
+    user: AuthenticatedUser = Depends(require_print_shop_hybrid),
 ) -> SettlementListResponse:
     """Get print shop settlement history."""
     query = select(Settlement).where(Settlement.printshop_id == user.user_id)

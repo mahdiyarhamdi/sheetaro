@@ -155,17 +155,20 @@ export default function NewOrderPage() {
     let planSpecificSteps: { id: OrderStep; label: string; icon: React.ElementType }[] = [];
 
     if (selectedPlan.has_templates) {
+      // PUBLIC plan: template + placeholders + optional validation
       planSpecificSteps = [
         { id: "template", label: "انتخاب قالب", icon: LayoutTemplate },
         { id: "placeholders", label: "محتوای طرح", icon: Type },
         { id: "validation", label: "اعتبارسنجی", icon: ShieldCheck },
       ];
     } else if (selectedPlan.has_questionnaire) {
+      // SEMI_PRIVATE / PRIVATE: questionnaire only, no validation step
+      // (design is created by designer, not uploaded by customer)
       planSpecificSteps = [
         { id: "questionnaire", label: "اطلاعات طراحی", icon: FileText },
-        { id: "validation", label: "اعتبارسنجی", icon: ShieldCheck },
       ];
     } else if (selectedPlan.has_file_upload) {
+      // OWN_DESIGN: customer uploads their file + optional validation
       planSpecificSteps = [
         { id: "upload", label: "آپلود طرح", icon: Upload },
         { id: "validation", label: "اعتبارسنجی", icon: ShieldCheck },
@@ -358,6 +361,12 @@ export default function NewOrderPage() {
         }
       }
 
+      // SEMI_PRIVATE and PRIVATE plans don't support validation
+      // (design is created by designer, not customer)
+      const validationRequested = (designPlan === "SEMI_PRIVATE" || designPlan === "PRIVATE")
+        ? false
+        : orderData.wants_validation;
+
       // Convert attributes to the backend format
       const selectedAttributes = Object.entries(orderData.attributes).map(([attrId, optionValue]) => {
         const attr = attributes?.find(a => a.id === attrId);
@@ -377,7 +386,7 @@ export default function NewOrderPage() {
             plan_id: orderData.plan_id, // Send actual plan_id to get correct price from database
             selected_attributes: selectedAttributes,
             quantity: orderData.quantity,
-            validation_requested: orderData.wants_validation,
+            validation_requested: validationRequested,
             template_id: orderData.template_id,
           },
           userId: user.id,
@@ -389,7 +398,48 @@ export default function NewOrderPage() {
 
       const orderId = orderResponse.data.id;
 
-      // Step 2: Save design with placeholder values (if template-based order)
+      // Step 2a: Submit questionnaire answers (for SEMI_PRIVATE / PRIVATE plans)
+      if (orderData.questionnaire_answers && Object.keys(orderData.questionnaire_answers).length > 0) {
+        // Build a lookup of question input types from the loaded questionnaire
+        const questionTypeMap: Record<string, string> = {};
+        if (questionnaire?.sections) {
+          for (const section of questionnaire.sections) {
+            for (const q of section.questions) {
+              questionTypeMap[q.id] = q.input_type;
+            }
+          }
+        }
+
+        const answers = Object.entries(orderData.questionnaire_answers)
+          .filter(([, value]) => value) // skip empty answers
+          .map(([questionId, value]) => {
+            const inputType = questionTypeMap[questionId] || "TEXT";
+
+            // Map to the correct field based on question type
+            if (inputType === "IMAGE_UPLOAD" || inputType === "FILE_UPLOAD") {
+              return {
+                question_id: questionId,
+                answer_file_url: value,
+              };
+            } else if (inputType === "MULTI_CHOICE") {
+              return {
+                question_id: questionId,
+                answer_values: value.split(",").filter(Boolean),
+              };
+            } else {
+              return {
+                question_id: questionId,
+                answer_text: value,
+              };
+            }
+          });
+
+        if (answers.length > 0) {
+          await ordersApi.submitAnswers(orderId, answers);
+        }
+      }
+
+      // Step 2b: Save design with placeholder values (if template-based order)
       if (orderData.template_id && Object.keys(orderData.placeholder_values).length > 0) {
         const placeholderValues = Object.entries(orderData.placeholder_values).map(
           ([placeholderId, value]) => ({
@@ -414,9 +464,19 @@ export default function NewOrderPage() {
 
       toast.success("سفارش با موفقیت ثبت شد. رسید پرداخت در حال بررسی است.");
       router.push(`/orders/${orderId}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error submitting order:", error);
-      toast.error("خطا در ثبت سفارش. لطفاً دوباره تلاش کنید.");
+      // Show backend validation errors if available
+      const detail = error?.response?.data?.detail;
+      if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+        // Questionnaire validation errors: { question_id: error_message }
+        const messages = Object.values(detail) as string[];
+        toast.error(messages.join("\n"), { duration: 6000 });
+      } else if (typeof detail === "string") {
+        toast.error(detail);
+      } else {
+        toast.error("خطا در ثبت سفارش. لطفاً دوباره تلاش کنید.");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -831,12 +891,15 @@ export default function NewOrderPage() {
                       {section.questions.map((question) => (
                         <div key={question.id}>
                           <label className="block text-sm font-medium text-foreground mb-2">
-                            {question.text_fa}
+                            {question.question_fa}
                             {question.is_required && (
                               <span className="text-danger mr-1">*</span>
                             )}
                           </label>
-                          {question.input_type === "textarea" ? (
+                          {question.help_text_fa && (
+                            <p className="text-xs text-muted mb-1">{question.help_text_fa}</p>
+                          )}
+                          {question.input_type === "TEXTAREA" ? (
                             <Textarea
                               value={orderData.questionnaire_answers?.[question.id] || ""}
                               onChange={(e) =>
@@ -848,11 +911,80 @@ export default function NewOrderPage() {
                                   },
                                 })
                               }
-                              placeholder={`${question.text_fa} را وارد کنید`}
+                              placeholder={question.placeholder_fa || `${question.question_fa} را وارد کنید`}
                             />
-                          ) : question.input_type === "select" && question.options ? (
-                            <Select
-                              options={question.options.map((o) => ({ value: o, label: o }))}
+                          ) : question.input_type === "SINGLE_CHOICE" && question.options?.length > 0 ? (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                              {question.options.map((option) => (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  onClick={() =>
+                                    setOrderData({
+                                      ...orderData,
+                                      questionnaire_answers: {
+                                        ...orderData.questionnaire_answers,
+                                        [question.id]: option.value,
+                                      },
+                                    })
+                                  }
+                                  className={cn(
+                                    "p-3 rounded-lg border text-sm text-right transition-all",
+                                    orderData.questionnaire_answers?.[question.id] === option.value
+                                      ? "border-primary bg-primary-50 text-primary"
+                                      : "border-border hover:border-primary/30"
+                                  )}
+                                >
+                                  {option.image_url && (
+                                    <OptimizedImage
+                                      src={getImageUrl(option.image_url) || option.image_url}
+                                      alt={option.label_fa}
+                                      width={60}
+                                      height={60}
+                                      className="mx-auto mb-2 rounded"
+                                    />
+                                  )}
+                                  <span className="block font-medium">{option.label_fa}</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : question.input_type === "MULTI_CHOICE" && question.options?.length > 0 ? (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                              {question.options.map((option) => {
+                                const selected = (orderData.questionnaire_answers?.[question.id] || "").split(",").filter(Boolean);
+                                const isSelected = selected.includes(option.value);
+                                return (
+                                  <button
+                                    key={option.id}
+                                    type="button"
+                                    onClick={() => {
+                                      const newValues = isSelected
+                                        ? selected.filter((v) => v !== option.value)
+                                        : [...selected, option.value];
+                                      setOrderData({
+                                        ...orderData,
+                                        questionnaire_answers: {
+                                          ...orderData.questionnaire_answers,
+                                          [question.id]: newValues.join(","),
+                                        },
+                                      });
+                                    }}
+                                    className={cn(
+                                      "p-3 rounded-lg border text-sm text-right transition-all",
+                                      isSelected
+                                        ? "border-primary bg-primary-50 text-primary"
+                                        : "border-border hover:border-primary/30"
+                                    )}
+                                  >
+                                    <span className="block font-medium">{option.label_fa}</span>
+                                    {isSelected && <Check className="w-4 h-4 text-primary mt-1" />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : question.input_type === "NUMBER" ? (
+                            <Input
+                              type="number"
                               value={orderData.questionnaire_answers?.[question.id] || ""}
                               onChange={(e) =>
                                 setOrderData({
@@ -863,8 +995,82 @@ export default function NewOrderPage() {
                                   },
                                 })
                               }
-                              placeholder="انتخاب کنید"
+                              placeholder={question.placeholder_fa || `${question.question_fa} را وارد کنید`}
                             />
+                          ) : question.input_type === "COLOR_PICKER" ? (
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="color"
+                                value={orderData.questionnaire_answers?.[question.id] || "#000000"}
+                                onChange={(e) =>
+                                  setOrderData({
+                                    ...orderData,
+                                    questionnaire_answers: {
+                                      ...orderData.questionnaire_answers,
+                                      [question.id]: e.target.value,
+                                    },
+                                  })
+                                }
+                                className="w-12 h-12 border border-border rounded-lg cursor-pointer"
+                              />
+                              <span className="text-sm text-muted font-mono" dir="ltr">
+                                {orderData.questionnaire_answers?.[question.id] || "#000000"}
+                              </span>
+                            </div>
+                          ) : question.input_type === "IMAGE_UPLOAD" ? (
+                            <div
+                              className={cn(
+                                "border-2 border-dashed rounded-lg p-4 text-center transition-colors",
+                                orderData.questionnaire_answers?.[question.id]
+                                  ? "border-success bg-success-light"
+                                  : "border-border hover:border-primary/30"
+                              )}
+                            >
+                              <input
+                                type="file"
+                                id={`q-upload-${question.id}`}
+                                className="hidden"
+                                accept="image/*"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    try {
+                                      const response = await filesApi.uploadPlaceholderImage(file);
+                                      setOrderData({
+                                        ...orderData,
+                                        questionnaire_answers: {
+                                          ...orderData.questionnaire_answers,
+                                          [question.id]: response.data.file_url,
+                                        },
+                                      });
+                                      toast.success("تصویر آپلود شد");
+                                    } catch {
+                                      toast.error("خطا در آپلود تصویر");
+                                    }
+                                  }
+                                }}
+                              />
+                              <label htmlFor={`q-upload-${question.id}`} className="cursor-pointer block">
+                                {orderData.questionnaire_answers?.[question.id] ? (
+                                  <div>
+                                    <ImagePreview
+                                      src={orderData.questionnaire_answers[question.id]}
+                                      alt={question.question_fa}
+                                      className="w-[100px] h-[100px] mx-auto"
+                                      aspectRatio="aspect-square"
+                                      thumbnailSize={200}
+                                      showDownload={false}
+                                    />
+                                    <p className="text-xs text-muted mt-2">برای تغییر کلیک کنید</p>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <Upload className="w-8 h-8 mx-auto text-muted" />
+                                    <p className="text-sm text-muted mt-2">آپلود تصویر</p>
+                                  </>
+                                )}
+                              </label>
+                            </div>
                           ) : (
                             <Input
                               value={orderData.questionnaire_answers?.[question.id] || ""}
@@ -877,7 +1083,7 @@ export default function NewOrderPage() {
                                   },
                                 })
                               }
-                              placeholder={`${question.text_fa} را وارد کنید`}
+                              placeholder={question.placeholder_fa || `${question.question_fa} را وارد کنید`}
                             />
                           )}
                         </div>

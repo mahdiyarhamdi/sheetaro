@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { useOrder } from "@/hooks/useOrders";
 import { ImagePreview } from "@/components/ui/image-preview";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { paymentsApi, ordersApi, getErrorMessage } from "@/lib/api";
+import { paymentsApi, ordersApi, getErrorMessage, DesignRevision, ChatMessage } from "@/lib/api";
 import {
   Card,
   CardHeader,
@@ -37,9 +37,16 @@ import {
   Star,
   MessageSquare,
   Send,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  History,
+  Palette,
+  Loader2,
 } from "lucide-react";
-import { formatPrice, formatDate, formatDateTime, orderStatusLabels, toPersianNumber, cn } from "@/lib/utils";
+import { formatPrice, formatDate, formatDateTime, orderStatusLabels, toPersianNumber, cn, getPaymentStatusInfo } from "@/lib/utils";
 import toast from "react-hot-toast";
+import { getUser } from "@/lib/auth";
 
 export default function OrderDetailPage() {
   const params = useParams();
@@ -59,6 +66,16 @@ export default function OrderDetailPage() {
   const [reviewHover, setReviewHover] = useState(0);
   const [reviewComment, setReviewComment] = useState("");
 
+  // Design review state
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectFeedback, setRejectFeedback] = useState("");
+  const [showRevisionHistory, setShowRevisionHistory] = useState(false);
+
+  // Chat state
+  const [chatMessage, setChatMessage] = useState("");
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const currentUser = typeof window !== "undefined" ? getUser() : null;
+
   // Fetch review for delivered orders
   const { data: existingReview, refetch: refetchReview } = useQuery({
     queryKey: ["orderReview", orderId],
@@ -67,6 +84,76 @@ export default function OrderDetailPage() {
       return res.data;
     },
     enabled: !!order && order.status === "DELIVERED",
+  });
+
+  // Fetch design revisions
+  const { data: revisionsData } = useQuery({
+    queryKey: ["orderRevisions", orderId],
+    queryFn: async () => {
+      const res = await ordersApi.getRevisions(orderId);
+      return res.data;
+    },
+    enabled: !!order && (order.design_plan === "SEMI_PRIVATE" || order.design_plan === "PRIVATE"),
+  });
+
+  const latestRevision = revisionsData?.items?.length
+    ? revisionsData.items[revisionsData.items.length - 1]
+    : null;
+
+  // Fetch chat messages (PRIVATE only)
+  const { data: messagesData, refetch: refetchMessages } = useQuery({
+    queryKey: ["orderMessages", orderId],
+    queryFn: async () => {
+      const res = await ordersApi.getMessages(orderId, { page: 1, page_size: 100 });
+      return res.data;
+    },
+    enabled: !!order && order.design_plan === "PRIVATE" && order.status === "DESIGNING",
+    refetchInterval: 5000, // poll every 5s
+  });
+
+  // Auto-scroll chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messagesData?.items?.length]);
+
+  // Approve design mutation
+  const approveDesignMutation = useMutation({
+    mutationFn: async () => ordersApi.approveDesign(orderId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+      queryClient.invalidateQueries({ queryKey: ["orderRevisions", orderId] });
+      toast.success("طرح با موفقیت تایید شد");
+    },
+    onError: (error) => toast.error(getErrorMessage(error)),
+  });
+
+  // Reject design mutation
+  const rejectDesignMutation = useMutation({
+    mutationFn: async () => {
+      if (rejectFeedback.trim().length < 5) throw new Error("بازخورد باید حداقل ۵ کاراکتر باشد");
+      return ordersApi.rejectDesign(orderId, { feedback: rejectFeedback.trim() });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+      queryClient.invalidateQueries({ queryKey: ["orderRevisions", orderId] });
+      setShowRejectModal(false);
+      setRejectFeedback("");
+      toast.success("درخواست اصلاح ارسال شد");
+    },
+    onError: (error) => toast.error(getErrorMessage(error)),
+  });
+
+  // Send chat message mutation
+  const sendMessageMutation = useMutation({
+    mutationFn: async () => {
+      if (!chatMessage.trim()) throw new Error("پیام نمی‌تواند خالی باشد");
+      return ordersApi.sendMessage(orderId, { content: chatMessage.trim() });
+    },
+    onSuccess: () => {
+      setChatMessage("");
+      refetchMessages();
+    },
+    onError: (error) => toast.error(getErrorMessage(error)),
   });
 
   // Confirm delivery mutation
@@ -247,11 +334,24 @@ export default function OrderDetailPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-sm text-muted">محصول</p>
-              <p className="font-medium">{order.category?.name_fa || "-"}</p>
+              <p className="font-medium">
+                {order.category_icon && <span className="ml-1">{order.category_icon}</span>}
+                {order.category_name || "-"}
+              </p>
             </div>
             <div>
               <p className="text-sm text-muted">نوع طراحی</p>
-              <p className="font-medium">{order.plan?.name_fa || "-"}</p>
+              <p className="font-medium">{order.design_plan_label || "-"}</p>
+            </div>
+            {order.template_name && (
+              <div>
+                <p className="text-sm text-muted">قالب</p>
+                <p className="font-medium">{order.template_name}</p>
+              </div>
+            )}
+            <div>
+              <p className="text-sm text-muted">تعداد</p>
+              <p className="font-medium">{toPersianNumber(order.quantity)}</p>
             </div>
             <div>
               <p className="text-sm text-muted">تاریخ ثبت</p>
@@ -263,21 +363,79 @@ export default function OrderDetailPage() {
             </div>
           </div>
 
-          {/* Attributes */}
-          {order.attributes && Object.keys(order.attributes).length > 0 && (
+          {/* Enriched Attributes */}
+          {order.enriched_attributes && order.enriched_attributes.length > 0 && (
             <div className="pt-4 border-t border-border">
-              <p className="text-sm font-medium text-foreground mb-2">ویژگی‌های انتخابی:</p>
+              <p className="text-sm font-medium text-foreground mb-2">مشخصات چاپ:</p>
               <div className="flex flex-wrap gap-2">
-                {Object.entries(order.attributes).map(([key, value]) => (
-                  <Badge key={key} variant="outline">
-                    {String(value)}
+                {order.enriched_attributes.map((attr: { attribute_name: string; value_name: string; price: number }, idx: number) => (
+                  <Badge key={idx} variant="outline">
+                    {attr.attribute_name}: {attr.value_name}
                   </Badge>
                 ))}
               </div>
             </div>
           )}
+
+          {/* Customer notes */}
+          {order.customer_notes && (
+            <div className="pt-4 border-t border-border">
+              <p className="text-sm font-medium text-foreground mb-1">یادداشت شما:</p>
+              <p className="text-sm text-muted bg-accent/50 rounded-lg p-3">{order.customer_notes}</p>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Price breakdown */}
+      {(order.base_price > 0 || order.design_price > 0 || order.attributes_price > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-primary" />
+              جزئیات قیمت
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 text-sm">
+              {order.base_price > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted">قیمت پایه</span>
+                  <span>{formatPrice(order.base_price)}</span>
+                </div>
+              )}
+              {order.attributes_price > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted">هزینه ویژگی‌ها</span>
+                  <span>{formatPrice(order.attributes_price)}</span>
+                </div>
+              )}
+              {order.design_price > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted">هزینه طراحی</span>
+                  <span>{formatPrice(order.design_price)}</span>
+                </div>
+              )}
+              {order.validation_price > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted">هزینه بازبینی</span>
+                  <span>{formatPrice(order.validation_price)}</span>
+                </div>
+              )}
+              {order.print_price > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted">هزینه چاپ</span>
+                  <span>{formatPrice(order.print_price)}</span>
+                </div>
+              )}
+              <div className="flex justify-between pt-2 border-t border-border font-bold text-base">
+                <span>جمع کل</span>
+                <span className="text-primary">{formatPrice(order.total_price)}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Payment section */}
       <Card>
@@ -367,17 +525,17 @@ export default function OrderDetailPage() {
       </Card>
 
       {/* Design file preview + download (if ready) */}
-      {order.design_file_url && (
+      {(order.design_preview_url || order.design_final_url || order.design_file_url) && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-primary" />
-              فایل طراحی
+              <ImageIcon className="w-5 h-5 text-primary" />
+              پیش‌نمایش طراحی
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <ImagePreview
-              src={order.design_file_url}
+              src={(order.design_preview_url || order.design_final_url || order.design_file_url)!}
               alt="پیش‌نمایش طرح سفارش"
               className="w-full max-w-md mx-auto rounded-xl"
               aspectRatio="aspect-auto"
@@ -389,6 +547,300 @@ export default function OrderDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* ==================== Design Review Section ==================== */}
+      {order.status === "DESIGNING" && (order.design_plan === "SEMI_PRIVATE" || order.design_plan === "PRIVATE") && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Palette className="w-5 h-5 text-primary" />
+              وضعیت طراحی
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {latestRevision && latestRevision.status === "PENDING_REVIEW" ? (
+              <>
+                {/* Revision counter */}
+                <div className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
+                  <span className="text-sm text-muted">شماره ریویژن</span>
+                  <span className="font-medium">
+                    {order.max_revisions != null
+                      ? `ریویژن ${toPersianNumber(latestRevision.version)} از ${toPersianNumber(order.max_revisions)}`
+                      : `ریویژن ${toPersianNumber(latestRevision.version)} (بدون محدودیت)`}
+                  </span>
+                </div>
+
+                {/* Last revision warning */}
+                {order.max_revisions != null && (order.revision_count ?? 0) + 1 >= order.max_revisions && (
+                  <div className="bg-warning-light rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+                      <p className="text-sm text-foreground">
+                        توجه: این آخرین فرصت اصلاح است. در صورت رد، طرح به صورت خودکار تایید خواهد شد.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Design preview */}
+                {latestRevision.design_file_url && (
+                  <ImagePreview
+                    src={latestRevision.design_file_url}
+                    alt="طرح ارسالی طراح"
+                    className="w-full max-w-md mx-auto rounded-xl"
+                    aspectRatio="aspect-auto"
+                    thumbnailSize={600}
+                    showDownload={true}
+                    showExpand={true}
+                  />
+                )}
+
+                {/* Approve / Reject buttons */}
+                <div className="flex gap-3">
+                  <Button
+                    variant="primary"
+                    className="flex-1"
+                    onClick={() => approveDesignMutation.mutate()}
+                    isLoading={approveDesignMutation.isPending}
+                    leftIcon={<CheckCircle className="w-4 h-4" />}
+                  >
+                    تایید طرح
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 border-orange-300 text-orange-600 hover:bg-orange-50"
+                    onClick={() => setShowRejectModal(true)}
+                    leftIcon={<XCircle className="w-4 h-4" />}
+                  >
+                    درخواست اصلاح
+                  </Button>
+                </div>
+              </>
+            ) : (
+              /* No revision uploaded yet */
+              <div className="bg-accent/50 rounded-xl p-6 text-center">
+                <Loader2 className="w-8 h-8 mx-auto text-primary animate-spin mb-3" />
+                <p className="font-medium text-foreground">طرح شما در حال آماده‌سازی توسط طراح است</p>
+                <p className="text-sm text-muted mt-1">پس از آپلود طرح، می‌توانید آن را بررسی کنید</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ==================== Revision History ==================== */}
+      {revisionsData && revisionsData.items.length > 0 && (
+        <Card>
+          <CardHeader
+            className="cursor-pointer"
+            onClick={() => setShowRevisionHistory(!showRevisionHistory)}
+          >
+            <CardTitle className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                <History className="w-5 h-5 text-primary" />
+                تاریخچه ریویژن‌ها ({toPersianNumber(revisionsData.items.length)})
+              </div>
+              {showRevisionHistory ? (
+                <ChevronUp className="w-5 h-5 text-muted" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-muted" />
+              )}
+            </CardTitle>
+          </CardHeader>
+          {showRevisionHistory && (
+            <CardContent className="space-y-4">
+              {revisionsData.items.map((rev: DesignRevision) => (
+                <div
+                  key={rev.id}
+                  className="p-4 border border-border rounded-lg space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">ریویژن {toPersianNumber(rev.version)}</span>
+                    <Badge
+                      variant={
+                        rev.status === "APPROVED"
+                          ? "success"
+                          : rev.status === "REJECTED"
+                          ? "danger"
+                          : "warning"
+                      }
+                      size="sm"
+                    >
+                      {rev.status === "APPROVED"
+                        ? "تایید شده"
+                        : rev.status === "REJECTED"
+                        ? "رد شده"
+                        : "در انتظار بررسی"}
+                    </Badge>
+                  </div>
+                  {rev.design_file_url && (
+                    <ImagePreview
+                      src={rev.design_file_url}
+                      alt={`ریویژن ${rev.version}`}
+                      className="w-32 h-32 rounded-lg"
+                      aspectRatio="aspect-square"
+                      thumbnailSize={200}
+                      showExpand={true}
+                    />
+                  )}
+                  {rev.customer_feedback && (
+                    <div className="bg-accent/50 rounded-lg p-3">
+                      <p className="text-xs text-muted mb-1">بازخورد شما:</p>
+                      <p className="text-sm">{rev.customer_feedback}</p>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted">
+                    {formatDateTime(rev.created_at)}
+                  </p>
+                </div>
+              ))}
+            </CardContent>
+          )}
+        </Card>
+      )}
+
+      {/* ==================== Chat Section (PRIVATE only) ==================== */}
+      {order.design_plan === "PRIVATE" && order.status === "DESIGNING" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-primary" />
+              چت با طراح
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Messages list */}
+            <div className="max-h-96 overflow-y-auto space-y-3 p-2">
+              {(!messagesData?.items || messagesData.items.length === 0) && (
+                <p className="text-center text-sm text-muted py-8">
+                  هنوز پیامی ارسال نشده. اولین پیام را ارسال کنید!
+                </p>
+              )}
+              {messagesData?.items?.map((msg: ChatMessage) => {
+                const isMe = msg.sender_id === currentUser?.id;
+                return (
+                  <div
+                    key={msg.id}
+                    className={cn(
+                      "flex",
+                      isMe ? "justify-end" : "justify-start"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "max-w-[75%] rounded-2xl px-4 py-2",
+                        isMe
+                          ? "bg-primary text-white rounded-br-sm"
+                          : "bg-accent rounded-bl-sm"
+                      )}
+                    >
+                      {!isMe && msg.sender_name && (
+                        <p className="text-xs font-medium mb-1 opacity-70">
+                          {msg.sender_name}
+                        </p>
+                      )}
+                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                      {msg.file_url && (
+                        <a
+                          href={msg.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={cn(
+                            "text-xs underline mt-1 inline-block",
+                            isMe ? "text-white/80" : "text-primary"
+                          )}
+                        >
+                          فایل پیوست
+                        </a>
+                      )}
+                      <p
+                        className={cn(
+                          "text-[10px] mt-1",
+                          isMe ? "text-white/60 text-left" : "text-muted text-left"
+                        )}
+                        dir="ltr"
+                      >
+                        {new Date(msg.created_at).toLocaleTimeString("fa-IR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Message input */}
+            <div className="flex gap-2">
+              <textarea
+                value={chatMessage}
+                onChange={(e) => setChatMessage(e.target.value)}
+                placeholder="پیام خود را بنویسید..."
+                className="flex-1 p-3 border border-border rounded-lg text-sm resize-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                rows={1}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (chatMessage.trim()) sendMessageMutation.mutate();
+                  }
+                }}
+              />
+              <Button
+                variant="primary"
+                onClick={() => sendMessageMutation.mutate()}
+                isLoading={sendMessageMutation.isPending}
+                disabled={!chatMessage.trim()}
+                className="self-end"
+              >
+                <Send className="w-4 h-4" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ==================== Reject Design Modal ==================== */}
+      <Modal
+        isOpen={showRejectModal}
+        onClose={() => setShowRejectModal(false)}
+        title="درخواست اصلاح طرح"
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted">
+            لطفاً توضیح دهید چه تغییراتی در طرح نیاز دارید تا طراح بتواند آن را اصلاح کند.
+          </p>
+          <textarea
+            value={rejectFeedback}
+            onChange={(e) => setRejectFeedback(e.target.value)}
+            placeholder="مثلاً: رنگ پس‌زمینه را تیره‌تر کنید و لوگو بزرگ‌تر باشد..."
+            className="w-full p-3 border border-border rounded-lg text-sm resize-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+            rows={4}
+            maxLength={2000}
+          />
+          {rejectFeedback.length > 0 && (
+            <p className="text-xs text-muted text-left" dir="ltr">
+              {rejectFeedback.length}/2000
+            </p>
+          )}
+          <div className="flex gap-3">
+            <Button
+              variant="primary"
+              className="flex-1"
+              onClick={() => rejectDesignMutation.mutate()}
+              isLoading={rejectDesignMutation.isPending}
+              disabled={rejectFeedback.trim().length < 5}
+            >
+              ارسال بازخورد
+            </Button>
+            <Button variant="outline" onClick={() => setShowRejectModal(false)}>
+              انصراف
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Shipping & Delivery section */}
       {(order.status === "SHIPPED" || order.status === "DELIVERED") && (

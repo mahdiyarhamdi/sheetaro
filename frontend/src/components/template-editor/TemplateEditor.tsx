@@ -31,16 +31,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import toast from "react-hot-toast";
-
-// API base URL for constructing full image URLs
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3005";
-
-// Helper to construct full image URL from relative path
-const getFullImageUrl = (url?: string): string | undefined => {
-  if (!url) return undefined;
-  if (url.startsWith('http')) return url;
-  return `${API_BASE_URL}/api/v1${url}`;
-};
+import { getImageUrl } from "@/lib/image-utils";
 
 interface TemplateEditorProps {
   templateId: string;
@@ -518,7 +509,7 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
               {/* Canvas */}
               <div className="flex-1 overflow-auto p-4">
                 <TemplateCanvas
-                  backgroundImage={getFullImageUrl(template?.file_url || template?.preview_url)}
+                  backgroundImage={getImageUrl(template?.file_url || template?.preview_url)}
                   placeholders={localPlaceholders}
                   selectedPlaceholder={selectedPlaceholder}
                   onPlaceholderSelect={handlePlaceholderSelect}
@@ -579,7 +570,7 @@ export default function TemplateEditor({ templateId, onClose }: TemplateEditorPr
           <div className="flex-1 flex">
             <div className="flex-1 overflow-auto p-4">
               <TemplateCanvas
-                backgroundImage={getFullImageUrl(template?.file_url || template?.preview_url)}
+                backgroundImage={getImageUrl(template?.file_url || template?.preview_url)}
                 placeholders={localPlaceholders}
                 canvasWidth={template?.image_width || 800}
                 canvasHeight={template?.image_height || 600}

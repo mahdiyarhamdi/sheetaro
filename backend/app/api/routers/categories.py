@@ -311,6 +311,22 @@ async def delete_plan(
         raise HTTPException(status_code=404, detail="Plan not found")
 
 
+# ============== Questionnaire Endpoint ==============
+
+@plans_router.get("/{plan_id}/questionnaire")
+async def get_plan_questionnaire(
+    plan_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the full questionnaire for a plan (sections + questions + options)."""
+    repo = CategoryRepository(db)
+    sections = await repo.get_sections_by_plan(plan_id, active_only=True)
+    return {
+        "plan_id": str(plan_id),
+        "sections": sections,
+    }
+
+
 # ============== Section Endpoints ==============
 
 @plans_router.get("/{plan_id}/sections", response_model=List[SectionWithQuestions])
@@ -920,7 +936,7 @@ async def submit_order_answers(
     # Get the order to find the plan_id
     from app.repositories.order_repository import OrderRepository
     order_repo = OrderRepository(db)
-    order = await order_repo.get_order_by_id(order_id)
+    order = await order_repo.get_by_id(order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     

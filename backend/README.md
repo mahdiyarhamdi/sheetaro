@@ -78,11 +78,25 @@ docker-compose up --build
 - `PATCH /orders/{id}` - Update order
 - `PATCH /orders/{id}/status` - Update order status
 - `POST /orders/{id}/cancel` - Cancel order
+- `POST /orders/{id}/approve-design` - Customer approves the latest design revision
+- `POST /orders/{id}/reject-design` - Customer rejects design with feedback (body: `{"feedback": "..."}`)
+- `GET /orders/{id}/revisions` - List all design revisions for the order
+- `GET /orders/{id}/messages` - Chat messages (PRIVATE plans only, paginated)
+- `POST /orders/{id}/messages` - Send chat message (body: `{"content": "...", "file_url": "..."}`)
+- `PATCH /orders/{id}/messages/read` - Mark chat messages as read
+
+### Designer (`/api/v1/designer`)
+- `GET /designer/orders` - List orders assigned to the designer (filter by `status`)
+- `GET /designer/orders/{id}` - Get enriched order detail (includes customer info, questionnaire answers)
+- `POST /designer/orders/{id}/accept` - Accept an assigned order
+- `POST /designer/orders/{id}/upload-design` - Upload a new design revision (multipart/form-data)
+- `GET /designer/orders/{id}/revisions` - List design revisions for the order
+- `GET /designer/stats` - Get designer dashboard statistics
 
 ### Print Shop (`/api/v1/printshop`)
-- `GET /printshop/orders` - Get queue of orders ready for printing (READY_FOR_PRINT)
-- `GET /printshop/my-orders` - Get orders assigned to this print shop (filter by status)
-- `GET /printshop/my-orders/{id}` - Get detail of an assigned order
+- `GET /printshop/orders` - Get queue of orders ready for printing (READY_FOR_PRINT). Response includes enriched `PrintShopOrderOut` with category info, design plan label, payment status, template name, and customer details.
+- `GET /printshop/my-orders` - Get orders assigned to this print shop (filter by status). Enriched response with same data as queue.
+- `GET /printshop/my-orders/{id}` - Get detail of an assigned order (full enriched `PrintShopOrderOut`)
 - `POST /printshop/accept/{id}` - Accept order from queue (sets status to PRINTING)
 - `POST /printshop/orders/{id}/complete` - Mark order as printed (PRINTING → PRINTED)
 - `POST /printshop/orders/{id}/ship` - Ship order with tracking code (PRINTED → SHIPPED)
@@ -294,7 +308,7 @@ python -m pytest tests/ -v -k "auth"
 
 | File | Description |
 |------|-------------|
-| `tests/unit/test_printshop_service.py` | OrderService print shop methods (accept, complete, ship, stats, queue) |
+| `tests/unit/test_printshop_service.py` | OrderService print shop methods (accept, complete, ship, stats, queue, enriched PrintShopOrderOut fields) |
 | `tests/integration/test_printshop_api.py` | Print shop API endpoints (queue, accept, my-orders, complete, ship, stats, settlements) |
 | `tests/integration/test_admin_printshop_api.py` | Admin print shop management endpoints (list, stats, orders, reassign, settlements, SLA) |
 

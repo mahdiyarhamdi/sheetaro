@@ -31,6 +31,8 @@ from app.models.processed_design import ProcessedDesign
 from app.models.order_step import OrderStepTemplate, OrderStep, StepType
 from app.models.question_answer import QuestionAnswer
 from app.models.settlement import Settlement
+from app.models.review import Review
+from app.models.printshop_profile import PrintShopProfile
 from app.models.system_font import SystemFont
 
 __all__ = [
@@ -73,6 +75,8 @@ __all__ = [
     "OrderStep",
     "StepType",
     "QuestionAnswer",
+    "Review",
+    "PrintShopProfile",
     "SystemFont",
 ]
 

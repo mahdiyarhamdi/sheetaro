@@ -33,6 +33,7 @@ class Order(Base):
     
     # Order details
     design_plan = Column(ENUM(DesignPlan, name='designplan', create_type=False), nullable=False)
+    design_plan_id = Column(UUID(as_uuid=True), ForeignKey('category_design_plans.id'), nullable=True)
     status = Column(ENUM(OrderStatus, name='orderstatus', create_type=False), nullable=False, default=OrderStatus.PENDING, index=True)
     quantity = Column(Integer, nullable=False, default=1)
     

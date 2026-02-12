@@ -901,6 +901,67 @@ The Telegram bot uses a **unified flow management** architecture:
 
 ---
 
+## Design Revision Flow
+
+### Overview
+
+The Design Revision system manages the workflow between customers and designers for SEMI_PRIVATE and PRIVATE design plans. It supports iterative design feedback loops with optional auto-approval.
+
+### Models
+
+- **`DesignRevision`** (`design_revisions`): Tracks each design version uploaded by a designer for an order.
+  - Fields: `id`, `order_id`, `version`, `designer_id`, `design_file_url`, `customer_feedback`, `status` (PENDING_REVIEW/APPROVED/REJECTED), `created_at`, `reviewed_at`
+- **`Message`** (`messages`): Order-scoped chat messages between customer and designer (PRIVATE plan only).
+  - Fields: `id`, `order_id`, `sender_id`, `content`, `file_url`, `is_read`, `created_at`
+
+### Flow
+
+```
+PAYMENT_APPROVED → DESIGNING
+  ↓
+  Designer uploads design → DesignRevision(PENDING_REVIEW)
+  ↓
+  Customer reviews:
+    ├─ APPROVE → READY_FOR_PRINT (or AWAITING_VALIDATION if validation_requested)
+    └─ REJECT + feedback → revision_count++
+        ├─ revision_count < max_revisions → back to DESIGNING (designer uploads again)
+        └─ revision_count >= max_revisions → AUTO-APPROVE → READY_FOR_PRINT
+```
+
+For **PRIVATE** plans: `max_revisions` is NULL (unlimited), plus customer-designer chat.
+For **SEMI_PRIVATE** plans: `max_revisions` is set from the plan, no chat.
+
+### Services
+
+- **`DesignRevisionService`**: `submit_revision`, `approve_design`, `reject_design`, `get_revision_history`
+- **`MessageService`**: `send_message`, `get_messages`, `mark_read`, `get_unread_count`
+
+### API Endpoints
+
+Designer endpoints at `/api/v1/designer/`:
+- `GET /orders` - list assigned orders
+- `GET /orders/{id}` - order detail with enriched data
+- `POST /orders/{id}/accept` - accept order
+- `POST /orders/{id}/upload-design` - upload design file
+
+Customer endpoints at `/api/v1/orders/`:
+- `POST /orders/{id}/approve-design` - approve latest revision
+- `POST /orders/{id}/reject-design` - reject with feedback
+- `GET /orders/{id}/revisions` - revision history
+- `GET /orders/{id}/messages` - chat messages (PRIVATE only)
+- `POST /orders/{id}/messages` - send message (PRIVATE only)
+- `PATCH /orders/{id}/messages/read` - mark as read
+
+---
+
+## Chat System
+
+The chat system is order-scoped and available only for PRIVATE design plans during the DESIGNING status. Messages are stored in the `messages` table with sender identification and read tracking.
+
+Access control: Only the order owner (customer) and the assigned designer can read/write messages.
+
+---
+
 ## Print Shop Panel Architecture
 
 ### Overview
@@ -924,6 +985,19 @@ READY_FOR_PRINT → [Print Shop Accepts] → PRINTING → [Print Shop Completes]
 - `SettlementStatus` - PENDING / PAID
 - `OrderStatus.PRINTED` - New status between PRINTING and SHIPPED
 
+### Enriched Order Data Flow
+
+The `_to_printshop_order_out()` method in `OrderService` populates the `PrintShopOrderOut` response by joining data from multiple tables:
+
+- **Category**: `name_fa`, `icon` from the `Category` table (via `order.category` relationship)
+- **Design plan**: Persian label mapped from `DesignPlan` enum (e.g., `PUBLIC` → "قالب آماده")
+- **Template name**: `name_fa` from `DesignTemplate` (via `ProcessedDesign.template_id`)
+- **Payment status**: Latest `Payment.status` and `paid_at`/`approved_at` for the order
+- **Admin notes**: Copied directly from `order.admin_notes`
+- **Design preview**: `preview_url` and `final_url` from `ProcessedDesign`
+
+The existing fields (`selected_attributes`, `customer_notes`, `base_price`, `attributes_price`, etc.) from the parent `OrderOut` schema are already available from the Order model.
+
 ### SLA Enforcement
 
 - Background task (`tasks/printshop_sla.py`) checks for stale READY_FOR_PRINT orders
@@ -937,7 +1011,7 @@ READY_FOR_PRINT → [Print Shop Accepts] → PRINTING → [Print Shop Completes]
 | API | `api/routers/printshop.py` | Print shop queue, my-orders, accept, complete, ship, stats, settlements |
 | API | `api/routers/admin.py` | Admin: list printshops, stats, reassign, settlements, SLA report |
 | Model | `models/settlement.py` | Settlement ORM model |
-| Schema | `schemas/order.py` | PrintShopOrderOut, PrintShopStats, SettlementOut, etc. |
+| Schema | `schemas/order.py` | PrintShopOrderOut (enriched: category, payment, template, admin_notes), PrintShopStats, SettlementOut, etc. |
 | Task | `tasks/printshop_sla.py` | Background SLA enforcement |
 | Bot | `handlers/flows/printshop_flow.py` | Bot flow handlers |
 | Bot | `keyboards/printshop.py` | Inline/reply keyboards |

@@ -4,7 +4,12 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminApi, getErrorMessage } from "@/lib/api";
-import { formatPrice, formatDateTime } from "@/lib/utils";
+import {
+  formatPrice,
+  formatDateTime,
+  getPaymentStatusInfo,
+  toPersianNumber,
+} from "@/lib/utils";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -18,8 +23,55 @@ import {
   Clock,
   Hash,
   ImageIcon,
+  Tag,
+  FileText,
+  CreditCard,
+  MessageSquare,
+  ShieldCheck,
+  Calendar,
+  Layers,
 } from "lucide-react";
 import { ImagePreview } from "@/components/ui/image-preview";
+
+/** Enriched print shop order detail */
+interface PrintShopOrderDetail {
+  id: string;
+  user_id: string;
+  category_id?: string;
+  quantity: number;
+  total_price: number;
+  base_price: number;
+  attributes_price: number;
+  design_price: number;
+  print_price: number;
+  validation_price: number;
+  fix_price: number;
+  status: string;
+  design_plan: string;
+  design_plan_label?: string;
+  design_file_url?: string;
+  design_preview_url?: string;
+  design_final_url?: string;
+  customer_name?: string;
+  customer_phone?: string;
+  customer_city?: string;
+  customer_address?: string;
+  category_name?: string;
+  category_icon?: string;
+  template_name?: string;
+  admin_notes?: string;
+  customer_notes?: string;
+  payment_status?: string;
+  payment_paid_at?: string;
+  tracking_code?: string;
+  shipping_address?: string;
+  enriched_attributes?: Array<{ attribute_name: string; value_name: string; price: number }>;
+  created_at: string;
+  accepted_at?: string;
+  printed_at?: string;
+  shipped_at?: string;
+  delivered_at?: string;
+}
 
 const STATUS_TIMELINE = [
   { key: "PRINTING", label: "در حال چاپ", icon: Printer },
@@ -36,7 +88,7 @@ export default function PrintShopOrderDetailPage() {
   const [trackingCode, setTrackingCode] = useState("");
   const [error, setError] = useState("");
 
-  const { data: order, isLoading } = useQuery({
+  const { data: order, isLoading } = useQuery<PrintShopOrderDetail>({
     queryKey: ["printshopOrder", orderId],
     queryFn: async () => {
       const response = await adminApi.getPrintshopOrderDetail(orderId);
@@ -94,18 +146,31 @@ export default function PrintShopOrderDetailPage() {
   }
 
   const currentStatusIndex = STATUS_TIMELINE.findIndex((s) => s.key === order.status);
+  const payInfo = getPaymentStatusInfo(order.payment_status);
+  const enrichedAttrs = order.enriched_attributes || [];
 
   return (
     <div className="space-y-6 max-w-3xl">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <Link
-          href="/printshop/my-orders"
-          className="p-2 rounded-lg hover:bg-accent transition-colors"
-        >
-          <ArrowRight className="w-5 h-5" />
-        </Link>
-        <h1 className="text-xl font-bold">جزئیات سفارش #{orderId.slice(0, 8)}</h1>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/printshop/my-orders"
+            className="p-2 rounded-lg hover:bg-accent transition-colors"
+          >
+            <ArrowRight className="w-5 h-5" />
+          </Link>
+          <div>
+            <h1 className="text-xl font-bold">جزئیات سفارش #{orderId.slice(0, 8)}</h1>
+            <p className="text-sm text-muted">{formatDateTime(order.created_at)}</p>
+          </div>
+        </div>
+        {/* Payment status badge in header */}
+        {order.payment_status && (
+          <span className={`px-3 py-1 text-sm rounded-full ${payInfo.color}`}>
+            {payInfo.label}
+          </span>
+        )}
       </div>
 
       {/* Status Timeline */}
@@ -133,6 +198,99 @@ export default function PrintShopOrderDetailPage() {
         </div>
       </div>
 
+      {/* Product Info Card */}
+      <div className="bg-surface border border-border rounded-xl p-6">
+        <h2 className="text-sm font-semibold text-muted mb-4 flex items-center gap-2">
+          <Tag className="w-4 h-4" />
+          اطلاعات محصول
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {order.category_name && (
+            <InfoRow
+              icon={<span className="text-base">{order.category_icon || "📦"}</span>}
+              label="دسته‌بندی"
+              value={order.category_name}
+            />
+          )}
+          {order.design_plan_label && (
+            <InfoRow icon={<Layers className="w-4 h-4" />} label="نوع طراحی" value={order.design_plan_label} />
+          )}
+          {order.template_name && (
+            <InfoRow icon={<FileText className="w-4 h-4" />} label="قالب" value={order.template_name} />
+          )}
+          <InfoRow icon={<Calendar className="w-4 h-4" />} label="تاریخ ثبت" value={formatDateTime(order.created_at)} />
+        </div>
+      </div>
+
+      {/* Print Specifications Card */}
+      {(enrichedAttrs.length > 0 || order.quantity > 0) && (
+        <div className="bg-surface border border-border rounded-xl p-6">
+          <h2 className="text-sm font-semibold text-muted mb-4 flex items-center gap-2">
+            <Printer className="w-4 h-4" />
+            مشخصات چاپ
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <InfoRow icon={<Package className="w-4 h-4" />} label="تعداد" value={`${toPersianNumber(order.quantity)} عدد`} />
+            {enrichedAttrs.map((attr, i) => (
+              <div key={i} className="flex items-center gap-2 text-sm">
+                <span className="text-muted">•</span>
+                <span className="text-muted">{attr.attribute_name}:</span>
+                <span className="font-medium">{attr.value_name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Price Breakdown Card */}
+      <div className="bg-surface border border-border rounded-xl p-6">
+        <h2 className="text-sm font-semibold text-muted mb-4 flex items-center gap-2">
+          <CreditCard className="w-4 h-4" />
+          جزئیات قیمت
+        </h2>
+        <div className="space-y-2">
+          {Number(order.base_price) > 0 && (
+            <PriceRow label="قیمت پایه" price={order.base_price} />
+          )}
+          {Number(order.attributes_price) > 0 && (
+            <PriceRow label="هزینه ویژگی‌ها" price={order.attributes_price} />
+          )}
+          {Number(order.design_price) > 0 && (
+            <PriceRow label="هزینه طراحی" price={order.design_price} />
+          )}
+          {Number(order.print_price) > 0 && (
+            <PriceRow label="هزینه چاپ" price={order.print_price} />
+          )}
+          {Number(order.validation_price) > 0 && (
+            <PriceRow label="هزینه اعتبارسنجی" price={order.validation_price} />
+          )}
+          <div className="border-t border-border pt-2 mt-2 flex items-center justify-between font-bold text-base">
+            <span>مبلغ کل</span>
+            <span className="text-primary">{formatPrice(order.total_price)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Payment Status Card */}
+      {order.payment_status && (
+        <div className="bg-surface border border-border rounded-xl p-6">
+          <h2 className="text-sm font-semibold text-muted mb-4 flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4" />
+            وضعیت پرداخت
+          </h2>
+          <div className="flex items-center gap-3">
+            <span className={`px-3 py-1 text-sm rounded-full ${payInfo.color}`}>
+              {payInfo.label}
+            </span>
+            {order.payment_paid_at && (
+              <span className="text-sm text-muted">
+                تاریخ تایید: {formatDateTime(order.payment_paid_at)}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Design Preview */}
       {(order.design_preview_url || order.design_final_url || order.design_file_url) && (
         <div className="bg-surface border border-border rounded-xl p-6">
@@ -142,7 +300,7 @@ export default function PrintShopOrderDetailPage() {
           </h2>
           <div className="max-w-md mx-auto">
             <ImagePreview
-              src={order.design_preview_url || order.design_final_url || order.design_file_url}
+              src={(order.design_preview_url || order.design_final_url || order.design_file_url)!}
               alt="طرح سفارش"
               className="w-full"
               aspectRatio="aspect-auto"
@@ -166,23 +324,52 @@ export default function PrintShopOrderDetailPage() {
         </div>
       </div>
 
-      {/* Order Info */}
+      {/* Notes Section */}
+      {(order.customer_notes || order.admin_notes) && (
+        <div className="bg-surface border border-border rounded-xl p-6">
+          <h2 className="text-sm font-semibold text-muted mb-4 flex items-center gap-2">
+            <MessageSquare className="w-4 h-4" />
+            یادداشت‌ها
+          </h2>
+          <div className="space-y-3">
+            {order.customer_notes && (
+              <div className="p-3 bg-blue-50 rounded-lg">
+                <p className="text-xs font-medium text-blue-600 mb-1">یادداشت مشتری</p>
+                <p className="text-sm whitespace-pre-wrap">{order.customer_notes}</p>
+              </div>
+            )}
+            {order.admin_notes && (
+              <div className="p-3 bg-orange-50 rounded-lg">
+                <p className="text-xs font-medium text-orange-600 mb-1 flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3" />
+                  یادداشت مدیریت
+                </p>
+                <p className="text-sm whitespace-pre-wrap">{order.admin_notes}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Order Timestamps */}
       <div className="bg-surface border border-border rounded-xl p-6">
-        <h2 className="text-sm font-semibold text-muted mb-4">اطلاعات سفارش</h2>
+        <h2 className="text-sm font-semibold text-muted mb-4">زمان‌بندی سفارش</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <InfoRow icon={<Package className="w-4 h-4" />} label="تعداد" value={`${order.quantity} عدد`} />
-          <InfoRow icon={<Hash className="w-4 h-4" />} label="مبلغ کل" value={formatPrice(order.total_price)} />
-          {order.tracking_code && (
-            <InfoRow icon={<Truck className="w-4 h-4" />} label="کد رهگیری" value={order.tracking_code} />
-          )}
+          <InfoRow icon={<Calendar className="w-4 h-4" />} label="ثبت سفارش" value={formatDateTime(order.created_at)} />
           {order.accepted_at && (
-            <InfoRow icon={<Clock className="w-4 h-4" />} label="زمان قبول" value={new Date(order.accepted_at).toLocaleString("fa-IR")} />
+            <InfoRow icon={<Clock className="w-4 h-4" />} label="قبول سفارش" value={formatDateTime(order.accepted_at)} />
           )}
           {order.printed_at && (
-            <InfoRow icon={<Clock className="w-4 h-4" />} label="زمان چاپ" value={new Date(order.printed_at).toLocaleString("fa-IR")} />
+            <InfoRow icon={<Clock className="w-4 h-4" />} label="اتمام چاپ" value={formatDateTime(order.printed_at)} />
           )}
           {order.shipped_at && (
-            <InfoRow icon={<Clock className="w-4 h-4" />} label="زمان ارسال" value={new Date(order.shipped_at).toLocaleString("fa-IR")} />
+            <InfoRow icon={<Clock className="w-4 h-4" />} label="ارسال" value={formatDateTime(order.shipped_at)} />
+          )}
+          {order.delivered_at && (
+            <InfoRow icon={<Clock className="w-4 h-4" />} label="تحویل" value={formatDateTime(order.delivered_at)} />
+          )}
+          {order.tracking_code && (
+            <InfoRow icon={<Truck className="w-4 h-4" />} label="کد رهگیری" value={order.tracking_code} />
           )}
         </div>
       </div>
@@ -236,6 +423,15 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
       <span className="text-muted">{icon}</span>
       <span className="text-muted">{label}:</span>
       <span className="font-medium">{value}</span>
+    </div>
+  );
+}
+
+function PriceRow({ label, price }: { label: string; price: number }) {
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <span className="text-muted">{label}</span>
+      <span>{formatPrice(price)}</span>
     </div>
   );
 }

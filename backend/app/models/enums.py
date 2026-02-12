@@ -44,7 +44,8 @@ class OrderStatus(str, Enum):
     PENDING = "PENDING"
     AWAITING_VALIDATION = "AWAITING_VALIDATION"
     NEEDS_ACTION = "NEEDS_ACTION"
-    DESIGNING = "DESIGNING"
+    PENDING_DESIGNER = "PENDING_DESIGNER"  # Waiting for a designer to accept (queue)
+    DESIGNING = "DESIGNING"  # Designer accepted and is working on it
     READY_FOR_PRINT = "READY_FOR_PRINT"
     PRINTING = "PRINTING"
     PRINTED = "PRINTED"  # Print completed, awaiting shipment
@@ -83,6 +84,13 @@ class PaymentStatus(str, Enum):
     AWAITING_APPROVAL = "AWAITING_APPROVAL"  # Receipt uploaded, waiting for admin approval
     SUCCESS = "SUCCESS"  # Approved by admin
     FAILED = "FAILED"  # Rejected by admin
+
+
+class RevisionStatus(str, Enum):
+    """Design revision review status."""
+    PENDING_REVIEW = "PENDING_REVIEW"  # Designer uploaded, waiting for customer review
+    APPROVED = "APPROVED"              # Customer approved the design
+    REJECTED = "REJECTED"              # Customer rejected and requested changes
 
 
 class SubscriptionPlan(str, Enum):

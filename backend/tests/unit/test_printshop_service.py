@@ -31,14 +31,35 @@ def make_mock_user(role=UserRole.PRINT_SHOP, **kwargs):
     return SimpleNamespace(**defaults)
 
 
-def make_mock_order(user=None, printshop_user=None, status=OrderStatus.PRINTING, **kwargs):
+def make_mock_category(**kwargs):
+    """Create a mock category object."""
+    defaults = {
+        "id": uuid4(),
+        "slug": "label",
+        "name_fa": "لیبل",
+        "description_fa": "لیبل‌های مختلف",
+        "icon": "🏷️",
+        "base_price": Decimal("5000"),
+        "sort_order": 0,
+        "is_active": True,
+    }
+    defaults.update(kwargs)
+    return SimpleNamespace(**defaults)
+
+
+_SENTINEL = object()
+
+
+def make_mock_order(user=None, printshop_user=None, status=OrderStatus.PRINTING, category=_SENTINEL, **kwargs):
     """Create a mock order object with real values compatible with Pydantic model_validate."""
     if user is None:
         user = make_mock_user(role=UserRole.CUSTOMER)
+    if category is _SENTINEL:
+        category = make_mock_category()
     defaults = {
         "id": uuid4(),
         "user_id": user.id,
-        "category_id": uuid4(),
+        "category_id": category.id,
         "product_id": None,
         "selected_attributes": [],
         "design_plan": DesignPlan.PUBLIC,
@@ -62,6 +83,7 @@ def make_mock_order(user=None, printshop_user=None, status=OrderStatus.PRINTING,
         "tracking_code": None,
         "shipping_address": "Tehran, Valiasr Street",
         "customer_notes": "Test notes",
+        "admin_notes": "Admin internal note",
         "accepted_at": None,
         "printed_at": None,
         "shipped_at": None,
@@ -69,6 +91,8 @@ def make_mock_order(user=None, printshop_user=None, status=OrderStatus.PRINTING,
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
         "user": user,
+        "category": category,
+        "cancelled_at": None,
     }
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -261,6 +285,13 @@ class TestGetPrintshopOrderDetail:
         """PS-U12: Print shop can get detail of its assigned order."""
         order = make_mock_order(user=customer, printshop_user=ps_user)
         order_service.repository.get_by_id.return_value = order
+        # Mock db.execute for enrichment queries (ProcessedDesign, Payment)
+        order_service.db.execute = AsyncMock(
+            side_effect=[
+                _mock_scalar_one_or_none(None),  # ProcessedDesign
+                _mock_scalar_one_or_none(None),  # Payment
+            ]
+        )
 
         result = await order_service.get_printshop_order_detail(
             order_id=order.id, printshop_id=ps_user.id,
@@ -346,6 +377,13 @@ class TestGetPrintshopQueue:
         """PS-U17: Queue returns paginated response."""
         order = make_mock_order(user=customer, status=OrderStatus.READY_FOR_PRINT)
         order_service.repository.get_ready_for_print.return_value = ([order], 1)
+        # Mock db.execute for enrichment queries (ProcessedDesign, Payment)
+        order_service.db.execute = AsyncMock(
+            side_effect=[
+                _mock_scalar_one_or_none(None),  # ProcessedDesign
+                _mock_scalar_one_or_none(None),  # Payment
+            ]
+        )
 
         result = await order_service.get_printshop_queue(page=1, page_size=20)
 
@@ -371,3 +409,187 @@ class TestGetPrintshopQueue:
         order_service.repository.get_ready_for_print.assert_called_once_with(
             page=1, page_size=100
         )
+
+
+# ==================== Enriched PrintShopOrderOut Tests ====================
+
+
+def _mock_scalar_one_or_none(value):
+    """Create a mock execute result that returns value from scalar_one_or_none()."""
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = value
+    return mock_result
+
+
+class TestPrintShopOrderOutEnrichment:
+    """Tests verifying _to_printshop_order_out populates enriched fields."""
+
+    @pytest.mark.asyncio
+    async def test_category_fields_populated(self, order_service, ps_user, customer):
+        """PS-U20: category_name and category_icon come from order.category relation."""
+        cat = make_mock_category(name_fa="فاکتور", icon="📄")
+        order = make_mock_order(user=customer, printshop_user=ps_user, category=cat)
+
+        # Mock db.execute calls for ProcessedDesign, DesignTemplate, Payment
+        order_service.db.execute = AsyncMock(
+            side_effect=[
+                _mock_scalar_one_or_none(None),  # ProcessedDesign
+                _mock_scalar_one_or_none(None),  # Payment
+            ]
+        )
+
+        result = await order_service._to_printshop_order_out(order)
+
+        assert result.category_name == "فاکتور"
+        assert result.category_icon == "📄"
+
+    @pytest.mark.asyncio
+    async def test_design_plan_label_populated(self, order_service, ps_user, customer):
+        """PS-U21: design_plan_label is mapped from DesignPlan enum."""
+        for plan, expected_label in [
+            (DesignPlan.PUBLIC, "قالب آماده"),
+            (DesignPlan.SEMI_PRIVATE, "نیمه اختصاصی"),
+            (DesignPlan.PRIVATE, "اختصاصی"),
+            (DesignPlan.OWN_DESIGN, "طرح مشتری"),
+        ]:
+            order = make_mock_order(
+                user=customer, printshop_user=ps_user, design_plan=plan,
+            )
+            order_service.db.execute = AsyncMock(
+                side_effect=[
+                    _mock_scalar_one_or_none(None),  # ProcessedDesign
+                    _mock_scalar_one_or_none(None),  # Payment
+                ]
+            )
+            result = await order_service._to_printshop_order_out(order)
+            assert result.design_plan_label == expected_label
+
+    @pytest.mark.asyncio
+    async def test_admin_notes_populated(self, order_service, ps_user, customer):
+        """PS-U22: admin_notes is copied from the order model."""
+        order = make_mock_order(
+            user=customer, printshop_user=ps_user, admin_notes="Rush order",
+        )
+        order_service.db.execute = AsyncMock(
+            side_effect=[
+                _mock_scalar_one_or_none(None),  # ProcessedDesign
+                _mock_scalar_one_or_none(None),  # Payment
+            ]
+        )
+        result = await order_service._to_printshop_order_out(order)
+        assert result.admin_notes == "Rush order"
+
+    @pytest.mark.asyncio
+    async def test_payment_status_populated(self, order_service, ps_user, customer):
+        """PS-U23: payment_status is fetched from Payment table."""
+        order = make_mock_order(user=customer, printshop_user=ps_user)
+        mock_payment = SimpleNamespace(
+            status=SimpleNamespace(value="SUCCESS"),
+            paid_at=datetime(2026, 1, 15, 10, 0, 0, tzinfo=timezone.utc),
+            approved_at=datetime(2026, 1, 15, 10, 0, 0, tzinfo=timezone.utc),
+        )
+        order_service.db.execute = AsyncMock(
+            side_effect=[
+                _mock_scalar_one_or_none(None),  # ProcessedDesign
+                _mock_scalar_one_or_none(mock_payment),  # Payment
+            ]
+        )
+        result = await order_service._to_printshop_order_out(order)
+        assert result.payment_status == "SUCCESS"
+        assert result.payment_paid_at is not None
+
+    @pytest.mark.asyncio
+    async def test_template_name_populated(self, order_service, ps_user, customer):
+        """PS-U24: template_name fetched from DesignTemplate via ProcessedDesign."""
+        order = make_mock_order(user=customer, printshop_user=ps_user)
+        mock_processed = SimpleNamespace(
+            preview_url="/files/preview.png",
+            final_url="/files/final.png",
+            template_id=uuid4(),
+            created_at=datetime.now(timezone.utc),
+        )
+        order_service.db.execute = AsyncMock(
+            side_effect=[
+                _mock_scalar_one_or_none(mock_processed),  # ProcessedDesign
+                _mock_scalar_one_or_none("قالب شماره ۱"),  # DesignTemplate name_fa
+                _mock_scalar_one_or_none(None),  # Payment
+            ]
+        )
+        result = await order_service._to_printshop_order_out(order)
+        assert result.template_name == "قالب شماره ۱"
+        assert result.design_preview_url == "/files/preview.png"
+        assert result.design_final_url == "/files/final.png"
+
+    @pytest.mark.asyncio
+    async def test_customer_info_populated(self, order_service, ps_user):
+        """PS-U25: customer info comes from order.user relation."""
+        cust = make_mock_user(
+            role=UserRole.CUSTOMER, first_name="احمد", last_name="رضایی",
+            phone_number="09121234567", city="تهران", address="ولیعصر",
+        )
+        order = make_mock_order(user=cust, printshop_user=ps_user)
+        order_service.db.execute = AsyncMock(
+            side_effect=[
+                _mock_scalar_one_or_none(None),
+                _mock_scalar_one_or_none(None),
+            ]
+        )
+        result = await order_service._to_printshop_order_out(order)
+        assert result.customer_name == "احمد رضایی"
+        assert result.customer_phone == "09121234567"
+        assert result.customer_city == "تهران"
+
+    @pytest.mark.asyncio
+    async def test_no_category_returns_none(self, order_service, ps_user, customer):
+        """PS-U26: If category relation is None, category fields stay None."""
+        order = make_mock_order(user=customer, printshop_user=ps_user)
+        # Override the category relation to None (simulates missing join)
+        order.category = None
+        order_service.db.execute = AsyncMock(
+            side_effect=[
+                _mock_scalar_one_or_none(None),
+                _mock_scalar_one_or_none(None),
+            ]
+        )
+        result = await order_service._to_printshop_order_out(order)
+        assert result.category_name is None
+        assert result.category_icon is None
+
+    @pytest.mark.asyncio
+    async def test_enriched_attributes_populated(self, order_service, ps_user, customer):
+        """PS-U27: enriched_attributes resolves IDs to human-readable names."""
+        attr_id = str(uuid4())
+        opt_id = str(uuid4())
+        order = make_mock_order(
+            user=customer,
+            printshop_user=ps_user,
+            selected_attributes=[
+                {"attribute_id": attr_id, "option_id": opt_id, "value": None, "price_modifier": 5000},
+            ],
+        )
+        order_service.db.execute = AsyncMock(
+            side_effect=[
+                _mock_scalar_one_or_none("اندازه"),    # CategoryAttribute.name_fa
+                _mock_scalar_one_or_none("A4"),        # AttributeOption.label_fa
+                _mock_scalar_one_or_none(None),        # ProcessedDesign
+                _mock_scalar_one_or_none(None),        # Payment
+            ]
+        )
+        result = await order_service._to_printshop_order_out(order)
+        assert len(result.enriched_attributes) == 1
+        assert result.enriched_attributes[0].attribute_name == "اندازه"
+        assert result.enriched_attributes[0].value_name == "A4"
+        assert result.enriched_attributes[0].price == 5000
+
+    @pytest.mark.asyncio
+    async def test_enriched_attributes_empty_when_no_attrs(self, order_service, ps_user, customer):
+        """PS-U28: enriched_attributes is empty when order has no selected_attributes."""
+        order = make_mock_order(user=customer, printshop_user=ps_user, selected_attributes=[])
+        order_service.db.execute = AsyncMock(
+            side_effect=[
+                _mock_scalar_one_or_none(None),  # ProcessedDesign
+                _mock_scalar_one_or_none(None),  # Payment
+            ]
+        )
+        result = await order_service._to_printshop_order_out(order)
+        assert result.enriched_attributes == []

@@ -102,6 +102,58 @@ class OrderOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class EnrichedAttributeItem(BaseModel):
+    """Human-readable attribute for display."""
+    attribute_name: str = Field(..., description="Persian attribute name (e.g. اندازه)")
+    value_name: str = Field(..., description="Persian option label (e.g. A4)")
+    price: int = Field(default=0, description="Price modifier for this selection")
+
+
+class CustomerOrderDetailOut(OrderOut):
+    """Enriched order detail for the customer view (category name, attributes, design plan, etc.)."""
+    design_plan_id: Optional[UUID] = None
+    category_name: Optional[str] = None
+    category_icon: Optional[str] = None
+    design_plan_label: Optional[str] = None
+    template_name: Optional[str] = None
+    enriched_attributes: List[EnrichedAttributeItem] = Field(default_factory=list)
+    design_preview_url: Optional[str] = None
+    design_final_url: Optional[str] = None
+    payment_status: Optional[str] = None
+    payment_paid_at: Optional[datetime] = None
+
+
+class DesignerOrderOut(OrderOut):
+    """Enriched order detail for designer view."""
+    design_plan_id: Optional[UUID] = None
+    category_name: Optional[str] = None
+    category_icon: Optional[str] = None
+    design_plan_label: Optional[str] = None
+    template_name: Optional[str] = None
+    enriched_attributes: List[EnrichedAttributeItem] = Field(default_factory=list)
+    design_preview_url: Optional[str] = None
+    design_final_url: Optional[str] = None
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
+
+
+class DesignerOrderListResponse(BaseModel):
+    """Response for designer order list."""
+    items: list[DesignerOrderOut]
+    total: int
+    page: int
+    page_size: int
+
+
+class DesignerStats(BaseModel):
+    """Designer dashboard statistics."""
+    total_assigned: int = 0
+    in_progress: int = 0
+    pending_upload: int = 0
+    completed: int = 0
+    queue_count: int = 0  # Orders waiting in PENDING_DESIGNER queue
+
+
 class OrderListResponse(BaseModel):
     """Response schema for order list."""
     items: list[OrderOut]
@@ -111,13 +163,27 @@ class OrderListResponse(BaseModel):
 
 
 class PrintShopOrderOut(OrderOut):
-    """Order output for print shop view (includes customer info + design preview)."""
+    """Order output for print shop view (includes customer info + design preview + enriched data)."""
+    # Customer info (joined from User)
     customer_name: Optional[str] = None
     customer_phone: Optional[str] = None
     customer_city: Optional[str] = None
     customer_address: Optional[str] = None
+    # Design preview (from ProcessedDesign or design_file_url)
     design_preview_url: Optional[str] = None
     design_final_url: Optional[str] = None
+    # Enriched product/category info
+    category_name: Optional[str] = None
+    category_icon: Optional[str] = None
+    design_plan_label: Optional[str] = None
+    template_name: Optional[str] = None
+    # Enriched attributes (human-readable names resolved from IDs)
+    enriched_attributes: List[EnrichedAttributeItem] = Field(default_factory=list)
+    # Admin notes (not in base OrderOut for security)
+    admin_notes: Optional[str] = None
+    # Payment status
+    payment_status: Optional[str] = None
+    payment_paid_at: Optional[datetime] = None
 
 
 class PrintShopOrderListResponse(BaseModel):

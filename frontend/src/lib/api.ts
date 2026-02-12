@@ -125,20 +125,99 @@ export const authApi = {
 
 // ============ Orders API ============
 
+export interface EnrichedAttribute {
+  attribute_name: string;
+  value_name: string;
+  price: number;
+}
+
 export interface Order {
   id: string;
   user_id: string;
   category_id: string;
   plan_id: string;
+  design_plan_id?: string;
   status: string;
+  quantity: number;
+  base_price: number;
+  attributes_price: number;
+  design_price: number;
+  validation_price: number;
+  fix_price: number;
+  print_price: number;
   total_price: number;
+  design_plan: string;
+  selected_attributes?: unknown[];
   attributes: Record<string, unknown>;
   questionnaire_answers?: Record<string, unknown>;
   design_file_url?: string;
+  tracking_code?: string;
+  shipping_address?: string;
+  customer_notes?: string;
+  revision_count?: number;
+  max_revisions?: number | null;
+  assigned_designer_id?: string;
+  accepted_at?: string;
+  printed_at?: string;
+  shipped_at?: string;
+  delivered_at?: string;
+  cancelled_at?: string;
   created_at: string;
   updated_at: string;
+  // Enriched fields (from CustomerOrderDetailOut)
+  category_name?: string;
+  category_icon?: string;
+  design_plan_label?: string;
+  template_name?: string;
+  enriched_attributes?: EnrichedAttribute[];
+  design_preview_url?: string;
+  design_final_url?: string;
+  payment_status?: string;
+  payment_paid_at?: string;
+  // Legacy nested
   category?: Category;
   plan?: DesignPlan;
+}
+
+// ============ Design Revision Types ============
+
+export type RevisionStatus = "PENDING_REVIEW" | "APPROVED" | "REJECTED";
+
+export interface DesignRevision {
+  id: string;
+  order_id: string;
+  version: number;
+  designer_id: string;
+  design_file_url: string;
+  customer_feedback?: string;
+  status: RevisionStatus;
+  created_at: string;
+  reviewed_at?: string;
+}
+
+export interface DesignRevisionListResponse {
+  items: DesignRevision[];
+  total: number;
+}
+
+// ============ Chat Message Types ============
+
+export interface ChatMessage {
+  id: string;
+  order_id: string;
+  sender_id: string;
+  sender_name?: string;
+  content: string;
+  file_url?: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface ChatMessageListResponse {
+  items: ChatMessage[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 export interface OrdersListResponse {
@@ -184,6 +263,38 @@ export const ordersApi = {
   // Save order design with placeholder values
   saveDesign: (orderId: string, data: SaveOrderDesignRequest) =>
     api.post<ProcessedDesignResponse>(`/orders/${orderId}/design`, data),
+
+  // Delivery confirmation
+  confirmDelivery: (orderId: string) =>
+    api.post<Order>(`/orders/${orderId}/confirm-delivery`),
+
+  // Reviews
+  submitReview: (orderId: string, data: { rating: number; comment?: string }) =>
+    api.post(`/orders/${orderId}/review`, data),
+  getReview: (orderId: string) =>
+    api.get(`/orders/${orderId}/review`),
+
+  // Questionnaire answers
+  submitAnswers: (orderId: string, answers: Array<{ question_id: string; answer_text?: string; answer_values?: string[]; answer_file_url?: string }>) =>
+    api.post(`/orders/${orderId}/answers`, { answers }),
+  getAnswers: (orderId: string) =>
+    api.get(`/orders/${orderId}/answers`),
+
+  // Design approval/rejection
+  approveDesign: (orderId: string) =>
+    api.post<DesignRevision>(`/orders/${orderId}/approve-design`),
+  rejectDesign: (orderId: string, data: { feedback: string }) =>
+    api.post<DesignRevision>(`/orders/${orderId}/reject-design`, data),
+  getRevisions: (orderId: string) =>
+    api.get<DesignRevisionListResponse>(`/orders/${orderId}/revisions`),
+
+  // Chat messages
+  getMessages: (orderId: string, params?: { page?: number; page_size?: number }) =>
+    api.get<ChatMessageListResponse>(`/orders/${orderId}/messages`, { params }),
+  sendMessage: (orderId: string, data: { content: string; file_url?: string }) =>
+    api.post<ChatMessage>(`/orders/${orderId}/messages`, data),
+  markMessagesRead: (orderId: string) =>
+    api.patch(`/orders/${orderId}/messages/read`),
 };
 
 export type DesignPlanType = "PUBLIC" | "SEMI_PRIVATE" | "PRIVATE" | "OWN_DESIGN";
@@ -396,7 +507,6 @@ export interface FontUploadResponse {
 }
 
 export interface Questionnaire {
-  id: string;
   plan_id: string;
   sections: QuestionnaireSection[];
 }
@@ -405,17 +515,28 @@ export interface QuestionnaireSection {
   id: string;
   title_fa: string;
   description_fa?: string;
-  order_index: number;
+  sort_order: number;
+  is_active: boolean;
   questions: Question[];
+}
+
+export interface QuestionOption {
+  id: string;
+  value: string;
+  label_fa: string;
+  image_url?: string;
+  sort_order: number;
 }
 
 export interface Question {
   id: string;
-  text_fa: string;
-  input_type: string;
+  question_fa: string;
+  input_type: string; // "TEXT", "TEXTAREA", "SINGLE_CHOICE", "MULTI_CHOICE", "NUMBER", "IMAGE_UPLOAD", "FILE_UPLOAD", "COLOR_PICKER", "DATE_PICKER", "SCALE"
   is_required: boolean;
-  options?: string[];
-  order_index: number;
+  placeholder_fa?: string;
+  help_text_fa?: string;
+  options: QuestionOption[];
+  sort_order: number;
 }
 
 export const plansApi = {
@@ -895,9 +1016,43 @@ export const adminApi = {
 
   // ============ Admin Print Shop Management API ============
 
-  // List all print shops
-  getAdminPrintshops: (params?: { is_active?: boolean; page?: number; page_size?: number }) =>
+  // List all print shops (includes admin acting as printshop)
+  getAdminPrintshops: (params?: { search?: string; is_active?: boolean; page?: number; page_size?: number }) =>
     api.get("/admin/printshops", { params }),
+
+  // Create a new printshop user
+  createPrintshop: (data: {
+    first_name: string;
+    last_name?: string;
+    phone_number: string;
+    password: string;
+    city?: string;
+    description?: string;
+    capabilities?: string[];
+    service_areas?: string[];
+    max_daily_capacity?: number;
+  }) => api.post("/admin/printshops", data),
+
+  // Get printshop capabilities list
+  getPrintshopCapabilities: () =>
+    api.get<{ capabilities: string[] }>("/admin/printshops/capabilities"),
+
+  // Get print shop profile
+  getAdminPrintshopProfile: (printshopId: string) =>
+    api.get(`/admin/printshops/${printshopId}/profile`),
+
+  // Update print shop profile
+  updatePrintshopProfile: (printshopId: string, data: {
+    description?: string;
+    capabilities?: string[];
+    max_daily_capacity?: number;
+    service_areas?: string[];
+    is_featured?: boolean;
+  }) => api.put(`/admin/printshops/${printshopId}/profile`, data),
+
+  // Toggle printshop active/inactive
+  togglePrintshopActive: (printshopId: string) =>
+    api.post(`/admin/printshops/${printshopId}/toggle-active`),
 
   // Get print shop stats (admin)
   getAdminPrintshopStats: (printshopId: string) =>
@@ -924,6 +1079,36 @@ export const adminApi = {
   // Get SLA compliance report
   getPrintshopSlaReport: () =>
     api.get("/admin/printshop-sla"),
+
+  // ============ Designer API ============
+
+  getDesignerQueue: (params?: { page?: number; page_size?: number }) =>
+    api.get("/designer/queue", { params }),
+  getDesignerOrders: (params?: { status?: string; page?: number; page_size?: number }) =>
+    api.get("/designer/orders", { params }),
+  getDesignerOrderDetail: (orderId: string) =>
+    api.get(`/designer/orders/${orderId}`),
+  designerAcceptOrder: (orderId: string) =>
+    api.post(`/designer/orders/${orderId}/accept`),
+  designerUploadDesign: (orderId: string, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post<DesignRevision>(`/designer/orders/${orderId}/upload-design`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+  getDesignerRevisions: (orderId: string) =>
+    api.get<DesignRevisionListResponse>(`/designer/orders/${orderId}/revisions`),
+  getDesignerStats: () =>
+    api.get("/designer/stats"),
+
+  // ============ Review Management API ============
+  getReviews: (params?: { printshop_id?: string; is_approved?: boolean; page?: number; page_size?: number }) =>
+    api.get<{ items: any[]; total: number; page: number; page_size: number }>("/admin/reviews", { params }),
+  approveReview: (reviewId: string) =>
+    api.post(`/admin/reviews/${reviewId}/approve`),
+  rejectReview: (reviewId: string) =>
+    api.post(`/admin/reviews/${reviewId}/reject`),
 };
 
 // Error helper

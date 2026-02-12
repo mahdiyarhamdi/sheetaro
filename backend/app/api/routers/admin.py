@@ -3,10 +3,12 @@
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime, timedelta
+import uuid as uuid_mod
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, or_
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 
@@ -16,11 +18,28 @@ from app.models.order import Order
 from app.models.payment import Payment
 from app.models.processed_design import ProcessedDesign
 from app.models.settlement import Settlement
+from app.models.printshop_profile import PrintShopProfile
+from app.models.review import Review
 from app.models.enums import UserRole, OrderStatus, PaymentStatus, ValidationStatus, SettlementStatus
 from app.services.user_service import UserService
 from app.services.order_service import OrderService
+from app.services.review_service import ReviewService
+from app.repositories.review_repository import ReviewRepository
+from app.core.security import get_password_hash
 from app.schemas.user import UserOut
 from app.schemas.order import PrintShopStats, SettlementOut
+from app.schemas.review import ReviewOut, ReviewListResponse
+from app.schemas.printshop_profile import (
+    PrintShopProfileCreate,
+    PrintShopProfileUpdate,
+    PrintShopProfileOut,
+    PrintShopListItem,
+    PrintShopListResponse,
+    CreatePrintShopRequest,
+    PRINTSHOP_CAPABILITIES,
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/admin", tags=["Admin"])
 
@@ -662,7 +681,6 @@ async def list_validation_requests(
 ) -> ValidationListResponse:
     """List orders with validation requested. Admin only."""
     from app.models.category import Category
-    from sqlalchemy import or_
     
     query = select(Order).where(Order.validation_requested == True)
     count_query = select(func.count(Order.id)).where(Order.validation_requested == True)
@@ -839,36 +857,325 @@ async def reject_validation(
 
 # ============== Print Shop Management ==============
 
-@router.get("/printshops")
+@router.get("/printshops", response_model=PrintShopListResponse)
 async def list_printshops(
+    search: Optional[str] = Query(None, description="Search by name or phone"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
-) -> dict:
-    """List all print shop users. Admin only."""
-    query = select(User).where(User.role == UserRole.PRINT_SHOP)
-    count_query = select(func.count(User.id)).where(User.role == UserRole.PRINT_SHOP)
+) -> PrintShopListResponse:
+    """List all printshop users (PRINT_SHOP + ADMIN roles). Admin only."""
+    role_filter = User.role.in_([UserRole.PRINT_SHOP, UserRole.ADMIN])
+    conditions = [role_filter]
 
     if is_active is not None:
-        query = query.where(User.is_active == is_active)
-        count_query = count_query.where(User.is_active == is_active)
+        conditions.append(User.is_active == is_active)
 
+    if search:
+        sp = f"%{search}%"
+        conditions.append(
+            or_(
+                User.first_name.ilike(sp),
+                User.last_name.ilike(sp),
+                User.phone_number.ilike(sp),
+                User.full_name.ilike(sp),
+            )
+        )
+
+    count_query = select(func.count(User.id)).where(and_(*conditions))
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
-    query = query.order_by(User.created_at.desc())
-    query = query.offset((page - 1) * page_size).limit(page_size)
-
+    query = (
+        select(User)
+        .where(and_(*conditions))
+        .order_by(User.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
     result = await db.execute(query)
-    printshops = result.scalars().all()
+    users = result.scalars().all()
+
+    user_ids = [u.id for u in users]
+
+    # Bulk fetch profiles
+    profile_map: dict[UUID, PrintShopProfile] = {}
+    if user_ids:
+        prof_result = await db.execute(
+            select(PrintShopProfile).where(PrintShopProfile.user_id.in_(user_ids))
+        )
+        for p in prof_result.scalars().all():
+            profile_map[p.user_id] = p
+
+    # Bulk fetch avg ratings
+    review_repo = ReviewRepository(db)
+    rating_map = await review_repo.get_avg_ratings_bulk(user_ids)
+
+    # Bulk fetch order counts
+    order_count_map: dict[UUID, int] = {}
+    if user_ids:
+        oc_result = await db.execute(
+            select(Order.assigned_printshop_id, func.count(Order.id))
+            .where(Order.assigned_printshop_id.in_(user_ids))
+            .group_by(Order.assigned_printshop_id)
+        )
+        for row in oc_result.all():
+            order_count_map[row[0]] = row[1]
+
+    items = []
+    for u in users:
+        prof = profile_map.get(u.id)
+        rating_info = rating_map.get(u.id, (None, 0))
+        items.append(
+            PrintShopListItem(
+                id=u.id,
+                first_name=u.first_name,
+                last_name=u.last_name,
+                full_name=u.full_name,
+                phone_number=u.phone_number,
+                city=u.city,
+                role=u.role.value,
+                is_active=u.is_active,
+                created_at=u.created_at,
+                profile_id=prof.id if prof else None,
+                description=prof.description if prof else None,
+                capabilities=prof.capabilities if prof else [],
+                service_areas=prof.service_areas if prof else [],
+                is_featured=prof.is_featured if prof else False,
+                avg_rating=rating_info[0],
+                review_count=rating_info[1],
+                total_orders=order_count_map.get(u.id, 0),
+            )
+        )
+
+    return PrintShopListResponse(items=items, total=total, page=page, page_size=page_size)
+
+
+@router.post("/printshops", status_code=status.HTTP_201_CREATED)
+async def create_printshop(
+    data: CreatePrintShopRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> dict:
+    """Register a new printshop user with profile. Admin only."""
+    # Check if phone already exists
+    existing = await db.execute(
+        select(User).where(User.phone_number == data.phone_number)
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="شماره تلفن قبلاً ثبت شده است",
+        )
+
+    full_name = f"{data.first_name} {data.last_name or ''}".strip()
+    new_user = User(
+        id=uuid_mod.uuid4(),
+        first_name=data.first_name,
+        last_name=data.last_name,
+        full_name=full_name,
+        phone_number=data.phone_number,
+        password_hash=get_password_hash(data.password),
+        city=data.city,
+        role=UserRole.PRINT_SHOP,
+        is_active=True,
+        phone_verified=True,
+    )
+    db.add(new_user)
+    await db.flush()
+
+    profile = PrintShopProfile(
+        id=uuid_mod.uuid4(),
+        user_id=new_user.id,
+        description=data.description,
+        capabilities=data.capabilities,
+        max_daily_capacity=data.max_daily_capacity,
+        service_areas=data.service_areas,
+    )
+    db.add(profile)
+    await db.commit()
+
+    logger.info("Admin %s created printshop user %s (%s)", current_user.id, new_user.id, new_user.phone_number)
 
     return {
-        "items": [UserOut.model_validate(u).model_dump() for u in printshops],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
+        "id": str(new_user.id),
+        "first_name": new_user.first_name,
+        "last_name": new_user.last_name,
+        "phone_number": new_user.phone_number,
+        "city": new_user.city,
+        "role": new_user.role.value,
+        "profile_id": str(profile.id),
+    }
+
+
+@router.get("/printshops/capabilities")
+async def get_printshop_capabilities(
+    current_user: User = Depends(require_admin),
+) -> dict:
+    """Get predefined printshop capabilities list. Admin only."""
+    return {"capabilities": PRINTSHOP_CAPABILITIES}
+
+
+@router.get("/printshops/{printshop_id}/profile", response_model=PrintShopProfileOut)
+async def get_printshop_profile(
+    printshop_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> PrintShopProfileOut:
+    """Get printshop profile with stats. Admin only."""
+    # Get user
+    user_result = await db.execute(select(User).where(User.id == printshop_id))
+    user = user_result.scalar_one_or_none()
+    if not user or user.role not in [UserRole.PRINT_SHOP, UserRole.ADMIN]:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="چاپخانه یافت نشد")
+
+    # Get or create profile
+    prof_result = await db.execute(
+        select(PrintShopProfile).where(PrintShopProfile.user_id == printshop_id)
+    )
+    profile = prof_result.scalar_one_or_none()
+    if not profile:
+        profile = PrintShopProfile(
+            id=uuid_mod.uuid4(),
+            user_id=printshop_id,
+            capabilities=[],
+            service_areas=[],
+        )
+        db.add(profile)
+        await db.flush()
+
+    # Get avg rating
+    review_repo = ReviewRepository(db)
+    avg_rating, review_count = await review_repo.get_avg_rating(printshop_id)
+
+    # Get order count
+    oc_result = await db.execute(
+        select(func.count(Order.id)).where(Order.assigned_printshop_id == printshop_id)
+    )
+    total_orders = oc_result.scalar() or 0
+
+    return PrintShopProfileOut(
+        id=profile.id,
+        user_id=profile.user_id,
+        description=profile.description,
+        capabilities=profile.capabilities or [],
+        max_daily_capacity=profile.max_daily_capacity,
+        service_areas=profile.service_areas or [],
+        is_featured=profile.is_featured,
+        created_at=profile.created_at,
+        updated_at=profile.updated_at,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        full_name=user.full_name,
+        phone_number=user.phone_number,
+        city=user.city,
+        address=user.address,
+        role=user.role.value,
+        is_active=user.is_active,
+        user_created_at=user.created_at,
+        avg_rating=avg_rating,
+        review_count=review_count,
+        total_orders=total_orders,
+    )
+
+
+@router.put("/printshops/{printshop_id}/profile", response_model=PrintShopProfileOut)
+async def update_printshop_profile(
+    printshop_id: UUID,
+    data: PrintShopProfileUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> PrintShopProfileOut:
+    """Update printshop profile fields. Admin only."""
+    # Verify user exists
+    user_result = await db.execute(select(User).where(User.id == printshop_id))
+    user = user_result.scalar_one_or_none()
+    if not user or user.role not in [UserRole.PRINT_SHOP, UserRole.ADMIN]:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="چاپخانه یافت نشد")
+
+    # Get or create profile
+    prof_result = await db.execute(
+        select(PrintShopProfile).where(PrintShopProfile.user_id == printshop_id)
+    )
+    profile = prof_result.scalar_one_or_none()
+    if not profile:
+        profile = PrintShopProfile(
+            id=uuid_mod.uuid4(),
+            user_id=printshop_id,
+            capabilities=[],
+            service_areas=[],
+        )
+        db.add(profile)
+        await db.flush()
+
+    # Apply updates
+    update_data = data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(profile, field, value)
+
+    await db.commit()
+    await db.refresh(profile)
+
+    # Get stats
+    review_repo = ReviewRepository(db)
+    avg_rating, review_count = await review_repo.get_avg_rating(printshop_id)
+    oc_result = await db.execute(
+        select(func.count(Order.id)).where(Order.assigned_printshop_id == printshop_id)
+    )
+    total_orders = oc_result.scalar() or 0
+
+    return PrintShopProfileOut(
+        id=profile.id,
+        user_id=profile.user_id,
+        description=profile.description,
+        capabilities=profile.capabilities or [],
+        max_daily_capacity=profile.max_daily_capacity,
+        service_areas=profile.service_areas or [],
+        is_featured=profile.is_featured,
+        created_at=profile.created_at,
+        updated_at=profile.updated_at,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        full_name=user.full_name,
+        phone_number=user.phone_number,
+        city=user.city,
+        address=user.address,
+        role=user.role.value,
+        is_active=user.is_active,
+        user_created_at=user.created_at,
+        avg_rating=avg_rating,
+        review_count=review_count,
+        total_orders=total_orders,
+    )
+
+
+@router.post("/printshops/{printshop_id}/toggle-active")
+async def toggle_printshop_active(
+    printshop_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> dict:
+    """Toggle a printshop active/inactive. Admin only."""
+    user_result = await db.execute(select(User).where(User.id == printshop_id))
+    user = user_result.scalar_one_or_none()
+    if not user or user.role not in [UserRole.PRINT_SHOP, UserRole.ADMIN]:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="چاپخانه یافت نشد")
+
+    if printshop_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="نمی‌توانید حساب خودتان را غیرفعال کنید",
+        )
+
+    user.is_active = not user.is_active
+    await db.commit()
+
+    return {
+        "success": True,
+        "printshop_id": str(printshop_id),
+        "is_active": user.is_active,
     }
 
 
@@ -924,7 +1231,7 @@ async def reassign_printshop(
         # Verify the new printshop exists and has the right role
         ps_result = await db.execute(select(User).where(User.id == new_printshop_id))
         printshop = ps_result.scalar_one_or_none()
-        if not printshop or printshop.role != UserRole.PRINT_SHOP:
+        if not printshop or printshop.role not in [UserRole.PRINT_SHOP, UserRole.ADMIN]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="چاپخانه مورد نظر یافت نشد"
@@ -1043,9 +1350,12 @@ async def get_printshop_sla_report(
     """Get SLA compliance report for all print shops. Admin only."""
     from sqlalchemy import extract as sa_extract
 
-    # Get all print shops
+    # Get all print shops (including admin who acts as printshop)
     ps_result = await db.execute(
-        select(User).where(User.role == UserRole.PRINT_SHOP, User.is_active == True)
+        select(User).where(
+            User.role.in_([UserRole.PRINT_SHOP, UserRole.ADMIN]),
+            User.is_active == True,
+        )
     )
     printshops = ps_result.scalars().all()
 
@@ -1073,4 +1383,75 @@ async def get_printshop_sla_report(
         "queue_size": queue_size,
         "printshops": report,
     }
+
+
+# ============== Review Management ==============
+
+
+@router.get(
+    "/reviews",
+    response_model=ReviewListResponse,
+    summary="List reviews",
+    description="List all reviews with optional filters. Admin only.",
+)
+async def list_reviews(
+    printshop_id: Optional[UUID] = Query(None, description="Filter by print shop"),
+    is_approved: Optional[bool] = Query(None, description="Filter by approval status"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> ReviewListResponse:
+    """List all reviews. Admin only."""
+    service = ReviewService(db)
+    return await service.list_reviews(
+        printshop_id=printshop_id,
+        is_approved=is_approved,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.post(
+    "/reviews/{review_id}/approve",
+    response_model=ReviewOut,
+    summary="Approve review",
+    description="Approve a customer review for public display. Admin only.",
+)
+async def approve_review(
+    review_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> ReviewOut:
+    """Approve a review. Admin only."""
+    service = ReviewService(db)
+    result = await service.approve_review(review_id)
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="نظر یافت نشد",
+        )
+    await db.commit()
+    return result
+
+
+@router.post(
+    "/reviews/{review_id}/reject",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Reject review",
+    description="Reject (delete) a customer review. Admin only.",
+)
+async def reject_review(
+    review_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> None:
+    """Reject and delete a review. Admin only."""
+    service = ReviewService(db)
+    success = await service.reject_review(review_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="نظر یافت نشد",
+        )
 

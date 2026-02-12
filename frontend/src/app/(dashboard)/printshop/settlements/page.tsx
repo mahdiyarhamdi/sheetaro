@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { adminApi } from "@/lib/api";
+import { formatPrice } from "@/lib/utils";
 import { DollarSign, CheckCircle, Clock, RefreshCw } from "lucide-react";
 
 export default function PrintShopSettlementsPage() {
@@ -73,19 +74,19 @@ export default function PrintShopSettlementsPage() {
                     <div>
                       <p className="text-muted">درآمد کل</p>
                       <p className="font-bold">
-                        {Number(s.total_revenue).toLocaleString("fa-IR")} تومان
+                        {formatPrice(s.total_revenue as number)}
                       </p>
                     </div>
                     <div>
                       <p className="text-muted">کمیسیون (۱۰٪)</p>
                       <p className="font-bold text-red-600">
-                        {Number(s.platform_commission).toLocaleString("fa-IR")} تومان
+                        {formatPrice(s.platform_commission as number)}
                       </p>
                     </div>
                     <div>
                       <p className="text-muted">خالص دریافتی</p>
                       <p className="font-bold text-green-600">
-                        {Number(s.net_amount).toLocaleString("fa-IR")} تومان
+                        {formatPrice(s.net_amount as number)}
                       </p>
                     </div>
                   </div>
