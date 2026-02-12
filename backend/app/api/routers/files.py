@@ -9,6 +9,7 @@ from app.core.rate_limit import limiter, RateLimits
 from app.schemas.file import FileUploadResponse, TemplateImageUploadResponse, FontUploadResponse
 from app.services.file_service import FileService, MAX_FILE_SIZE, MAX_TEMPLATE_IMAGE_SIZE, MAX_FONT_FILE_SIZE, UPLOAD_DIR
 from app.api.deps import get_current_admin_user
+from app.utils.image_utils import resolve_file_path, generate_thumbnail
 
 router = APIRouter()
 
@@ -290,5 +291,72 @@ async def get_preview_file(
     return FileResponse(
         path=str(file_path),
         filename=filename,
+    )
+
+
+# ============== Thumbnail & Download Endpoints ==============
+
+
+@router.get(
+    "/files/thumbnail/{file_path:path}",
+    summary="Get optimized thumbnail",
+    description="Returns an optimized WebP thumbnail of the image. Generated on first request and cached.",
+)
+async def get_thumbnail(
+    file_path: str,
+    max_size: int = Query(400, ge=50, le=1200, description="Maximum dimension (width or height)"),
+) -> FileResponse:
+    """Serve an optimized thumbnail for any uploaded image."""
+    source = resolve_file_path(file_path)
+    if not source:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found",
+        )
+
+    thumb = generate_thumbnail(str(source), max_size=max_size)
+    if not thumb:
+        # Fallback: serve original if thumbnail generation fails
+        return FileResponse(path=str(source), filename=source.name)
+
+    return FileResponse(
+        path=str(thumb),
+        media_type="image/webp",
+        filename=f"thumb_{source.stem}.webp",
+    )
+
+
+@router.get(
+    "/files/download/{file_path:path}",
+    summary="Download original file",
+    description="Downloads the original file with Content-Disposition: attachment header.",
+)
+async def download_file(
+    file_path: str,
+) -> FileResponse:
+    """Serve original file as a downloadable attachment."""
+    source = resolve_file_path(file_path)
+    if not source:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found",
+        )
+
+    # Determine media type
+    ext = source.suffix.lower()
+    media_types = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".pdf": "application/pdf",
+        ".svg": "image/svg+xml",
+    }
+
+    return FileResponse(
+        path=str(source),
+        filename=source.name,
+        media_type=media_types.get(ext, "application/octet-stream"),
+        headers={"Content-Disposition": f'attachment; filename="{source.name}"'},
     )
 

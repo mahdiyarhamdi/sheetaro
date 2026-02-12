@@ -1,0 +1,39 @@
+قانون پیش‌نمایش تصاویر (Image Preview Standard)
+
+## قانون اصلی:
+تمام تصاویری که از بکند سرو می‌شوند (قالب‌ها، طرح‌ها، رسیدها، پیش‌نمایش‌ها) **باید** از کامپوننت `ImagePreview` استفاده کنند. هرگز از `<img>` خام یا `<OptimizedImage>` برای تصاویر API استفاده نکنید.
+
+## کامپوننت استاندارد:
+```tsx
+import { ImagePreview } from "@/components/ui/image-preview";
+
+<ImagePreview
+  src={backendImageUrl}     // URL بکند (خام یا پراکسی)
+  alt="توضیح تصویر"
+  thumbnailSize={400}        // اندازه بندانگشتی (پیش‌فرض 400)
+  showDownload={true}        // دکمه دانلود (پیش‌فرض true)
+  showExpand={true}          // دکمه بزرگنمایی (پیش‌فرض true)
+  downloadFilename="name"    // نام فایل دانلود
+/>
+```
+
+## اندپوینت‌های بکند:
+- `GET /api/v1/files/thumbnail/{path}?max_size=400` — بندانگشتی WebP بهینه (کش روی دیسک)
+- `GET /api/v1/files/download/{path}` — دانلود فایل اصلی با هدر attachment
+
+## کجا اعمال شود:
+- بخش سفارش جدید (قالب‌ها، پیش‌نمایش تولیدی)
+- بخش قالب‌های آماده (کاتالوگ ادمین)
+- بخش اعتبارسنجی (پیش‌نمایش طرح)
+- بخش رسیدهای پرداخت
+- بخش سفارشات چاپخانه
+- بخش جزییات سفارش مشتری
+
+## استثنا:
+- تصاویر blob/Data URL محلی (مثل پیش‌نمایش آپلود قبل از ارسال به سرور) می‌توانند از `<Image>` یا `<OptimizedImage>` استفاده کنند.
+- تصاویر بسیار کوچک (مثل آیکون 12x12) می‌توانند از `<img>` خام استفاده کنند.
+
+## توابع کمکی:
+```tsx
+import { getThumbnailUrl, getDownloadUrl, getImageUrl } from "@/lib/image-utils";
+```

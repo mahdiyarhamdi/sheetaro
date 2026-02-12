@@ -28,6 +28,7 @@ from app.schemas.order import (
 )
 from app.models.enums import OrderStatus, DesignPlan, UserRole
 from app.utils.logger import log_event
+from sqlalchemy import select
 
 
 # Pricing constants (in Tomans)
@@ -242,7 +243,7 @@ class OrderService:
             page_size=page_size,
         )
 
-        items = [self._to_printshop_order_out(o) for o in orders]
+        items = [await self._to_printshop_order_out(o) for o in orders]
 
         return PrintShopOrderListResponse(
             items=items,
@@ -300,7 +301,7 @@ class OrderService:
         """Accept order by print shop."""
         # Verify print shop role
         printshop = await self.user_repo.get_by_id(printshop_id)
-        if not printshop or printshop.role != UserRole.PRINT_SHOP:
+        if not printshop or printshop.role not in [UserRole.PRINT_SHOP, UserRole.ADMIN]:
             raise ValueError("User is not a print shop")
         
         order = await self.repository.accept_by_printshop(order_id, printshop_id)
@@ -346,14 +347,33 @@ class OrderService:
 
     # ==================== Print Shop Methods ====================
 
-    def _to_printshop_order_out(self, order) -> PrintShopOrderOut:
-        """Convert an order with user relation to PrintShopOrderOut."""
+    async def _to_printshop_order_out(self, order) -> PrintShopOrderOut:
+        """Convert an order with user relation to PrintShopOrderOut, including design preview."""
         order_out = PrintShopOrderOut.model_validate(order)
         if order.user:
             order_out.customer_name = f"{order.user.first_name} {order.user.last_name or ''}".strip()
             order_out.customer_phone = order.user.phone_number
             order_out.customer_city = order.user.city
             order_out.customer_address = order.user.address
+
+        # Populate design preview/final URLs from ProcessedDesign
+        from app.models.processed_design import ProcessedDesign
+
+        pd_result = await self.db.execute(
+            select(ProcessedDesign)
+            .where(ProcessedDesign.order_id == order.id)
+            .order_by(ProcessedDesign.created_at.desc())
+            .limit(1)
+        )
+        processed = pd_result.scalar_one_or_none()
+        if processed:
+            order_out.design_preview_url = processed.preview_url
+            order_out.design_final_url = processed.final_url
+        elif order.design_file_url:
+            # OWN_DESIGN orders: design_file_url is the uploaded file
+            order_out.design_preview_url = order.design_file_url
+            order_out.design_final_url = order.design_file_url
+
         return order_out
 
     async def get_printshop_my_orders(
@@ -374,7 +394,7 @@ class OrderService:
             page_size=page_size,
         )
 
-        items = [self._to_printshop_order_out(o) for o in orders]
+        items = [await self._to_printshop_order_out(o) for o in orders]
 
         return PrintShopOrderListResponse(
             items=items,
@@ -394,7 +414,7 @@ class OrderService:
             return None
         if order.assigned_printshop_id != printshop_id:
             return None
-        return self._to_printshop_order_out(order)
+        return await self._to_printshop_order_out(order)
 
     async def complete_printing(
         self,

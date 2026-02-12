@@ -130,6 +130,8 @@ docker-compose up --build
 - `GET /files/templates/{filename}` - Download template image
 - `POST /fonts/upload` - Upload font file (Admin, TTF/WOFF/WOFF2, max 10MB)
 - `GET /files/fonts/{filename}` - Download font file
+- `GET /files/thumbnail/{path}?max_size=400` - Get optimized WebP thumbnail (cached, 50-1200px)
+- `GET /files/download/{path}` - Download original file with `Content-Disposition: attachment`
 
 ### Settings (`/api/v1/settings`)
 - `GET /settings/payment-card` - Get payment card info

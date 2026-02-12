@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { paymentsApi, getErrorMessage, Payment } from "@/lib/api";
+import { getImageUrl } from "@/lib/image-utils";
+import { ImagePreview } from "@/components/ui/image-preview";
 import { useAuth } from "@/hooks/useAuth";
 import {
   Card,
@@ -214,13 +216,17 @@ export default function AdminPaymentsPage() {
             <div>
               <p className="text-sm font-medium text-foreground mb-2">تصویر رسید</p>
               {selectedPayment.receipt_image_url ? (
-                <div className="relative aspect-video bg-accent rounded-xl overflow-hidden">
-                  <img
-                    src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005'}${selectedPayment.receipt_image_url.startsWith('/api/v1') ? selectedPayment.receipt_image_url : '/api/v1' + selectedPayment.receipt_image_url}`}
-                    alt="Receipt"
-                    className="w-full h-full object-contain"
-                  />
-                </div>
+                <ImagePreview
+                  src={selectedPayment.receipt_image_url}
+                  alt="تصویر رسید پرداخت"
+                  className="w-full rounded-xl"
+                  aspectRatio="aspect-video"
+                  imageClassName="object-contain"
+                  thumbnailSize={600}
+                  showDownload={true}
+                  showExpand={true}
+                  downloadFilename={`receipt-${selectedPayment.id?.toString().slice(0, 8)}`}
+                />
               ) : (
                 <div className="flex items-center justify-center aspect-video bg-accent rounded-xl">
                   <div className="text-center">

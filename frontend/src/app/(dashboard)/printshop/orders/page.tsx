@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminApi, getErrorMessage } from "@/lib/api";
+import { formatPrice } from "@/lib/utils";
 import { Clock, Package, MapPin, RefreshCw, Check } from "lucide-react";
+import { ImagePreview } from "@/components/ui/image-preview";
 
 interface QueueOrder {
   id: string;
@@ -14,6 +16,8 @@ interface QueueOrder {
   customer_city?: string;
   created_at: string;
   status: string;
+  design_preview_url?: string;
+  design_final_url?: string;
 }
 
 export default function PrintShopQueuePage() {
@@ -82,49 +86,65 @@ export default function PrintShopQueuePage() {
                 key={order.id}
                 className={`bg-surface border rounded-xl p-4 ${isUrgent ? "border-red-300 bg-red-50/50" : "border-border"}`}
               >
-                <div className="flex items-start justify-between">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-sm">#{order.id.slice(0, 8)}</span>
-                      {isUrgent && (
-                        <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full">
-                          فوری
-                        </span>
-                      )}
+                <div className="flex items-start gap-4">
+                  {/* Design thumbnail */}
+                  {order.design_preview_url && (
+                    <div className="flex-shrink-0 w-20 h-20">
+                      <ImagePreview
+                        src={order.design_preview_url}
+                        alt="پیش‌نمایش طرح"
+                        className="w-20 h-20"
+                        aspectRatio="aspect-square"
+                        thumbnailSize={200}
+                        showDownload={false}
+                        downloadFilename={`design-${order.id.slice(0, 8)}`}
+                      />
                     </div>
-                    <div className="flex flex-wrap gap-4 text-sm text-muted">
-                      <span className="flex items-center gap-1">
-                        <Package className="w-4 h-4" />
-                        {order.quantity} عدد
-                      </span>
-                      {order.customer_city && (
+                  )}
+                  <div className="flex-1 flex items-start justify-between">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-sm">#{order.id.slice(0, 8)}</span>
+                        {isUrgent && (
+                          <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full">
+                            فوری
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-4 text-sm text-muted">
                         <span className="flex items-center gap-1">
-                          <MapPin className="w-4 h-4" />
-                          {order.customer_city}
+                          <Package className="w-4 h-4" />
+                          {order.quantity} عدد
                         </span>
+                        {order.customer_city && (
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-4 h-4" />
+                            {order.customer_city}
+                          </span>
+                        )}
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-4 h-4" />
+                          {ageMinutes} دقیقه پیش
+                        </span>
+                      </div>
+                      {order.customer_name && (
+                        <p className="text-sm">
+                          <span className="text-muted">مشتری:</span> {order.customer_name}
+                        </p>
                       )}
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-4 h-4" />
-                        {ageMinutes} دقیقه پیش
-                      </span>
-                    </div>
-                    {order.customer_name && (
-                      <p className="text-sm">
-                        <span className="text-muted">مشتری:</span> {order.customer_name}
+                      <p className="text-sm font-semibold">
+                        {formatPrice(order.total_price)}
                       </p>
-                    )}
-                    <p className="text-sm font-semibold">
-                      {Number(order.total_price).toLocaleString("fa-IR")} تومان
-                    </p>
+                    </div>
+                    <button
+                      onClick={() => acceptMutation.mutate(order.id)}
+                      disabled={acceptingId === order.id}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                    >
+                      <Check className="w-4 h-4" />
+                      {acceptingId === order.id ? "..." : "قبول"}
+                    </button>
                   </div>
-                  <button
-                    onClick={() => acceptMutation.mutate(order.id)}
-                    disabled={acceptingId === order.id}
-                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-                  >
-                    <Check className="w-4 h-4" />
-                    {acceptingId === order.id ? "..." : "قبول"}
-                  </button>
                 </div>
               </div>
             );

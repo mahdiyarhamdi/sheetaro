@@ -111,11 +111,13 @@ class OrderListResponse(BaseModel):
 
 
 class PrintShopOrderOut(OrderOut):
-    """Order output for print shop view (includes customer info)."""
+    """Order output for print shop view (includes customer info + design preview)."""
     customer_name: Optional[str] = None
     customer_phone: Optional[str] = None
     customer_city: Optional[str] = None
     customer_address: Optional[str] = None
+    design_preview_url: Optional[str] = None
+    design_final_url: Optional[str] = None
 
 
 class PrintShopOrderListResponse(BaseModel):

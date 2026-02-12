@@ -17,16 +17,8 @@ import {
   X,
 } from "lucide-react";
 import toast from "react-hot-toast";
-
-// API base URL for constructing full image URLs
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3005";
-
-// Helper to construct full image URL from relative path
-const getFullImageUrl = (url?: string): string | undefined => {
-  if (!url) return undefined;
-  if (url.startsWith('http')) return url;
-  return `${API_BASE_URL}/api/v1${url}`;
-};
+import { getImageUrl } from "@/lib/image-utils";
+import { ImagePreview } from "@/components/ui/image-preview";
 
 interface PreviewPanelProps {
   templateId: string;
@@ -136,7 +128,7 @@ export default function PreviewPanel({
   const handleDownload = () => {
     if (!previewResult?.preview_url) return;
     
-    const fullUrl = getFullImageUrl(previewResult.preview_url);
+    const fullUrl = getImageUrl(previewResult.preview_url);
     if (!fullUrl) return;
     
     const link = document.createElement("a");
@@ -224,7 +216,7 @@ export default function PreviewPanel({
                     {sampleData[placeholder.id]?.image_url && (
                       <div className="relative group">
                         <img
-                          src={getFullImageUrl(sampleData[placeholder.id].image_url)}
+                          src={getImageUrl(sampleData[placeholder.id].image_url)}
                           alt="Preview"
                           className="w-12 h-12 object-cover rounded border"
                           onError={(e) => (e.currentTarget.style.display = "none")}
@@ -282,25 +274,20 @@ export default function PreviewPanel({
         {/* Preview Result */}
         {previewResult && (
           <div className="space-y-3">
-            <div className="relative rounded-lg overflow-hidden border bg-gray-100">
-              <img
-                src={getFullImageUrl(previewResult.preview_url)}
-                alt="Generated Preview"
-                className="w-full h-auto"
+            <div className="relative">
+              <ImagePreview
+                src={previewResult.preview_url}
+                alt="پیش‌نمایش تولید شده"
+                className="w-full rounded-lg border"
+                thumbnailSize={600}
+                showDownload={true}
+                showExpand={true}
+                downloadFilename="template-preview"
               />
-              <div className="absolute bottom-2 right-2 text-xs bg-black/70 text-white px-2 py-1 rounded">
+              <div className="absolute bottom-2 right-2 text-xs bg-black/70 text-white px-2 py-1 rounded z-10 pointer-events-none">
                 {previewResult.width} × {previewResult.height}
               </div>
             </div>
-
-            <Button
-              variant="outline"
-              onClick={handleDownload}
-              className="w-full"
-            >
-              <Download className="w-4 h-4 ml-2" />
-              دانلود پیش‌نمایش
-            </Button>
           </div>
         )}
 
@@ -308,13 +295,14 @@ export default function PreviewPanel({
         {!previewResult && templatePreviewUrl && (
           <div className="space-y-2">
             <p className="text-xs text-gray-500">پیش‌نمایش قالب اصلی:</p>
-            <div className="rounded-lg overflow-hidden border bg-gray-100">
-              <img
-                src={getFullImageUrl(templatePreviewUrl)}
-                alt="Template Preview"
-                className="w-full h-auto opacity-50"
-              />
-            </div>
+            <ImagePreview
+              src={templatePreviewUrl}
+              alt="پیش‌نمایش قالب"
+              className="w-full rounded-lg border opacity-50"
+              thumbnailSize={400}
+              showDownload={false}
+              showExpand={true}
+            />
           </div>
         )}
       </div>

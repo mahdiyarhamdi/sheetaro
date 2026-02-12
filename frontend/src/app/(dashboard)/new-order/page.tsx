@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { OptimizedImage } from "@/components/ui";
+import { ImagePreview } from "@/components/ui/image-preview";
 import { useCategories, useCategoryAttributes, useCategoryPlans, usePlanTemplates, usePlanQuestionnaire, useTemplatePlaceholders, useTemplatePreview } from "@/hooks/useCatalog";
 import { useOrders } from "@/hooks/useOrders";
 import { useAuth } from "@/hooks/useAuth";
@@ -39,6 +40,7 @@ import {
   X,
 } from "lucide-react";
 import { cn, formatPrice, toPersianNumber } from "@/lib/utils";
+import { getImageUrl } from "@/lib/image-utils";
 import toast from "react-hot-toast";
 
 // Step types for different plan flows
@@ -69,16 +71,6 @@ interface OrderData {
 }
 
 const VALIDATION_PRICE = 50000; // 50,000 Toman
-
-// API base URL for constructing full image URLs
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3005";
-
-// Helper to construct full image URL from relative path
-const getFullImageUrl = (url?: string): string | undefined => {
-  if (!url) return undefined;
-  if (url.startsWith('http')) return url;
-  return `${API_BASE_URL}/api/v1${url}`;
-};
 
 export default function NewOrderPage() {
   const router = useRouter();
@@ -635,11 +627,15 @@ export default function NewOrderPage() {
                     >
                       <div className="aspect-square relative bg-accent">
                         {template.preview_url ? (
-                          <OptimizedImage
-                          src={getFullImageUrl(template.preview_url) || ""}
+                          <ImagePreview
+                            src={template.preview_url}
                             alt={template.name_fa}
-                            fill
-                            className="object-cover"
+                            className="w-full h-full"
+                            aspectRatio="aspect-square"
+                            imageClassName="object-cover"
+                            thumbnailSize={300}
+                            showDownload={false}
+                            downloadFilename={template.name_fa}
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
@@ -688,18 +684,25 @@ export default function NewOrderPage() {
                     <CardContent>
                       <div className="aspect-square relative bg-accent rounded-lg overflow-hidden">
                         {previewUrl ? (
-                          <OptimizedImage
-                            src={getFullImageUrl(previewUrl) || ""}
-                            alt="پیش‌نمایش"
-                            fill
-                            className="object-contain"
+                          <ImagePreview
+                            src={previewUrl}
+                            alt="پیش‌نمایش طرح نهایی"
+                            className="w-full h-full"
+                            aspectRatio="aspect-square"
+                            imageClassName="object-contain"
+                            thumbnailSize={600}
+                            showDownload={true}
+                            downloadFilename="design-preview"
                           />
                         ) : selectedTemplate?.preview_url ? (
-                          <OptimizedImage
-                            src={getFullImageUrl(selectedTemplate.preview_url) || ""}
+                          <ImagePreview
+                            src={selectedTemplate.preview_url}
                             alt={selectedTemplate.name_fa}
-                            fill
-                            className="object-contain"
+                            className="w-full h-full"
+                            aspectRatio="aspect-square"
+                            imageClassName="object-contain"
+                            thumbnailSize={600}
+                            showDownload={false}
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
@@ -761,12 +764,14 @@ export default function NewOrderPage() {
                               </div>
                             ) : orderData.placeholder_values[placeholder.id]?.value ? (
                               <div className="relative">
-                                <OptimizedImage
-                                  src={getFullImageUrl(orderData.placeholder_values[placeholder.id].value) || ""}
+                                <ImagePreview
+                                  src={orderData.placeholder_values[placeholder.id].value}
                                   alt={placeholder.label_fa}
-                                  width={100}
-                                  height={100}
-                                  className="mx-auto rounded object-cover"
+                                  className="w-[100px] h-[100px] mx-auto"
+                                  aspectRatio="aspect-square"
+                                  thumbnailSize={200}
+                                  showDownload={false}
+                                  showExpand={true}
                                 />
                                 <p className="text-xs text-muted mt-2">برای تغییر کلیک کنید</p>
                               </div>

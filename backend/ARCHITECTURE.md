@@ -177,7 +177,8 @@ backend/
 │   │   └── settings_service.py     # Payment card settings
 │   └── utils/
 │       ├── logger.py           # Structured JSON logging
-│       └── validators.py       # Shared validation functions
+│       ├── validators.py       # Shared validation functions
+│       └── image_utils.py      # Thumbnail generation (WebP, disk-cached)
 ├── tests/
 │   ├── conftest.py             # Test fixtures
 │   ├── unit/                   # Unit tests for services
@@ -514,6 +515,26 @@ For public plan templates:
 2. Placeholder is visualized as red square in preview
 3. When user selects template and uploads logo, system auto-places logo at placeholder position
 4. Uses Pillow (PIL) for image processing
+
+### Image Preview Optimization
+
+All backend-served images (templates, designs, receipts, previews) support:
+
+1. **Thumbnail endpoint** (`GET /files/thumbnail/{path}?max_size=400`):
+   - Generates optimized WebP thumbnails on first request
+   - Caches to `{UPLOAD_DIR}/thumbs/{hash}_{size}.webp`
+   - Quality: 80, max dimension: 50-1200px
+   - Falls back to original on failure
+
+2. **Download endpoint** (`GET /files/download/{path}`):
+   - Serves original file with `Content-Disposition: attachment`
+   - Triggers browser download dialog
+
+3. **Frontend `ImagePreview` component** (standard):
+   - Uses thumbnail endpoint for display
+   - Click-to-expand lightbox with full-quality image
+   - Download button for original file
+   - Error/loading states handled
 
 ### Questionnaire System
 

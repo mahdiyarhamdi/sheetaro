@@ -51,16 +51,8 @@ import {
 import toast from "react-hot-toast";
 import { TemplateEditor } from "@/components/template-editor";
 import { toPersianNumber, formatPrice } from "@/lib/utils";
-
-// API base URL for constructing full image URLs
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3005";
-
-// Helper to construct full image URL from relative path
-const getFullImageUrl = (url?: string): string | undefined => {
-  if (!url) return undefined;
-  if (url.startsWith('http')) return url;
-  return `${API_BASE_URL}/api/v1${url}`;
-};
+import { getImageUrl } from "@/lib/image-utils";
+import { ImagePreview } from "@/components/ui/image-preview";
 
 type TabType = "categories" | "plans" | "attributes" | "questionnaire" | "templates";
 
@@ -2343,10 +2335,15 @@ export default function CatalogManagementPage() {
                       {/* Preview Image */}
                       <div className="aspect-[3/4] bg-accent relative">
                         {(template.preview_url || template.file_url) ? (
-                          <img
-                            src={getFullImageUrl(template.preview_url || template.file_url)}
+                          <ImagePreview
+                            src={template.preview_url || template.file_url}
                             alt={template.name_fa}
-                            className="w-full h-full object-cover"
+                            className="w-full h-full"
+                            aspectRatio="aspect-[3/4]"
+                            imageClassName="object-cover"
+                            thumbnailSize={400}
+                            showDownload={false}
+                            showExpand={false}
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">

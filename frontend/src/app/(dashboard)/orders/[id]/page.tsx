@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { useOrder } from "@/hooks/useOrders";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { paymentsApi, getErrorMessage } from "@/lib/api";
+import { ImagePreview } from "@/components/ui/image-preview";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { paymentsApi, ordersApi, getErrorMessage } from "@/lib/api";
 import {
   Card,
   CardHeader,
@@ -32,6 +33,10 @@ import {
   Image as ImageIcon,
   FileText,
   X,
+  Truck,
+  Star,
+  MessageSquare,
+  Send,
 } from "lucide-react";
 import { formatPrice, formatDate, formatDateTime, orderStatusLabels, toPersianNumber, cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -48,6 +53,55 @@ export default function OrderDetailPage() {
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Review state
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewHover, setReviewHover] = useState(0);
+  const [reviewComment, setReviewComment] = useState("");
+
+  // Fetch review for delivered orders
+  const { data: existingReview, refetch: refetchReview } = useQuery({
+    queryKey: ["orderReview", orderId],
+    queryFn: async () => {
+      const res = await ordersApi.getReview(orderId);
+      return res.data;
+    },
+    enabled: !!order && order.status === "DELIVERED",
+  });
+
+  // Confirm delivery mutation
+  const confirmDeliveryMutation = useMutation({
+    mutationFn: async () => {
+      return ordersApi.confirmDelivery(orderId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+      toast.success("تحویل سفارش با موفقیت تایید شد");
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+
+  // Submit review mutation
+  const submitReviewMutation = useMutation({
+    mutationFn: async () => {
+      if (reviewRating === 0) throw new Error("لطفا امتیاز را انتخاب کنید");
+      return ordersApi.submitReview(orderId, {
+        rating: reviewRating,
+        comment: reviewComment.trim() || undefined,
+      });
+    },
+    onSuccess: () => {
+      refetchReview();
+      toast.success("نظر شما با موفقیت ثبت شد. ممنون از بازخوردتان!");
+      setReviewRating(0);
+      setReviewComment("");
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
 
   // Bank card info (should come from API/settings)
   const bankInfo = {
@@ -312,7 +366,7 @@ export default function OrderDetailPage() {
         )}
       </Card>
 
-      {/* Design file download (if ready) */}
+      {/* Design file preview + download (if ready) */}
       {order.design_file_url && (
         <Card>
           <CardHeader>
@@ -321,22 +375,207 @@ export default function OrderDetailPage() {
               فایل طراحی
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <a
-              href={order.design_file_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-3 p-4 bg-success-light rounded-xl hover:bg-success/20 transition-colors"
-            >
-              <CheckCircle className="w-6 h-6 text-success" />
-              <div className="flex-1">
-                <p className="font-medium text-foreground">طراحی شما آماده است!</p>
-                <p className="text-sm text-muted">برای دانلود کلیک کنید</p>
+          <CardContent className="space-y-3">
+            <ImagePreview
+              src={order.design_file_url}
+              alt="پیش‌نمایش طرح سفارش"
+              className="w-full max-w-md mx-auto rounded-xl"
+              aspectRatio="aspect-auto"
+              thumbnailSize={600}
+              showDownload={true}
+              showExpand={true}
+              downloadFilename={`design-order-${order.id?.toString().slice(0, 8)}`}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Shipping & Delivery section */}
+      {(order.status === "SHIPPED" || order.status === "DELIVERED") && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Truck className="w-5 h-5 text-primary" />
+              وضعیت ارسال
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {order.tracking_code && (
+              <div className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
+                <span className="text-sm text-muted">کد رهگیری</span>
+                <span className="font-mono font-bold" dir="ltr">
+                  {order.tracking_code}
+                </span>
               </div>
-              <Button variant="primary" size="sm">
-                دانلود
+            )}
+
+            {order.status === "SHIPPED" && (
+              <div className="bg-info-light rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <Truck className="w-5 h-5 text-info shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-medium text-foreground">سفارش ارسال شده</p>
+                    <p className="text-sm text-muted mt-1">
+                      سفارش شما ارسال شده است. پس از دریافت، دکمه تحویل گرفتم را بزنید.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {order.status === "DELIVERED" && (
+              <div className="bg-success-light rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <CheckCircle className="w-5 h-5 text-success shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-foreground">تحویل داده شد</p>
+                    <p className="text-sm text-muted mt-1">
+                      {order.delivered_at
+                        ? `تاریخ تحویل: ${formatDateTime(order.delivered_at)}`
+                        : "سفارش تحویل داده شده است"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+
+          {order.status === "SHIPPED" && (
+            <CardFooter>
+              <Button
+                variant="primary"
+                className="w-full"
+                onClick={() => confirmDeliveryMutation.mutate()}
+                isLoading={confirmDeliveryMutation.isPending}
+                leftIcon={<CheckCircle className="w-4 h-4" />}
+              >
+                تحویل گرفتم
               </Button>
-            </a>
+            </CardFooter>
+          )}
+        </Card>
+      )}
+
+      {/* Review section (only for delivered orders) */}
+      {order.status === "DELIVERED" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Star className="w-5 h-5 text-primary" />
+              امتیاز و نظر
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {existingReview ? (
+              /* Show submitted review */
+              <div className="space-y-4">
+                <div className="bg-success-light rounded-xl p-4">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle className="w-5 h-5 text-success shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-foreground">نظر شما ثبت شده است</p>
+                      <p className="text-sm text-muted mt-1">
+                        ممنون از بازخورد شما!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Star display */}
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star
+                      key={star}
+                      className={cn(
+                        "w-6 h-6",
+                        star <= existingReview.rating
+                          ? "text-yellow-400 fill-yellow-400"
+                          : "text-gray-300"
+                      )}
+                    />
+                  ))}
+                  <span className="text-sm text-muted mr-2">
+                    {toPersianNumber(existingReview.rating)}/۵
+                  </span>
+                </div>
+
+                {existingReview.comment && (
+                  <div className="p-3 bg-accent/50 rounded-lg">
+                    <p className="text-sm text-foreground">{existingReview.comment}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Review form */
+              <div className="space-y-4">
+                <p className="text-sm text-muted">
+                  تجربه خود از این سفارش را با ما به اشتراک بگذارید
+                </p>
+
+                {/* Star rating */}
+                <div>
+                  <p className="text-sm font-medium text-foreground mb-2">امتیاز شما</p>
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setReviewRating(star)}
+                        onMouseEnter={() => setReviewHover(star)}
+                        onMouseLeave={() => setReviewHover(0)}
+                        className="p-0.5 transition-transform hover:scale-110"
+                      >
+                        <Star
+                          className={cn(
+                            "w-8 h-8 transition-colors",
+                            star <= (reviewHover || reviewRating)
+                              ? "text-yellow-400 fill-yellow-400"
+                              : "text-gray-300"
+                          )}
+                        />
+                      </button>
+                    ))}
+                    {reviewRating > 0 && (
+                      <span className="text-sm text-muted mr-2">
+                        {toPersianNumber(reviewRating)}/۵
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Comment */}
+                <div>
+                  <p className="text-sm font-medium text-foreground mb-2">
+                    نظر شما (اختیاری)
+                  </p>
+                  <textarea
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    placeholder="نظر خود را بنویسید..."
+                    className="w-full p-3 border border-border rounded-lg text-sm resize-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                    rows={3}
+                    maxLength={1000}
+                  />
+                  {reviewComment.length > 0 && (
+                    <p className="text-xs text-muted mt-1 text-left" dir="ltr">
+                      {reviewComment.length}/1000
+                    </p>
+                  )}
+                </div>
+
+                {/* Submit */}
+                <Button
+                  variant="primary"
+                  className="w-full"
+                  onClick={() => submitReviewMutation.mutate()}
+                  isLoading={submitReviewMutation.isPending}
+                  disabled={reviewRating === 0}
+                  leftIcon={<Send className="w-4 h-4" />}
+                >
+                  ثبت نظر
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

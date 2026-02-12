@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminApi, getErrorMessage } from "@/lib/api";
+import { formatPrice, formatDateTime } from "@/lib/utils";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -16,7 +17,9 @@ import {
   Printer,
   Clock,
   Hash,
+  ImageIcon,
 } from "lucide-react";
+import { ImagePreview } from "@/components/ui/image-preview";
 
 const STATUS_TIMELINE = [
   { key: "PRINTING", label: "در حال چاپ", icon: Printer },
@@ -130,6 +133,28 @@ export default function PrintShopOrderDetailPage() {
         </div>
       </div>
 
+      {/* Design Preview */}
+      {(order.design_preview_url || order.design_final_url || order.design_file_url) && (
+        <div className="bg-surface border border-border rounded-xl p-6">
+          <h2 className="text-sm font-semibold text-muted mb-4 flex items-center gap-2">
+            <ImageIcon className="w-4 h-4" />
+            پیش‌نمایش طرح
+          </h2>
+          <div className="max-w-md mx-auto">
+            <ImagePreview
+              src={order.design_preview_url || order.design_final_url || order.design_file_url}
+              alt="طرح سفارش"
+              className="w-full"
+              aspectRatio="aspect-auto"
+              thumbnailSize={600}
+              showDownload={true}
+              showExpand={true}
+              downloadFilename={`design-order-${orderId.slice(0, 8)}`}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Customer Info */}
       <div className="bg-surface border border-border rounded-xl p-6">
         <h2 className="text-sm font-semibold text-muted mb-4">اطلاعات مشتری</h2>
@@ -146,7 +171,7 @@ export default function PrintShopOrderDetailPage() {
         <h2 className="text-sm font-semibold text-muted mb-4">اطلاعات سفارش</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <InfoRow icon={<Package className="w-4 h-4" />} label="تعداد" value={`${order.quantity} عدد`} />
-          <InfoRow icon={<Hash className="w-4 h-4" />} label="مبلغ کل" value={`${Number(order.total_price).toLocaleString("fa-IR")} تومان`} />
+          <InfoRow icon={<Hash className="w-4 h-4" />} label="مبلغ کل" value={formatPrice(order.total_price)} />
           {order.tracking_code && (
             <InfoRow icon={<Truck className="w-4 h-4" />} label="کد رهگیری" value={order.tracking_code} />
           )}

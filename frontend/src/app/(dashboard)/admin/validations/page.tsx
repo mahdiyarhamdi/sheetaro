@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminApi, getErrorMessage, ValidationRequest, ValidationStatus } from "@/lib/api";
+import { getImageUrl } from "@/lib/image-utils";
+import { ImagePreview } from "@/components/ui/image-preview";
 import { useAuth } from "@/hooks/useAuth";
 import {
   Card,
@@ -342,15 +344,17 @@ export default function AdminValidationsPage() {
             <div>
               <p className="text-sm font-medium text-foreground mb-2">پیش‌نمایش طرح</p>
               {selectedValidation.design_preview_url ? (
-                <div className="relative aspect-video bg-accent rounded-xl overflow-hidden">
-                  <img
-                    src={selectedValidation.design_preview_url.startsWith('http') 
-                      ? selectedValidation.design_preview_url 
-                      : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005'}${selectedValidation.design_preview_url.startsWith('/api/v1') ? selectedValidation.design_preview_url : '/api/v1' + selectedValidation.design_preview_url}`}
-                    alt="Design Preview"
-                    className="w-full h-full object-contain"
-                  />
-                </div>
+                <ImagePreview
+                  src={selectedValidation.design_preview_url}
+                  alt="پیش‌نمایش طرح"
+                  className="w-full rounded-xl"
+                  aspectRatio="aspect-video"
+                  imageClassName="object-contain"
+                  thumbnailSize={600}
+                  showDownload={true}
+                  showExpand={true}
+                  downloadFilename={`design-validation-${selectedValidation.id?.toString().slice(0, 8)}`}
+                />
               ) : (
                 <div className="flex items-center justify-center aspect-video bg-accent rounded-xl">
                   <div className="text-center">
