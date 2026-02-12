@@ -368,7 +368,7 @@ export interface DesignPlan {
   category_id: string;
   name_fa: string;
   slug: string;
-  // Backend uses flags instead of plan_type
+  plan_type?: "PUBLIC" | "SEMI_PRIVATE" | "PRIVATE" | "OWN_DESIGN";
   has_templates: boolean;
   has_questionnaire: boolean;
   has_file_upload: boolean;
@@ -1079,6 +1079,17 @@ export const adminApi = {
   // Get SLA compliance report
   getPrintshopSlaReport: () =>
     api.get("/admin/printshop-sla"),
+
+  // ============ Designer Management (Admin) ============
+
+  getAdminDesigners: (params?: { search?: string; is_active?: boolean; page?: number; page_size?: number }) =>
+    api.get("/admin/designers", { params }),
+  createDesigner: (data: { first_name: string; last_name?: string; phone_number: string; password: string; city?: string; bio?: string }) =>
+    api.post("/admin/designers", data),
+  toggleDesignerActive: (designerId: string) =>
+    api.post(`/admin/designers/${designerId}/toggle-active`),
+  getAdminDesignerStats: (designerId: string) =>
+    api.get(`/admin/designers/${designerId}/stats`),
 
   // ============ Designer API ============
 

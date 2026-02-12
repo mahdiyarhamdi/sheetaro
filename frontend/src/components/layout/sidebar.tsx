@@ -55,6 +55,7 @@ const adminNavItems: NavItem[] = [
   { href: "/admin/fonts", label: "مدیریت فونت‌ها", icon: Type },
   { href: "/admin/users", label: "کاربران", icon: Users },
   { href: "/admin/printshops", label: "مدیریت چاپخانه‌ها", icon: Factory },
+  { href: "/admin/designers", label: "مدیریت طراح‌ها", icon: Palette },
 ];
 
 const designerNavItems: NavItem[] = [

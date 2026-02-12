@@ -26,7 +26,7 @@ from app.services.order_service import OrderService
 from app.services.review_service import ReviewService
 from app.repositories.review_repository import ReviewRepository
 from app.core.security import get_password_hash
-from app.schemas.user import UserOut
+from app.schemas.user import UserOut, CreateDesignerRequest, DesignerListItem, DesignerListResponse
 from app.schemas.order import PrintShopStats, SettlementOut
 from app.schemas.review import ReviewOut, ReviewListResponse
 from app.schemas.printshop_profile import (
@@ -1454,4 +1454,240 @@ async def reject_review(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="نظر یافت نشد",
         )
+
+
+# ============== Designer Management ==============
+
+
+@router.get("/designers", response_model=DesignerListResponse)
+async def list_designers(
+    search: Optional[str] = Query(None, description="Search by name or phone"),
+    is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> DesignerListResponse:
+    """List all designer users with order stats. Admin only."""
+    conditions = [User.role == UserRole.DESIGNER]
+
+    if is_active is not None:
+        conditions.append(User.is_active == is_active)
+
+    if search:
+        sp = f"%{search}%"
+        conditions.append(
+            or_(
+                User.first_name.ilike(sp),
+                User.last_name.ilike(sp),
+                User.phone_number.ilike(sp),
+                User.full_name.ilike(sp),
+            )
+        )
+
+    count_query = select(func.count(User.id)).where(and_(*conditions))
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    query = (
+        select(User)
+        .where(and_(*conditions))
+        .order_by(User.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    result = await db.execute(query)
+    users = result.scalars().all()
+
+    user_ids = [u.id for u in users]
+
+    # Bulk fetch order counts by status
+    total_map: dict[UUID, int] = {}
+    in_progress_map: dict[UUID, int] = {}
+    completed_map: dict[UUID, int] = {}
+    if user_ids:
+        # Total assigned orders
+        total_result_q = await db.execute(
+            select(Order.assigned_designer_id, func.count(Order.id))
+            .where(Order.assigned_designer_id.in_(user_ids))
+            .group_by(Order.assigned_designer_id)
+        )
+        for row in total_result_q.all():
+            total_map[row[0]] = row[1]
+
+        # In-progress (DESIGNING)
+        ip_result = await db.execute(
+            select(Order.assigned_designer_id, func.count(Order.id))
+            .where(
+                Order.assigned_designer_id.in_(user_ids),
+                Order.status == OrderStatus.DESIGNING,
+            )
+            .group_by(Order.assigned_designer_id)
+        )
+        for row in ip_result.all():
+            in_progress_map[row[0]] = row[1]
+
+        # Completed (READY_FOR_PRINT and beyond)
+        completed_statuses = [
+            OrderStatus.READY_FOR_PRINT,
+            OrderStatus.PRINTING,
+            OrderStatus.PRINTED,
+            OrderStatus.SHIPPED,
+            OrderStatus.DELIVERED,
+        ]
+        comp_result = await db.execute(
+            select(Order.assigned_designer_id, func.count(Order.id))
+            .where(
+                Order.assigned_designer_id.in_(user_ids),
+                Order.status.in_(completed_statuses),
+            )
+            .group_by(Order.assigned_designer_id)
+        )
+        for row in comp_result.all():
+            completed_map[row[0]] = row[1]
+
+    items = []
+    for u in users:
+        items.append(
+            DesignerListItem(
+                id=u.id,
+                first_name=u.first_name,
+                last_name=u.last_name,
+                phone_number=u.phone_number,
+                city=u.city,
+                bio=u.bio,
+                is_active=u.is_active,
+                created_at=u.created_at,
+                total_orders=total_map.get(u.id, 0),
+                in_progress_orders=in_progress_map.get(u.id, 0),
+                completed_orders=completed_map.get(u.id, 0),
+            )
+        )
+
+    return DesignerListResponse(items=items, total=total, page=page, page_size=page_size)
+
+
+@router.post("/designers", status_code=status.HTTP_201_CREATED)
+async def create_designer(
+    data: CreateDesignerRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> dict:
+    """Register a new designer user. Admin only."""
+    existing = await db.execute(
+        select(User).where(User.phone_number == data.phone_number)
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="شماره تلفن قبلاً ثبت شده است",
+        )
+
+    full_name = f"{data.first_name} {data.last_name or ''}".strip()
+    new_user = User(
+        id=uuid_mod.uuid4(),
+        first_name=data.first_name,
+        last_name=data.last_name,
+        full_name=full_name,
+        phone_number=data.phone_number,
+        password_hash=get_password_hash(data.password),
+        city=data.city,
+        bio=data.bio,
+        role=UserRole.DESIGNER,
+        is_active=True,
+        phone_verified=True,
+    )
+    db.add(new_user)
+    await db.commit()
+
+    logger.info("Admin %s created designer user %s (%s)", current_user.id, new_user.id, new_user.phone_number)
+
+    return {
+        "id": str(new_user.id),
+        "first_name": new_user.first_name,
+        "last_name": new_user.last_name,
+        "phone_number": new_user.phone_number,
+        "city": new_user.city,
+        "bio": new_user.bio,
+        "role": new_user.role.value,
+    }
+
+
+@router.post("/designers/{designer_id}/toggle-active")
+async def toggle_designer_active(
+    designer_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> dict:
+    """Toggle a designer active/inactive. Admin only."""
+    user_result = await db.execute(select(User).where(User.id == designer_id))
+    user = user_result.scalar_one_or_none()
+    if not user or user.role != UserRole.DESIGNER:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="طراح یافت نشد")
+
+    user.is_active = not user.is_active
+    await db.commit()
+
+    return {
+        "success": True,
+        "designer_id": str(designer_id),
+        "is_active": user.is_active,
+    }
+
+
+@router.get("/designers/{designer_id}/stats")
+async def get_designer_stats(
+    designer_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> dict:
+    """Get performance stats for a specific designer. Admin only."""
+    user_result = await db.execute(select(User).where(User.id == designer_id))
+    user = user_result.scalar_one_or_none()
+    if not user or user.role != UserRole.DESIGNER:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="طراح یافت نشد")
+
+    # Total assigned
+    total_res = await db.execute(
+        select(func.count(Order.id)).where(Order.assigned_designer_id == designer_id)
+    )
+    total_assigned = total_res.scalar() or 0
+
+    # In progress (DESIGNING)
+    ip_res = await db.execute(
+        select(func.count(Order.id)).where(
+            Order.assigned_designer_id == designer_id,
+            Order.status == OrderStatus.DESIGNING,
+        )
+    )
+    in_progress = ip_res.scalar() or 0
+
+    # Pending in queue
+    queue_res = await db.execute(
+        select(func.count(Order.id)).where(
+            Order.status == OrderStatus.PENDING_DESIGNER,
+        )
+    )
+    queue_count = queue_res.scalar() or 0
+
+    # Completed
+    completed_statuses = [
+        OrderStatus.READY_FOR_PRINT, OrderStatus.PRINTING,
+        OrderStatus.PRINTED, OrderStatus.SHIPPED, OrderStatus.DELIVERED,
+    ]
+    comp_res = await db.execute(
+        select(func.count(Order.id)).where(
+            Order.assigned_designer_id == designer_id,
+            Order.status.in_(completed_statuses),
+        )
+    )
+    completed = comp_res.scalar() or 0
+
+    return {
+        "designer_id": str(designer_id),
+        "total_assigned": total_assigned,
+        "in_progress": in_progress,
+        "completed": completed,
+        "queue_count": queue_count,
+    }
 

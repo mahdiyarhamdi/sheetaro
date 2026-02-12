@@ -1,6 +1,7 @@
 """User schemas."""
 from __future__ import annotations
 
+from typing import List, Optional
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from datetime import datetime
 from uuid import UUID
@@ -61,3 +62,45 @@ class UserOut(UserBase):
     updated_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
+
+
+# ============ Designer Management Schemas ============
+
+
+class CreateDesignerRequest(BaseModel):
+    """Schema for admin to register a new designer."""
+    first_name: str = Field(..., min_length=1, max_length=255)
+    last_name: Optional[str] = Field(None, max_length=255)
+    phone_number: str = Field(..., min_length=11, max_length=20)
+    password: str = Field(..., min_length=6, max_length=128)
+    city: Optional[str] = Field(None, max_length=100)
+    bio: Optional[str] = None
+
+    @field_validator('phone_number')
+    @classmethod
+    def validate_phone_number(cls, v: str) -> str:
+        """Validate Iranian phone number format."""
+        return validate_iranian_phone(v)
+
+
+class DesignerListItem(BaseModel):
+    """Single designer item in list response."""
+    id: UUID
+    first_name: str
+    last_name: Optional[str] = None
+    phone_number: Optional[str] = None
+    city: Optional[str] = None
+    bio: Optional[str] = None
+    is_active: bool = True
+    created_at: datetime
+    total_orders: int = 0
+    in_progress_orders: int = 0
+    completed_orders: int = 0
+
+
+class DesignerListResponse(BaseModel):
+    """Paginated response for designer list."""
+    items: List[DesignerListItem]
+    total: int
+    page: int
+    page_size: int

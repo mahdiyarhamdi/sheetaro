@@ -173,6 +173,10 @@ docker-compose up --build
 - `GET /admin/settlements` - List all settlements
 - `POST /admin/settlements/{id}/pay` - Mark settlement as paid
 - `GET /admin/printshop-sla` - Get SLA compliance report for all print shops
+- `GET /admin/designers` - List all designer users with order stats (search, filter, paginate)
+- `POST /admin/designers` - Register a new designer user
+- `POST /admin/designers/{id}/toggle-active` - Toggle designer active/inactive
+- `GET /admin/designers/{id}/stats` - Get designer performance stats
 
 ### Categories (`/api/v1/categories`) - Dynamic Product Catalog
 - `GET /categories` - List all categories
@@ -311,6 +315,7 @@ python -m pytest tests/ -v -k "auth"
 | `tests/unit/test_printshop_service.py` | OrderService print shop methods (accept, complete, ship, stats, queue, enriched PrintShopOrderOut fields) |
 | `tests/integration/test_printshop_api.py` | Print shop API endpoints (queue, accept, my-orders, complete, ship, stats, settlements) |
 | `tests/integration/test_admin_printshop_api.py` | Admin print shop management endpoints (list, stats, orders, reassign, settlements, SLA) |
+| `tests/integration/test_admin_designer_api.py` | Admin designer management endpoints (list, create, toggle-active, stats, search, filters) |
 
 ### Dynamic Template Builder Tests
 
