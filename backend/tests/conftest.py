@@ -73,6 +73,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'revisionstatus') THEN
         CREATE TYPE revisionstatus AS ENUM ('PENDING_REVIEW', 'APPROVED', 'REJECTED');
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'reviewtype') THEN
+        CREATE TYPE reviewtype AS ENUM ('PRINTSHOP', 'DESIGNER');
+    END IF;
     -- Dynamic category system enums
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'attributeinputtype') THEN
         CREATE TYPE attributeinputtype AS ENUM ('SELECT', 'MULTI_SELECT', 'NUMBER', 'TEXT');

@@ -62,6 +62,7 @@ const designerNavItems: NavItem[] = [
   { href: "/designer", label: "داشبورد طراح", icon: Palette },
   { href: "/designer/queue", label: "صف سفارشات جدید", icon: Inbox },
   { href: "/designer/orders", label: "سفارشات من", icon: PenTool },
+  { href: "/designer/validations", label: "اعتبارسنجی", icon: CheckSquare },
 ];
 
 const printShopNavItems: NavItem[] = [

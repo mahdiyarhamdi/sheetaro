@@ -1396,17 +1396,28 @@ async def get_printshop_sla_report(
 )
 async def list_reviews(
     printshop_id: Optional[UUID] = Query(None, description="Filter by print shop"),
+    designer_id: Optional[UUID] = Query(None, description="Filter by designer"),
     is_approved: Optional[bool] = Query(None, description="Filter by approval status"),
+    review_type: Optional[str] = Query(None, description="Filter by type: PRINTSHOP or DESIGNER"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ) -> ReviewListResponse:
     """List all reviews. Admin only."""
+    from app.models.enums import ReviewType as RT
+    rt = None
+    if review_type:
+        try:
+            rt = RT(review_type)
+        except ValueError:
+            pass
     service = ReviewService(db)
     return await service.list_reviews(
         printshop_id=printshop_id,
+        designer_id=designer_id,
         is_approved=is_approved,
+        review_type=rt,
         page=page,
         page_size=page_size,
     )
@@ -1546,8 +1557,14 @@ async def list_designers(
         for row in comp_result.all():
             completed_map[row[0]] = row[1]
 
+    # Bulk fetch designer ratings
+    from app.repositories.review_repository import ReviewRepository as RR
+    rr = RR(db)
+    ratings_map = await rr.get_avg_ratings_bulk_designer(user_ids) if user_ids else {}
+
     items = []
     for u in users:
+        avg, cnt = ratings_map.get(u.id, (None, 0))
         items.append(
             DesignerListItem(
                 id=u.id,
@@ -1561,6 +1578,8 @@ async def list_designers(
                 total_orders=total_map.get(u.id, 0),
                 in_progress_orders=in_progress_map.get(u.id, 0),
                 completed_orders=completed_map.get(u.id, 0),
+                avg_rating=round(avg, 1) if avg is not None else None,
+                review_count=cnt,
             )
         )
 

@@ -409,15 +409,38 @@ async def submit_review(
     "/orders/{order_id}/review",
     response_model=Optional[ReviewOut],
     summary="Get order review",
-    description="Get the review for a specific order (if exists).",
+    description="Get the review for a specific order (if exists). Use review_type to filter.",
 )
 async def get_order_review(
     order_id: UUID,
+    review_type: Optional[str] = Query(None, description="PRINTSHOP or DESIGNER"),
     db: AsyncSession = Depends(get_db),
 ) -> Optional[ReviewOut]:
-    """Get review for an order."""
+    """Get review for an order (optionally filtered by type)."""
+    from app.models.enums import ReviewType
     service = ReviewService(db)
-    return await service.get_review_for_order(order_id)
+    rt = None
+    if review_type:
+        try:
+            rt = ReviewType(review_type)
+        except ValueError:
+            pass
+    return await service.get_review_for_order(order_id, review_type=rt)
+
+
+@router.get(
+    "/orders/{order_id}/reviews",
+    response_model=list[ReviewOut],
+    summary="Get all order reviews",
+    description="Get all reviews (printshop + designer) for a specific order.",
+)
+async def get_order_reviews(
+    order_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> list[ReviewOut]:
+    """Get all reviews for an order."""
+    service = ReviewService(db)
+    return await service.get_reviews_for_order(order_id)
 
 
 # NOTE: Print shop endpoints moved to app/api/routers/printshop.py

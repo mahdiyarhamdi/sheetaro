@@ -96,6 +96,8 @@ class DesignerListItem(BaseModel):
     total_orders: int = 0
     in_progress_orders: int = 0
     completed_orders: int = 0
+    avg_rating: Optional[float] = None
+    review_count: int = 0
 
 
 class DesignerListResponse(BaseModel):

@@ -269,10 +269,12 @@ export const ordersApi = {
     api.post<Order>(`/orders/${orderId}/confirm-delivery`),
 
   // Reviews
-  submitReview: (orderId: string, data: { rating: number; comment?: string }) =>
+  submitReview: (orderId: string, data: { rating: number; comment?: string; review_type?: string }) =>
     api.post(`/orders/${orderId}/review`, data),
-  getReview: (orderId: string) =>
-    api.get(`/orders/${orderId}/review`),
+  getReview: (orderId: string, reviewType?: string) =>
+    api.get(`/orders/${orderId}/review`, { params: reviewType ? { review_type: reviewType } : undefined }),
+  getReviews: (orderId: string) =>
+    api.get(`/orders/${orderId}/reviews`),
 
   // Questionnaire answers
   submitAnswers: (orderId: string, answers: Array<{ question_id: string; answer_text?: string; answer_values?: string[]; answer_file_url?: string }>) =>
@@ -1112,6 +1114,15 @@ export const adminApi = {
     api.get<DesignRevisionListResponse>(`/designer/orders/${orderId}/revisions`),
   getDesignerStats: () =>
     api.get("/designer/stats"),
+
+  // ============ Designer Validation API ============
+
+  getDesignerValidations: (params?: { status?: string; page?: number; page_size?: number }) =>
+    api.get("/designer/validations", { params }),
+  approveDesignerValidation: (orderId: string) =>
+    api.post(`/designer/validations/${orderId}/approve`),
+  rejectDesignerValidation: (orderId: string, comment: string) =>
+    api.post(`/designer/validations/${orderId}/reject`, { comment }),
 
   // ============ Review Management API ============
   getReviews: (params?: { printshop_id?: string; is_approved?: boolean; page?: number; page_size?: number }) =>

@@ -2,10 +2,14 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, or_
+from sqlalchemy.orm import selectinload
 from uuid import UUID
-from typing import Optional
+from typing import Optional, List
+from pydantic import BaseModel
 import os
 import uuid as uuid_mod
+import logging
 from datetime import datetime
 
 from app.api.deps import (
@@ -21,7 +25,12 @@ from app.schemas.order import (
 from app.schemas.design_revision import DesignRevisionOut, DesignRevisionListResponse
 from app.services.order_service import OrderService
 from app.services.design_revision_service import DesignRevisionService
-from app.models.enums import OrderStatus
+from app.models.enums import OrderStatus, ValidationStatus
+from app.models.order import Order
+from app.models.user import User
+from app.models.processed_design import ProcessedDesign
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/designer", tags=["Designer"])
 
@@ -101,7 +110,7 @@ async def accept_order(
 ) -> DesignerOrderOut:
     """Designer accepts an order from the queue."""
     from app.schemas.order import OrderStatusUpdate
-    from app.utils.logging import log_event
+    from app.utils.logger import log_event
 
     service = OrderService(db)
     order_obj = await service.repository.get_by_id(order_id)
@@ -161,7 +170,7 @@ async def upload_design(
     with open(filepath, "wb") as f:
         f.write(content)
 
-    file_url = f"/uploads/designs/{filename}"
+    file_url = f"/files/designs/{filename}"
 
     revision_service = DesignRevisionService(db)
     try:
@@ -216,3 +225,192 @@ async def get_stats(
     """Get designer dashboard statistics."""
     service = OrderService(db)
     return await service.get_designer_stats(user.user_id)
+
+
+# ============== Validation Management (Designer) ==============
+
+
+class DesignerValidationRequestResponse(BaseModel):
+    """Validation request item for designer view."""
+    id: str
+    user_id: str
+    user_name: Optional[str] = None
+    user_phone: Optional[str] = None
+    category_name: Optional[str] = None
+    plan_name: Optional[str] = None
+    template_name: Optional[str] = None
+    validation_status: Optional[str] = None
+    total_price: float
+    validation_price: float
+    created_at: str
+    design_preview_url: Optional[str] = None
+
+
+class DesignerValidationListResponse(BaseModel):
+    """Paginated validation requests for designer."""
+    items: List[DesignerValidationRequestResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class DesignerValidationRejectRequest(BaseModel):
+    """Reject validation with comment."""
+    comment: str
+
+
+@router.get("/validations", response_model=DesignerValidationListResponse)
+async def list_designer_validations(
+    status_filter: Optional[ValidationStatus] = Query(None, alias="status", description="Filter by validation status"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_designer_hybrid),
+) -> DesignerValidationListResponse:
+    """List orders with validation requested. Designer access."""
+    from app.models.category import Category
+
+    query = select(Order).where(Order.validation_requested == True)
+    count_query = select(func.count(Order.id)).where(Order.validation_requested == True)
+
+    if status_filter:
+        if status_filter == ValidationStatus.PENDING:
+            sf = or_(
+                Order.validation_status == status_filter,
+                Order.validation_status.is_(None),
+            )
+        else:
+            sf = Order.validation_status == status_filter
+        query = query.where(sf)
+        count_query = count_query.where(sf)
+
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    query = query.order_by(Order.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
+    orders = result.scalars().all()
+
+    items = []
+    for order in orders:
+        user_result = await db.execute(select(User).where(User.id == order.user_id))
+        order_user = user_result.scalar_one_or_none()
+
+        category_name = None
+        if order.category_id:
+            cat_result = await db.execute(select(Category).where(Category.id == order.category_id))
+            cat = cat_result.scalar_one_or_none()
+            if cat:
+                category_name = cat.name_fa
+
+        plan_name = None
+        if order.design_plan:
+            plan_names = {
+                "PUBLIC": "عمومی",
+                "SEMI_PRIVATE": "نیمه خصوصی",
+                "PRIVATE": "خصوصی",
+                "OWN_DESIGN": "طرح اختصاصی",
+            }
+            plan_name = plan_names.get(order.design_plan.value, order.design_plan.value)
+
+        design_preview_url = order.design_file_url
+        template_name = None
+        if not design_preview_url:
+            pd_result = await db.execute(
+                select(ProcessedDesign)
+                .where(ProcessedDesign.order_id == order.id)
+                .options(selectinload(ProcessedDesign.template))
+                .order_by(ProcessedDesign.created_at.desc())
+                .limit(1)
+            )
+            processed = pd_result.scalar_one_or_none()
+            if processed:
+                design_preview_url = processed.preview_url
+                if processed.template:
+                    template_name = processed.template.name_fa
+
+        items.append(DesignerValidationRequestResponse(
+            id=str(order.id),
+            user_id=str(order.user_id),
+            user_name=order_user.full_name if order_user else None,
+            user_phone=order_user.phone_number if order_user else None,
+            category_name=category_name,
+            plan_name=plan_name,
+            template_name=template_name,
+            validation_status=order.validation_status.value if order.validation_status else None,
+            total_price=float(order.total_price) if order.total_price else 0,
+            validation_price=float(order.validation_price) if order.validation_price else 0,
+            created_at=order.created_at.isoformat(),
+            design_preview_url=design_preview_url,
+        ))
+
+    return DesignerValidationListResponse(items=items, total=total, page=page, page_size=page_size)
+
+
+@router.post("/validations/{order_id}/approve")
+async def approve_designer_validation(
+    order_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_designer_hybrid),
+) -> dict:
+    """Approve validation for an order. Designer access."""
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalar_one_or_none()
+
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="سفارش یافت نشد")
+
+    if not order.validation_requested:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="این سفارش درخواست اعتبارسنجی نداشته است")
+
+    order.validation_status = ValidationStatus.PASSED
+    order.assigned_validator_id = user.user_id
+
+    if order.status == OrderStatus.AWAITING_VALIDATION:
+        order.status = OrderStatus.READY_FOR_PRINT
+
+    await db.commit()
+
+    logger.info("Designer %s approved validation for order %s", user.user_id, order_id)
+
+    return {
+        "success": True,
+        "order_id": str(order_id),
+        "validation_status": order.validation_status.value,
+        "message": "اعتبارسنجی با موفقیت تأیید شد",
+    }
+
+
+@router.post("/validations/{order_id}/reject")
+async def reject_designer_validation(
+    order_id: UUID,
+    data: DesignerValidationRejectRequest,
+    db: AsyncSession = Depends(get_db),
+    user: AuthenticatedUser = Depends(require_designer_hybrid),
+) -> dict:
+    """Reject validation with correction comment. Designer access."""
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalar_one_or_none()
+
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="سفارش یافت نشد")
+
+    if not order.validation_requested:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="این سفارش درخواست اعتبارسنجی نداشته است")
+
+    order.validation_status = ValidationStatus.FAILED
+    order.assigned_validator_id = user.user_id
+    order.admin_notes = data.comment
+    order.status = OrderStatus.NEEDS_ACTION
+
+    await db.commit()
+
+    logger.info("Designer %s rejected validation for order %s", user.user_id, order_id)
+
+    return {
+        "success": True,
+        "order_id": str(order_id),
+        "validation_status": order.validation_status.value,
+        "comment": data.comment,
+        "message": "درخواست اصلاح ثبت شد",
+    }

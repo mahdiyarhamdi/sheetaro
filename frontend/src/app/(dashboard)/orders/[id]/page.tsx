@@ -7,7 +7,8 @@ import Link from "next/link";
 import { useOrder } from "@/hooks/useOrders";
 import { ImagePreview } from "@/components/ui/image-preview";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { paymentsApi, ordersApi, getErrorMessage, DesignRevision, ChatMessage } from "@/lib/api";
+import { paymentsApi, ordersApi, filesApi, getErrorMessage, DesignRevision, ChatMessage } from "@/lib/api";
+import { getImageUrl } from "@/lib/image-utils";
 import {
   Card,
   CardHeader,
@@ -43,6 +44,7 @@ import {
   History,
   Palette,
   Loader2,
+  Paperclip,
 } from "lucide-react";
 import { formatPrice, formatDate, formatDateTime, orderStatusLabels, toPersianNumber, cn, getPaymentStatusInfo } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -61,10 +63,14 @@ export default function OrderDetailPage() {
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Review state
+  // Review state (printshop)
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewHover, setReviewHover] = useState(0);
   const [reviewComment, setReviewComment] = useState("");
+  // Review state (designer)
+  const [designerRating, setDesignerRating] = useState(0);
+  const [designerHover, setDesignerHover] = useState(0);
+  const [designerComment, setDesignerComment] = useState("");
 
   // Design review state
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -73,18 +79,24 @@ export default function OrderDetailPage() {
 
   // Chat state
   const [chatMessage, setChatMessage] = useState("");
+  const [chatFile, setChatFile] = useState<File | null>(null);
+  const [chatFilePreview, setChatFilePreview] = useState<string | null>(null);
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatFileInputRef = useRef<HTMLInputElement>(null);
   const currentUser = typeof window !== "undefined" ? getUser() : null;
 
-  // Fetch review for delivered orders
-  const { data: existingReview, refetch: refetchReview } = useQuery({
-    queryKey: ["orderReview", orderId],
+  // Fetch reviews for delivered orders (both printshop and designer)
+  const { data: orderReviews, refetch: refetchReview } = useQuery({
+    queryKey: ["orderReviews", orderId],
     queryFn: async () => {
-      const res = await ordersApi.getReview(orderId);
-      return res.data;
+      const res = await ordersApi.getReviews(orderId);
+      return res.data as Array<{ id: string; review_type: string; rating: number; comment?: string; is_approved: boolean }>;
     },
     enabled: !!order && order.status === "DELIVERED",
   });
+  const existingReview = orderReviews?.find((r: any) => r.review_type === "PRINTSHOP") ?? null;
+  const existingDesignerReview = orderReviews?.find((r: any) => r.review_type === "DESIGNER") ?? null;
 
   // Fetch design revisions
   const { data: revisionsData } = useQuery({
@@ -143,18 +155,59 @@ export default function OrderDetailPage() {
     onError: (error) => toast.error(getErrorMessage(error)),
   });
 
-  // Send chat message mutation
+  // Send chat message mutation (with optional file)
   const sendMessageMutation = useMutation({
     mutationFn: async () => {
-      if (!chatMessage.trim()) throw new Error("پیام نمی‌تواند خالی باشد");
-      return ordersApi.sendMessage(orderId, { content: chatMessage.trim() });
+      const hasText = chatMessage.trim().length > 0;
+      const hasFile = !!chatFile;
+      if (!hasText && !hasFile) throw new Error("پیام یا فایل الزامی است");
+
+      let fileUrl: string | undefined;
+      if (hasFile) {
+        setIsUploadingFile(true);
+        try {
+          const uploadRes = await filesApi.uploadPlaceholderImage(chatFile!);
+          fileUrl = uploadRes.data.file_url;
+        } finally {
+          setIsUploadingFile(false);
+        }
+      }
+
+      return ordersApi.sendMessage(orderId, {
+        content: chatMessage.trim(),
+        file_url: fileUrl,
+      });
     },
     onSuccess: () => {
       setChatMessage("");
+      setChatFile(null);
+      setChatFilePreview(null);
       refetchMessages();
     },
     onError: (error) => toast.error(getErrorMessage(error)),
   });
+
+  // Chat file selection handler
+  const handleChatFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setChatFile(file);
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onloadend = () => setChatFilePreview(reader.result as string);
+        reader.readAsDataURL(file);
+      } else {
+        setChatFilePreview(null);
+      }
+    }
+    // Reset input so the same file can be selected again
+    e.target.value = "";
+  };
+
+  const removeChatFile = () => {
+    setChatFile(null);
+    setChatFilePreview(null);
+  };
 
   // Confirm delivery mutation
   const confirmDeliveryMutation = useMutation({
@@ -170,20 +223,42 @@ export default function OrderDetailPage() {
     },
   });
 
-  // Submit review mutation
+  // Submit printshop review mutation
   const submitReviewMutation = useMutation({
     mutationFn: async () => {
       if (reviewRating === 0) throw new Error("لطفا امتیاز را انتخاب کنید");
       return ordersApi.submitReview(orderId, {
         rating: reviewRating,
         comment: reviewComment.trim() || undefined,
+        review_type: "PRINTSHOP",
       });
     },
     onSuccess: () => {
       refetchReview();
-      toast.success("نظر شما با موفقیت ثبت شد. ممنون از بازخوردتان!");
+      toast.success("نظر شما برای چاپخانه ثبت شد. ممنون از بازخوردتان!");
       setReviewRating(0);
       setReviewComment("");
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+
+  // Submit designer review mutation
+  const submitDesignerReviewMutation = useMutation({
+    mutationFn: async () => {
+      if (designerRating === 0) throw new Error("لطفا امتیاز را انتخاب کنید");
+      return ordersApi.submitReview(orderId, {
+        rating: designerRating,
+        comment: designerComment.trim() || undefined,
+        review_type: "DESIGNER",
+      });
+    },
+    onSuccess: () => {
+      refetchReview();
+      toast.success("نظر شما برای طراح ثبت شد. ممنون از بازخوردتان!");
+      setDesignerRating(0);
+      setDesignerComment("");
     },
     onError: (error) => {
       toast.error(getErrorMessage(error));
@@ -718,6 +793,7 @@ export default function OrderDetailPage() {
               )}
               {messagesData?.items?.map((msg: ChatMessage) => {
                 const isMe = msg.sender_id === currentUser?.id;
+                const isImageFile = msg.file_url?.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
                 return (
                   <div
                     key={msg.id}
@@ -735,28 +811,50 @@ export default function OrderDetailPage() {
                       )}
                     >
                       {!isMe && msg.sender_name && (
-                        <p className="text-xs font-medium mb-1 opacity-70">
+                        <p className={cn("text-xs font-medium mb-1", isMe ? "text-white/70" : "text-foreground/70")}>
                           {msg.sender_name}
                         </p>
                       )}
-                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                      {/* File attachment */}
                       {msg.file_url && (
-                        <a
-                          href={msg.file_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={cn(
-                            "text-xs underline mt-1 inline-block",
-                            isMe ? "text-white/80" : "text-primary"
-                          )}
-                        >
-                          فایل پیوست
-                        </a>
+                        isImageFile ? (
+                          <a
+                            href={getImageUrl(msg.file_url) || "#"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block mb-2"
+                          >
+                            <img
+                              src={getImageUrl(msg.file_url) || ""}
+                              alt="تصویر پیوست"
+                              className="max-w-full max-h-48 rounded-lg object-contain hover:opacity-80 transition-opacity"
+                            />
+                          </a>
+                        ) : (
+                          <a
+                            href={getImageUrl(msg.file_url) || "#"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={cn(
+                              "flex items-center gap-2 mb-2 p-2 rounded-lg text-sm",
+                              isMe ? "bg-white/10 text-white" : "bg-white text-foreground"
+                            )}
+                          >
+                            <FileText className="w-4 h-4 shrink-0" />
+                            <span className="truncate">فایل پیوست</span>
+                          </a>
+                        )
+                      )}
+                      {/* Text content */}
+                      {msg.content && (
+                        <p className={cn("text-sm whitespace-pre-wrap", isMe ? "text-white" : "text-foreground")}>
+                          {msg.content}
+                        </p>
                       )}
                       <p
                         className={cn(
                           "text-[10px] mt-1",
-                          isMe ? "text-white/60 text-left" : "text-muted text-left"
+                          isMe ? "text-white/60 text-left" : "text-foreground/40 text-left"
                         )}
                         dir="ltr"
                       >
@@ -772,8 +870,46 @@ export default function OrderDetailPage() {
               <div ref={chatEndRef} />
             </div>
 
+            {/* File preview (when file is selected) */}
+            {chatFile && (
+              <div className="flex items-center gap-3 p-3 bg-accent/50 rounded-lg border border-border">
+                {chatFilePreview ? (
+                  <img src={chatFilePreview} alt="پیش‌نمایش" className="w-14 h-14 rounded-lg object-cover" />
+                ) : (
+                  <div className="w-14 h-14 rounded-lg bg-accent flex items-center justify-center">
+                    <FileText className="w-6 h-6 text-muted" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{chatFile.name}</p>
+                  <p className="text-xs text-muted">{(chatFile.size / 1024).toFixed(0)} KB</p>
+                </div>
+                <button
+                  onClick={removeChatFile}
+                  className="text-muted hover:text-danger transition-colors p-1"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
             {/* Message input */}
-            <div className="flex gap-2">
+            <div className="flex items-end gap-2">
+              <input
+                type="file"
+                ref={chatFileInputRef}
+                className="hidden"
+                accept="image/*,.pdf,.doc,.docx,.ai,.psd,.svg"
+                onChange={handleChatFileSelect}
+              />
+              <button
+                type="button"
+                onClick={() => chatFileInputRef.current?.click()}
+                className="p-3 text-muted hover:text-primary transition-colors rounded-lg hover:bg-accent"
+                title="پیوست فایل"
+              >
+                <Paperclip className="w-5 h-5" />
+              </button>
               <textarea
                 value={chatMessage}
                 onChange={(e) => setChatMessage(e.target.value)}
@@ -783,15 +919,15 @@ export default function OrderDetailPage() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    if (chatMessage.trim()) sendMessageMutation.mutate();
+                    if (chatMessage.trim() || chatFile) sendMessageMutation.mutate();
                   }
                 }}
               />
               <Button
                 variant="primary"
                 onClick={() => sendMessageMutation.mutate()}
-                isLoading={sendMessageMutation.isPending}
-                disabled={!chatMessage.trim()}
+                isLoading={sendMessageMutation.isPending || isUploadingFile}
+                disabled={!chatMessage.trim() && !chatFile}
                 className="self-end"
               >
                 <Send className="w-4 h-4" />
@@ -910,126 +1046,127 @@ export default function OrderDetailPage() {
 
       {/* Review section (only for delivered orders) */}
       {order.status === "DELIVERED" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Star className="w-5 h-5 text-primary" />
-              امتیاز و نظر
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {existingReview ? (
-              /* Show submitted review */
-              <div className="space-y-4">
-                <div className="bg-success-light rounded-xl p-4">
-                  <div className="flex items-start gap-3">
-                    <CheckCircle className="w-5 h-5 text-success shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-medium text-foreground">نظر شما ثبت شده است</p>
-                      <p className="text-sm text-muted mt-1">
-                        ممنون از بازخورد شما!
-                      </p>
+        <div className="space-y-4">
+          {/* Printshop review */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Star className="w-5 h-5 text-primary" />
+                امتیاز و نظر چاپخانه
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {existingReview ? (
+                <div className="space-y-4">
+                  <div className="bg-success-light rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                      <CheckCircle className="w-5 h-5 text-success shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium text-foreground">نظر شما برای چاپخانه ثبت شده است</p>
+                        <p className="text-sm text-muted mt-1">ممنون از بازخورد شما!</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-
-                {/* Star display */}
-                <div className="flex items-center gap-1">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <Star
-                      key={star}
-                      className={cn(
-                        "w-6 h-6",
-                        star <= existingReview.rating
-                          ? "text-yellow-400 fill-yellow-400"
-                          : "text-gray-300"
-                      )}
-                    />
-                  ))}
-                  <span className="text-sm text-muted mr-2">
-                    {toPersianNumber(existingReview.rating)}/۵
-                  </span>
-                </div>
-
-                {existingReview.comment && (
-                  <div className="p-3 bg-accent/50 rounded-lg">
-                    <p className="text-sm text-foreground">{existingReview.comment}</p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              /* Review form */
-              <div className="space-y-4">
-                <p className="text-sm text-muted">
-                  تجربه خود از این سفارش را با ما به اشتراک بگذارید
-                </p>
-
-                {/* Star rating */}
-                <div>
-                  <p className="text-sm font-medium text-foreground mb-2">امتیاز شما</p>
                   <div className="flex items-center gap-1">
                     {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        type="button"
-                        onClick={() => setReviewRating(star)}
-                        onMouseEnter={() => setReviewHover(star)}
-                        onMouseLeave={() => setReviewHover(0)}
-                        className="p-0.5 transition-transform hover:scale-110"
-                      >
-                        <Star
-                          className={cn(
-                            "w-8 h-8 transition-colors",
-                            star <= (reviewHover || reviewRating)
-                              ? "text-yellow-400 fill-yellow-400"
-                              : "text-gray-300"
-                          )}
-                        />
-                      </button>
+                      <Star key={star} className={cn("w-6 h-6", star <= existingReview.rating ? "text-yellow-400 fill-yellow-400" : "text-gray-300")} />
                     ))}
-                    {reviewRating > 0 && (
-                      <span className="text-sm text-muted mr-2">
-                        {toPersianNumber(reviewRating)}/۵
-                      </span>
-                    )}
+                    <span className="text-sm text-muted mr-2">{toPersianNumber(existingReview.rating)}/۵</span>
                   </div>
-                </div>
-
-                {/* Comment */}
-                <div>
-                  <p className="text-sm font-medium text-foreground mb-2">
-                    نظر شما (اختیاری)
-                  </p>
-                  <textarea
-                    value={reviewComment}
-                    onChange={(e) => setReviewComment(e.target.value)}
-                    placeholder="نظر خود را بنویسید..."
-                    className="w-full p-3 border border-border rounded-lg text-sm resize-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
-                    rows={3}
-                    maxLength={1000}
-                  />
-                  {reviewComment.length > 0 && (
-                    <p className="text-xs text-muted mt-1 text-left" dir="ltr">
-                      {reviewComment.length}/1000
-                    </p>
+                  {existingReview.comment && (
+                    <div className="p-3 bg-accent/50 rounded-lg">
+                      <p className="text-sm text-foreground">{existingReview.comment}</p>
+                    </div>
                   )}
                 </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-sm text-muted">تجربه خود از چاپخانه را با ما به اشتراک بگذارید</p>
+                  <div>
+                    <p className="text-sm font-medium text-foreground mb-2">امتیاز شما</p>
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button key={star} type="button" onClick={() => setReviewRating(star)} onMouseEnter={() => setReviewHover(star)} onMouseLeave={() => setReviewHover(0)} className="p-0.5 transition-transform hover:scale-110">
+                          <Star className={cn("w-8 h-8 transition-colors", star <= (reviewHover || reviewRating) ? "text-yellow-400 fill-yellow-400" : "text-gray-300")} />
+                        </button>
+                      ))}
+                      {reviewRating > 0 && <span className="text-sm text-muted mr-2">{toPersianNumber(reviewRating)}/۵</span>}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground mb-2">نظر شما (اختیاری)</p>
+                    <textarea value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} placeholder="نظر خود را بنویسید..." className="w-full p-3 border border-border rounded-lg text-sm resize-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors" rows={3} maxLength={1000} />
+                    {reviewComment.length > 0 && <p className="text-xs text-muted mt-1 text-left" dir="ltr">{reviewComment.length}/1000</p>}
+                  </div>
+                  <Button variant="primary" className="w-full" onClick={() => submitReviewMutation.mutate()} isLoading={submitReviewMutation.isPending} disabled={reviewRating === 0} leftIcon={<Send className="w-4 h-4" />}>
+                    ثبت نظر چاپخانه
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-                {/* Submit */}
-                <Button
-                  variant="primary"
-                  className="w-full"
-                  onClick={() => submitReviewMutation.mutate()}
-                  isLoading={submitReviewMutation.isPending}
-                  disabled={reviewRating === 0}
-                  leftIcon={<Send className="w-4 h-4" />}
-                >
-                  ثبت نظر
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          {/* Designer review (only if order has a designer) */}
+          {order.assigned_designer_id && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Palette className="w-5 h-5 text-primary" />
+                  امتیاز و نظر طراح
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {existingDesignerReview ? (
+                  <div className="space-y-4">
+                    <div className="bg-success-light rounded-xl p-4">
+                      <div className="flex items-start gap-3">
+                        <CheckCircle className="w-5 h-5 text-success shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-medium text-foreground">نظر شما برای طراح ثبت شده است</p>
+                          <p className="text-sm text-muted mt-1">ممنون از بازخورد شما!</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star key={star} className={cn("w-6 h-6", star <= existingDesignerReview.rating ? "text-yellow-400 fill-yellow-400" : "text-gray-300")} />
+                      ))}
+                      <span className="text-sm text-muted mr-2">{toPersianNumber(existingDesignerReview.rating)}/۵</span>
+                    </div>
+                    {existingDesignerReview.comment && (
+                      <div className="p-3 bg-accent/50 rounded-lg">
+                        <p className="text-sm text-foreground">{existingDesignerReview.comment}</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted">تجربه خود از طراح را با ما به اشتراک بگذارید</p>
+                    <div>
+                      <p className="text-sm font-medium text-foreground mb-2">امتیاز شما</p>
+                      <div className="flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button key={star} type="button" onClick={() => setDesignerRating(star)} onMouseEnter={() => setDesignerHover(star)} onMouseLeave={() => setDesignerHover(0)} className="p-0.5 transition-transform hover:scale-110">
+                            <Star className={cn("w-8 h-8 transition-colors", star <= (designerHover || designerRating) ? "text-yellow-400 fill-yellow-400" : "text-gray-300")} />
+                          </button>
+                        ))}
+                        {designerRating > 0 && <span className="text-sm text-muted mr-2">{toPersianNumber(designerRating)}/۵</span>}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground mb-2">نظر شما (اختیاری)</p>
+                      <textarea value={designerComment} onChange={(e) => setDesignerComment(e.target.value)} placeholder="نظر خود را درباره طراح بنویسید..." className="w-full p-3 border border-border rounded-lg text-sm resize-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors" rows={3} maxLength={1000} />
+                      {designerComment.length > 0 && <p className="text-xs text-muted mt-1 text-left" dir="ltr">{designerComment.length}/1000</p>}
+                    </div>
+                    <Button variant="primary" className="w-full" onClick={() => submitDesignerReviewMutation.mutate()} isLoading={submitDesignerReviewMutation.isPending} disabled={designerRating === 0} leftIcon={<Send className="w-4 h-4" />}>
+                      ثبت نظر طراح
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* Payment Modal */}

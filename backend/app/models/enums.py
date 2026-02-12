@@ -93,6 +93,12 @@ class RevisionStatus(str, Enum):
     REJECTED = "REJECTED"              # Customer rejected and requested changes
 
 
+class ReviewType(str, Enum):
+    """Target type for a customer review."""
+    PRINTSHOP = "PRINTSHOP"
+    DESIGNER = "DESIGNER"
+
+
 class SubscriptionPlan(str, Enum):
     """Subscription plan types."""
     ADVANCED_SEARCH = "ADVANCED_SEARCH"

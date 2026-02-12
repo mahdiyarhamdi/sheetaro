@@ -84,6 +84,9 @@ docker-compose up --build
 - `GET /orders/{id}/messages` - Chat messages (PRIVATE plans only, paginated)
 - `POST /orders/{id}/messages` - Send chat message (body: `{"content": "...", "file_url": "..."}`)
 - `PATCH /orders/{id}/messages/read` - Mark chat messages as read
+- `POST /orders/{id}/review` - Submit review (body: `{"rating": 1-5, "comment": "...", "review_type": "PRINTSHOP|DESIGNER"}`)
+- `GET /orders/{id}/review` - Get review for an order (query: `review_type=PRINTSHOP|DESIGNER`)
+- `GET /orders/{id}/reviews` - Get all reviews (printshop + designer) for an order
 
 ### Designer (`/api/v1/designer`)
 - `GET /designer/orders` - List orders assigned to the designer (filter by `status`)
@@ -92,6 +95,9 @@ docker-compose up --build
 - `POST /designer/orders/{id}/upload-design` - Upload a new design revision (multipart/form-data)
 - `GET /designer/orders/{id}/revisions` - List design revisions for the order
 - `GET /designer/stats` - Get designer dashboard statistics
+- `GET /designer/validations` - List validation requests (filter by `status`: PENDING/PASSED/FAILED)
+- `POST /designer/validations/{id}/approve` - Approve a validation request
+- `POST /designer/validations/{id}/reject` - Reject a validation request (body: `{"comment": "..."}`)
 
 ### Print Shop (`/api/v1/printshop`)
 - `GET /printshop/orders` - Get queue of orders ready for printing (READY_FOR_PRINT). Response includes enriched `PrintShopOrderOut` with category info, design plan label, payment status, template name, and customer details.
@@ -316,6 +322,8 @@ python -m pytest tests/ -v -k "auth"
 | `tests/integration/test_printshop_api.py` | Print shop API endpoints (queue, accept, my-orders, complete, ship, stats, settlements) |
 | `tests/integration/test_admin_printshop_api.py` | Admin print shop management endpoints (list, stats, orders, reassign, settlements, SLA) |
 | `tests/integration/test_admin_designer_api.py` | Admin designer management endpoints (list, create, toggle-active, stats, search, filters) |
+| `tests/integration/test_designer_validation_api.py` | Designer validation endpoints (list, approve, reject, auth checks) |
+| `tests/integration/test_designer_review_api.py` | Designer review endpoints (submit printshop/designer reviews, duplicate prevention, get reviews) |
 
 ### Dynamic Template Builder Tests
 

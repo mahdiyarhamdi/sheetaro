@@ -18,6 +18,7 @@ import {
   Clock,
   UserX,
   UserCheck,
+  Star,
 } from "lucide-react";
 import { toPersianNumber } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -34,6 +35,8 @@ interface DesignerItem {
   total_orders: number;
   in_progress_orders: number;
   completed_orders: number;
+  avg_rating?: number;
+  review_count: number;
 }
 
 export default function AdminDesignersPage() {
@@ -254,6 +257,13 @@ export default function AdminDesignersPage() {
                     <CheckCircle className="w-3.5 h-3.5" />
                     {toPersianNumber(designer.completed_orders)} تکمیل شده
                   </span>
+                  {designer.avg_rating != null && (
+                    <span className="flex items-center gap-1.5 text-yellow-500">
+                      <Star className="w-3.5 h-3.5 fill-yellow-400" />
+                      {toPersianNumber(designer.avg_rating.toFixed(1))}
+                      <span className="text-muted">({toPersianNumber(designer.review_count)} نظر)</span>
+                    </span>
+                  )}
                 </div>
 
                 {/* Row 4: Bio (if present) */}
