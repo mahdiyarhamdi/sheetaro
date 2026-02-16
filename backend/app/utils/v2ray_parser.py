@@ -145,6 +145,8 @@ def _parse_vmess(link: str) -> dict:
     host = data.get("host", "")
     path = data.get("path", "")
     header_type = data.get("type", "none")
+    fp = data.get("fp", "")
+    alpn = data.get("alpn", "")
 
     if not address or not uid:
         raise ValueError("vmess link missing address or id")
@@ -167,7 +169,8 @@ def _parse_vmess(link: str) -> dict:
             ]
         },
         "streamSettings": _build_stream_settings(
-            net=net, tls=tls, sni=sni, host=host, path=path, header_type=header_type
+            net=net, tls=tls, sni=sni, host=host, path=path,
+            header_type=header_type, fp=fp, alpn=alpn,
         ),
     }
 
