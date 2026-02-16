@@ -242,16 +242,40 @@ async def remove_proxy(
 
 @router.post(
     "/admin/proxy/restart",
-    summary="Signal services to restart and pick up new proxy config",
+    summary="Restart xray and bot to apply new proxy config",
 )
 async def restart_proxy_services(
     _: dict = Depends(get_current_admin_user),
 ) -> dict:
-    """Write a restart signal file that bot checks on next poll cycle."""
-    _ensure_config_dir()
-    # Write a signal file; the bot's wrapper script detects this and exits,
-    # Docker restart policy will bring it back with new config.
-    signal_path = PROXY_CONFIG_DIR / "restart_signal"
-    signal_path.write_text("restart")
-    logger.info("Restart signal written for bot")
-    return {"message": "Restart signal sent. Bot will restart within ~30 seconds."}
+    """Restart xray and bot containers via Docker API to apply new proxy config."""
+    import socket
+
+    docker_sock = Path("/var/run/docker.sock")
+    results = []
+
+    if not docker_sock.exists():
+        # Fallback: write signal file for bot self-restart
+        _ensure_config_dir()
+        signal_path = PROXY_CONFIG_DIR / "restart_signal"
+        signal_path.write_text("restart")
+        return {"message": "Docker socket not available. Bot will self-restart within ~30s."}
+
+    for container_name in ["sheetaro_xray", "sheetaro_bot"]:
+        try:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.connect(str(docker_sock))
+            request = f"POST /containers/{container_name}/restart?t=5 HTTP/1.1\r\nHost: localhost\r\n\r\n"
+            sock.sendall(request.encode())
+            response = sock.recv(4096).decode()
+            sock.close()
+            if "204" in response or "304" in response:
+                results.append(f"{container_name}: restarted")
+                logger.info(f"Container {container_name} restarted")
+            else:
+                results.append(f"{container_name}: {response[:80]}")
+                logger.warning(f"Container {container_name} restart response: {response[:80]}")
+        except Exception as e:
+            results.append(f"{container_name}: error - {str(e)[:50]}")
+            logger.error(f"Failed to restart {container_name}: {e}")
+
+    return {"message": " | ".join(results)}
