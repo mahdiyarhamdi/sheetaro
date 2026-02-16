@@ -108,7 +108,7 @@ async def _test_proxy_connectivity(timeout: float = 15.0) -> tuple[bool, float, 
             start = time.monotonic()
             response = await client.get(TELEGRAM_TEST_URL)
             latency = (time.monotonic() - start) * 1000
-            if response.status_code in (200, 404):
+            if response.status_code < 500:
                 return True, latency, f"Connected ({latency:.0f}ms)"
             return False, latency, f"HTTP {response.status_code}"
     except httpx.ProxyError as e:
