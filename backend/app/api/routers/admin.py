@@ -25,6 +25,10 @@ from app.services.user_service import UserService
 from app.services.order_service import OrderService
 from app.services.review_service import ReviewService
 from app.repositories.review_repository import ReviewRepository
+from app.utils.telegram_notify import (
+    notify_designer_assigned as tg_notify_designer,
+    notify_customer_designer_assigned as tg_notify_customer_designer,
+)
 from app.core.security import get_password_hash
 from app.schemas.user import UserOut, CreateDesignerRequest, DesignerListItem, DesignerListResponse
 from app.schemas.order import PrintShopStats, SettlementOut
@@ -441,7 +445,21 @@ async def assign_order(
         order.assigned_printshop_id = printshop_id
     
     await db.commit()
-    
+
+    # Send Telegram notifications for designer assignment
+    if designer_id:
+        try:
+            designer = await db.get(User, designer_id)
+            if designer and designer.telegram_id:
+                await tg_notify_designer(designer.telegram_id, str(order_id))
+            # Notify customer
+            if order.user_id:
+                customer = await db.get(User, order.user_id)
+                if customer and customer.telegram_id:
+                    await tg_notify_customer_designer(customer.telegram_id, str(order_id))
+        except Exception:
+            pass  # Don't fail the assignment if notification fails
+
     return {
         "success": True,
         "order_id": str(order_id),
@@ -679,11 +697,19 @@ async def list_validation_requests(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ) -> ValidationListResponse:
-    """List orders with validation requested. Admin only."""
+    """List orders with validation requested (only after payment approved). Admin only."""
     from app.models.category import Category
     
-    query = select(Order).where(Order.validation_requested == True)
-    count_query = select(func.count(Order.id)).where(Order.validation_requested == True)
+    # Only show validation requests for orders that have been paid
+    # (exclude PENDING_PAYMENT, PAYMENT_UPLOADED, PAYMENT_REJECTED)
+    paid_filter = Order.status.notin_([
+        OrderStatus.PENDING_PAYMENT,
+        OrderStatus.PAYMENT_UPLOADED,
+        OrderStatus.PAYMENT_REJECTED,
+    ])
+    
+    query = select(Order).where(Order.validation_requested == True, paid_filter)
+    count_query = select(func.count(Order.id)).where(Order.validation_requested == True, paid_filter)
     
     if status:
         # PENDING should include NULL validation_status (new requests)
@@ -797,6 +823,13 @@ async def approve_validation(
             detail="این سفارش درخواست اعتبارسنجی نداشته است"
         )
     
+    # Prevent validation before payment is approved
+    if order.status in [OrderStatus.PENDING_PAYMENT, OrderStatus.PAYMENT_UPLOADED, OrderStatus.PAYMENT_REJECTED]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="اعتبارسنجی قبل از تأیید پرداخت امکان‌پذیر نیست"
+        )
+    
     order.validation_status = ValidationStatus.PASSED
     order.assigned_validator_id = current_user.id
     
@@ -835,6 +868,13 @@ async def reject_validation(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="این سفارش درخواست اعتبارسنجی نداشته است"
+        )
+    
+    # Prevent validation before payment is approved
+    if order.status in [OrderStatus.PENDING_PAYMENT, OrderStatus.PAYMENT_UPLOADED, OrderStatus.PAYMENT_REJECTED]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="اعتبارسنجی قبل از تأیید پرداخت امکان‌پذیر نیست"
         )
     
     order.validation_status = ValidationStatus.FAILED

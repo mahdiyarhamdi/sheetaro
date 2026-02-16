@@ -98,6 +98,10 @@ export interface User {
   role?: string | null;
   phone_verified: boolean;
   web_linked: boolean;
+  city?: string | null;
+  address?: string | null;
+  postal_code?: string | null;
+  bio?: string | null;
   created_at: string;
 }
 
@@ -121,6 +125,36 @@ export const authApi = {
 
   // Get current user
   me: () => api.get<User>("/auth/me"),
+};
+
+// ============ Profile API ============
+
+export interface ProfileUpdateData {
+  full_name?: string;
+  city?: string;
+  address?: string;
+  postal_code?: string;
+  bio?: string;
+}
+
+export const profileApi = {
+  update: (data: ProfileUpdateData) => api.patch<User>("/users/me", data),
+};
+
+// ============ Order Draft API ============
+
+export interface OrderDraft {
+  id: string;
+  current_step: string;
+  data: Record<string, unknown>;
+  updated_at: string;
+}
+
+export const draftsApi = {
+  get: () => api.get<OrderDraft>("/orders/draft"),
+  save: (data: { current_step: string; data: Record<string, unknown> }) =>
+    api.put<OrderDraft>("/orders/draft", data),
+  delete: () => api.delete("/orders/draft"),
 };
 
 // ============ Orders API ============
@@ -613,11 +647,19 @@ export interface PlaceholderImageUploadResponse {
 }
 
 export const filesApi = {
-  upload: (file: File, type: string = "design") => {
+  upload: (file: File, type: string = "design", userId?: string) => {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("type", type);
-    return api.post<{ url: string; file_id: string }>("/files/upload", formData, {
+    let uid = userId;
+    if (!uid && typeof window !== "undefined") {
+      try {
+        const userStr = localStorage.getItem("user");
+        if (userStr) uid = JSON.parse(userStr).id;
+      } catch { /* ignore */ }
+    }
+    if (!uid) throw new Error("User ID is required for file upload");
+    return api.post<{ file_url: string; url?: string; filename: string; file_size: number; content_type: string }>(`/files/upload?user_id=${uid}`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },

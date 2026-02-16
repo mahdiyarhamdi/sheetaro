@@ -13,32 +13,33 @@ logger = logging.getLogger(__name__)
 WAITING_OTP = 1
 
 
+class _StartLinkwebFilter(filters.BaseFilter):
+    """Matches only /start linkweb deep-link."""
+
+    def filter(self, message) -> bool:
+        if not message or not message.text:
+            return False
+        return message.text.strip() in ("/start linkweb", "/start linkweb@sheetarobot")
+
+
 async def linkweb_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle /linkweb command - start web account linking process."""
     user = update.effective_user
     
     logger.info(f"User {user.id} started web link process")
     
-    # Check if user is already registered in the system
+    # Check if already linked (optional, skip if user not found)
     user_data = await api_client.get_user(user.id)
-    
-    if not user_data:
-        await update.message.reply_text(
-            "❌ ابتدا /start را بزنید تا در سیستم ثبت‌نام شوید.",
-            reply_markup=get_main_menu_keyboard(is_admin=False)
-        )
-        return ConversationHandler.END
-    
-    # Check if already linked
-    if user_data.get('web_linked'):
+    if user_data and user_data.get('web_linked'):
+        is_admin = user_data.get('role') == 'ADMIN'
         await update.message.reply_text(
             "✅ حساب تلگرام شما قبلاً به وب اپ متصل شده است.\n\n"
             "می‌توانید با همین حساب در وب اپ وارد شوید.",
-            reply_markup=get_main_menu_keyboard(is_admin=user_data.get('role') == 'admin')
+            reply_markup=get_main_menu_keyboard(is_admin=is_admin)
         )
         return ConversationHandler.END
     
-    # Prompt for OTP
+    # Prompt for OTP (no need to be registered first)
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔙 انصراف", callback_data="cancel_linkweb")]
     ])
@@ -47,7 +48,7 @@ async def linkweb_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         "🔗 *اتصال به وب اپ*\n\n"
         "برای اتصال حساب تلگرام به وب اپ:\n\n"
         "1️⃣ ابتدا در وب اپ sheetaro.com ثبت‌نام کنید\n"
-        "2️⃣ به بخش «اتصال تلگرام» بروید\n"
+        "2️⃣ به بخش پروفایل و «اتصال تلگرام» بروید\n"
         "3️⃣ کد ۶ رقمی که در وب نمایش داده می‌شود را اینجا وارد کنید\n\n"
         "📝 لطفاً کد ۶ رقمی را وارد کنید:",
         parse_mode="Markdown",
@@ -82,7 +83,7 @@ async def handle_otp_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             
             # Get updated user data
             user_data = await api_client.get_user(user.id)
-            is_admin = user_data and user_data.get('role') == 'admin'
+            is_admin = user_data and user_data.get('role') == 'ADMIN'
             
             await update.message.reply_text(
                 "✅ *اتصال موفقیت‌آمیز!*\n\n"
@@ -122,7 +123,7 @@ async def cancel_linkweb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     user = update.effective_user
     user_data = await api_client.get_user(user.id)
-    is_admin = user_data and user_data.get('role') == 'admin'
+    is_admin = user_data and user_data.get('role') == 'ADMIN'
     
     await query.message.edit_text(
         "❌ فرآیند اتصال لغو شد.\n\n"
@@ -138,24 +139,32 @@ async def cancel_linkweb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 def get_web_link_handler() -> ConversationHandler:
-    """Get the ConversationHandler for web linking."""
+    """Get the ConversationHandler for web linking.
+
+    Entry points:
+      - /linkweb command
+      - /start linkweb deep link (via custom filter)
+    """
     return ConversationHandler(
         entry_points=[
             CommandHandler("linkweb", linkweb_command),
+            MessageHandler(_StartLinkwebFilter(), linkweb_command),
         ],
         states={
             WAITING_OTP: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_otp_input),
+                CallbackQueryHandler(cancel_linkweb, pattern="^cancel_linkweb$"),
             ],
         },
         fallbacks=[
             CommandHandler("cancel", cancel_linkweb),
+            CallbackQueryHandler(cancel_linkweb, pattern="^cancel_linkweb$"),
         ],
         name="web_link",
         persistent=False,
     )
 
 
-# Export callback query handler for cancel button
+# Kept for standalone use if needed
 cancel_linkweb_handler = CallbackQueryHandler(cancel_linkweb, pattern="^cancel_linkweb$")
 

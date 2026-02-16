@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { OptimizedImage } from "@/components/ui";
 import { ImagePreview } from "@/components/ui/image-preview";
 import { useCategories, useCategoryAttributes, useCategoryPlans, usePlanTemplates, usePlanQuestionnaire, useTemplatePlaceholders, useTemplatePreview } from "@/hooks/useCatalog";
 import { useOrders } from "@/hooks/useOrders";
 import { useAuth } from "@/hooks/useAuth";
-import { filesApi, paymentsApi, ordersApi, PlaceholderImageUploadResponse } from "@/lib/api";
+import { filesApi, paymentsApi, ordersApi, draftsApi, profileApi, PlaceholderImageUploadResponse } from "@/lib/api";
 import {
   Card,
   CardHeader,
@@ -38,6 +38,10 @@ import {
   AlertTriangle,
   Copy,
   X,
+  MapPin,
+  Hash,
+  UserIcon,
+  RotateCcw,
 } from "lucide-react";
 import { cn, formatPrice, toPersianNumber } from "@/lib/utils";
 import { getImageUrl } from "@/lib/image-utils";
@@ -45,13 +49,14 @@ import toast from "react-hot-toast";
 
 // Step types for different plan flows
 type BaseStep = "category" | "attributes" | "plan";
+type ProfileStep = "profile";
 type PublicPlanStep = "template" | "placeholders" | "validation";
 type SemiPrivateStep = "questionnaire" | "validation";
 type PrivateStep = "upload" | "validation";
 type PaymentStep = "payment";
 type FinalStep = "summary";
 
-type OrderStep = BaseStep | PublicPlanStep | SemiPrivateStep | PrivateStep | PaymentStep | FinalStep;
+type OrderStep = BaseStep | ProfileStep | PublicPlanStep | SemiPrivateStep | PrivateStep | PaymentStep | FinalStep;
 
 interface PlaceholderValue {
   type: "IMAGE" | "TEXT";
@@ -65,6 +70,8 @@ interface OrderData {
   template_id?: string;
   questionnaire_answers?: Record<string, string>;
   design_file?: File;
+  design_file_url?: string;
+  design_file_name?: string;
   placeholder_values: Record<string, PlaceholderValue>;
   wants_validation: boolean;
   quantity: number;
@@ -84,12 +91,25 @@ export default function NewOrderPage() {
     quantity: 1,
   });
   const [uploadingImage, setUploadingImage] = useState<string | null>(null);
+  const [uploadingDesign, setUploadingDesign] = useState(false);
+
+  // Profile step state (for inline profile editing)
+  const [profileCity, setProfileCity] = useState("");
+  const [profileAddress, setProfileAddress] = useState("");
+  const [profilePostalCode, setProfilePostalCode] = useState("");
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   
   // Payment receipt state
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Draft persistence state
+  const [isDraftLoading, setIsDraftLoading] = useState(true);
+  const [showDraftPrompt, setShowDraftPrompt] = useState(false);
+  const [pendingDraft, setPendingDraft] = useState<{ current_step: string; data: Record<string, unknown> } | null>(null);
+  const saveDraftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Bank card info (should come from API/settings)
   const bankInfo = {
@@ -108,7 +128,81 @@ export default function NewOrderPage() {
   
   const previewMutation = useTemplatePreview();
   const { createOrder, isCreatingOrder } = useOrders();
-  const { user } = useAuth();
+  const { user, refetchUser } = useAuth();
+
+  // Check whether the user's shipping profile is incomplete
+  const isProfileIncomplete = !user?.city || !user?.address || !user?.postal_code;
+
+  // ─── Draft: load on mount ───
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await draftsApi.get();
+        if (!cancelled && res.data) {
+          setPendingDraft({ current_step: res.data.current_step, data: res.data.data });
+          setShowDraftPrompt(true);
+        }
+      } catch {
+        // 404 = no draft, ignore
+      } finally {
+        if (!cancelled) setIsDraftLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Restore draft helper
+  const restoreDraft = useCallback(() => {
+    if (!pendingDraft) return;
+    const d = pendingDraft.data as Record<string, unknown>;
+    setOrderData({
+      category_id: (d.category_id as string) || "",
+      attributes: (d.attributes as Record<string, string>) || {},
+      plan_id: (d.plan_id as string) || "",
+      template_id: (d.template_id as string) || undefined,
+      questionnaire_answers: (d.questionnaire_answers as Record<string, string>) || undefined,
+      placeholder_values: (d.placeholder_values as Record<string, PlaceholderValue>) || {},
+      wants_validation: (d.wants_validation as boolean) || false,
+      quantity: (d.quantity as number) || 1,
+    });
+    setCurrentStep(pendingDraft.current_step as OrderStep);
+    setShowDraftPrompt(false);
+    setPendingDraft(null);
+  }, [pendingDraft]);
+
+  const discardDraft = useCallback(async () => {
+    setShowDraftPrompt(false);
+    setPendingDraft(null);
+    try { await draftsApi.delete(); } catch { /* ignore */ }
+  }, []);
+
+  // ─── Draft: save on step/data change (debounced) ───
+  const saveDraft = useCallback((step: string, data: OrderData) => {
+    if (saveDraftTimer.current) clearTimeout(saveDraftTimer.current);
+    saveDraftTimer.current = setTimeout(async () => {
+      try {
+        // Strip File objects (not serializable)
+        const { design_file, ...serializableData } = data;
+        await draftsApi.save({ current_step: step, data: serializableData as Record<string, unknown> });
+      } catch { /* silent */ }
+    }, 600);
+  }, []);
+
+  useEffect(() => {
+    // Don't save while loading draft or showing draft prompt
+    if (isDraftLoading || showDraftPrompt) return;
+    saveDraft(currentStep, orderData);
+  }, [currentStep, orderData, isDraftLoading, showDraftPrompt, saveDraft]);
+
+  // Init profile fields from user
+  useEffect(() => {
+    if (user) {
+      setProfileCity(user.city || "");
+      setProfileAddress(user.address || "");
+      setProfilePostalCode(user.postal_code || "");
+    }
+  }, [user]);
 
   const selectedCategory = categories?.find((c) => c.id === orderData.category_id);
   const selectedPlan = plans?.find((p) => p.id === orderData.plan_id);
@@ -136,17 +230,23 @@ export default function NewOrderPage() {
     }
   }, [orderData.template_id, orderData.placeholder_values, placeholders]);
 
-  // Dynamic steps based on plan type
+  // Dynamic steps based on plan type (+ conditional profile step)
   const getStepsForPlanType = () => {
-    const baseSteps = [
-      { id: "category" as OrderStep, label: "انتخاب محصول", icon: Package },
-      { id: "attributes" as OrderStep, label: "ویژگی‌ها", icon: Palette },
-      { id: "plan" as OrderStep, label: "نوع طراحی", icon: FileText },
+    const baseSteps: { id: OrderStep; label: string; icon: React.ElementType }[] = [
+      { id: "category", label: "انتخاب محصول", icon: Package },
+      { id: "attributes", label: "ویژگی‌ها", icon: Palette },
+      { id: "plan", label: "نوع طراحی", icon: FileText },
     ];
+
+    // Add profile completion step if shipping info is missing
+    const profileSteps: { id: OrderStep; label: string; icon: React.ElementType }[] = isProfileIncomplete
+      ? [{ id: "profile", label: "اطلاعات ارسال", icon: MapPin }]
+      : [];
 
     if (!selectedPlan) {
       return [
         ...baseSteps,
+        ...profileSteps,
         { id: "summary" as OrderStep, label: "خلاصه سفارش", icon: FileText },
         { id: "payment" as OrderStep, label: "پرداخت", icon: CreditCard },
       ];
@@ -155,20 +255,16 @@ export default function NewOrderPage() {
     let planSpecificSteps: { id: OrderStep; label: string; icon: React.ElementType }[] = [];
 
     if (selectedPlan.has_templates) {
-      // PUBLIC plan: template + placeholders + optional validation
       planSpecificSteps = [
         { id: "template", label: "انتخاب قالب", icon: LayoutTemplate },
         { id: "placeholders", label: "محتوای طرح", icon: Type },
         { id: "validation", label: "اعتبارسنجی", icon: ShieldCheck },
       ];
     } else if (selectedPlan.has_questionnaire) {
-      // SEMI_PRIVATE / PRIVATE: questionnaire only, no validation step
-      // (design is created by designer, not uploaded by customer)
       planSpecificSteps = [
         { id: "questionnaire", label: "اطلاعات طراحی", icon: FileText },
       ];
     } else if (selectedPlan.has_file_upload) {
-      // OWN_DESIGN: customer uploads their file + optional validation
       planSpecificSteps = [
         { id: "upload", label: "آپلود طرح", icon: Upload },
         { id: "validation", label: "اعتبارسنجی", icon: ShieldCheck },
@@ -177,6 +273,7 @@ export default function NewOrderPage() {
 
     return [
       ...baseSteps,
+      ...profileSteps,
       ...planSpecificSteps,
       { id: "summary" as OrderStep, label: "خلاصه سفارش", icon: FileText },
       { id: "payment" as OrderStep, label: "پرداخت", icon: CreditCard },
@@ -255,6 +352,8 @@ export default function NewOrderPage() {
         return attributes.every((attr) => !!orderData.attributes[attr.id]);
       case "plan":
         return !!orderData.plan_id;
+      case "profile":
+        return !!profileCity.trim() && !!profileAddress.trim() && !!profilePostalCode.trim();
       case "template":
           return !!orderData.template_id;
       case "placeholders":
@@ -270,7 +369,7 @@ export default function NewOrderPage() {
         }
         return true;
       case "upload":
-        return !!orderData.design_file;
+        return !!orderData.design_file_url && !uploadingDesign;
       case "validation":
         return true; // Always can proceed from validation step
       case "summary":
@@ -282,7 +381,25 @@ export default function NewOrderPage() {
     }
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
+    // If leaving the profile step, save the profile first
+    if (currentStep === "profile") {
+      setIsSavingProfile(true);
+      try {
+        await profileApi.update({
+          city: profileCity.trim(),
+          address: profileAddress.trim(),
+          postal_code: profilePostalCode.trim(),
+        });
+        refetchUser();
+      } catch {
+        toast.error("خطا در ذخیره اطلاعات پروفایل");
+        setIsSavingProfile(false);
+        return;
+      }
+      setIsSavingProfile(false);
+    }
+
     const nextIndex = currentStepIndex + 1;
     if (nextIndex < steps.length) {
       setCurrentStep(steps[nextIndex].id);
@@ -349,15 +466,22 @@ export default function NewOrderPage() {
     setIsSubmitting(true);
 
     try {
-      // Map plan characteristics to design_plan enum
+      // Determine design_plan enum from plan_type (authoritative) or fallback to flags
       let designPlan: "PUBLIC" | "SEMI_PRIVATE" | "PRIVATE" | "OWN_DESIGN" = "PUBLIC";
       if (selectedPlan) {
-        if (selectedPlan.has_templates) {
-          designPlan = "PUBLIC";
-        } else if (selectedPlan.has_questionnaire) {
-          designPlan = "SEMI_PRIVATE";
-        } else if (selectedPlan.has_file_upload) {
-          designPlan = "PRIVATE";
+        if (selectedPlan.plan_type) {
+          // Use explicit plan_type from backend (authoritative)
+          designPlan = selectedPlan.plan_type;
+        } else {
+          // Fallback: try slug, then boolean flags
+          const slug = selectedPlan.slug.toLowerCase();
+          if (slug === "private") designPlan = "PRIVATE";
+          else if (slug === "semi_private") designPlan = "SEMI_PRIVATE";
+          else if (slug === "own_design") designPlan = "OWN_DESIGN";
+          else if (slug === "public") designPlan = "PUBLIC";
+          else if (selectedPlan.has_file_upload) designPlan = "OWN_DESIGN";
+          else if (selectedPlan.has_templates) designPlan = "PUBLIC";
+          else if (selectedPlan.has_questionnaire) designPlan = "SEMI_PRIVATE";
         }
       }
 
@@ -377,17 +501,18 @@ export default function NewOrderPage() {
         };
       });
 
-      // Step 1: Create order
+      // Step 1: Create order (design_file_url already uploaded during the upload step)
       const orderResponse = await new Promise<{ data: { id: string } }>((resolve, reject) => {
         createOrder({
           data: {
             category_id: orderData.category_id,
             design_plan: designPlan,
-            plan_id: orderData.plan_id, // Send actual plan_id to get correct price from database
+            plan_id: orderData.plan_id,
             selected_attributes: selectedAttributes,
             quantity: orderData.quantity,
             validation_requested: validationRequested,
             template_id: orderData.template_id,
+            design_file_url: orderData.design_file_url,
           },
           userId: user.id,
         }, {
@@ -461,6 +586,9 @@ export default function NewOrderPage() {
 
       // Step 4: Upload receipt
       await paymentsApi.uploadReceipt(paymentId, receiptFile);
+
+      // Delete the draft (backend already deletes on order create, but clean up anyway)
+      try { await draftsApi.delete(); } catch { /* ignore */ }
 
       toast.success("سفارش با موفقیت ثبت شد. رسید پرداخت در حال بررسی است.");
       router.push(`/orders/${orderId}`);
@@ -659,6 +787,61 @@ export default function NewOrderPage() {
                 description="برای این محصول پلن طراحی تعریف نشده است"
               />
             )}
+          </div>
+        );
+
+      case "profile":
+        return (
+          <div className="space-y-4">
+            <p className="text-muted">
+              برای ارسال سفارش، لطفاً اطلاعات آدرس خود را تکمیل کنید:
+            </p>
+
+            <Card>
+              <CardContent className="pt-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">شهر *</label>
+                  <div className="relative">
+                    <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
+                    <input
+                      type="text"
+                      className="w-full pr-10 pl-4 py-2.5 border border-border rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+                      placeholder="مثال: تهران"
+                      value={profileCity}
+                      onChange={(e) => setProfileCity(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">آدرس کامل *</label>
+                  <textarea
+                    className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-primary min-h-[80px]"
+                    placeholder="آدرس دقیق جهت ارسال سفارش"
+                    value={profileAddress}
+                    onChange={(e) => setProfileAddress(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">کد پستی *</label>
+                  <div className="relative">
+                    <Hash className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
+                    <input
+                      type="text"
+                      className="w-full pr-10 pl-4 py-2.5 border border-border rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+                      placeholder="مثال: ۱۲۳۴۵۶۷۸۹۰"
+                      value={profilePostalCode}
+                      onChange={(e) => setProfilePostalCode(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <p className="text-xs text-muted">
+                  این اطلاعات در پروفایل شما ذخیره می‌شود و برای سفارشات بعدی نیازی به وارد کردن مجدد نیست.
+                </p>
+              </CardContent>
+            </Card>
           </div>
         );
 
@@ -1107,9 +1290,11 @@ export default function NewOrderPage() {
             <div
               className={cn(
                 "border-2 border-dashed rounded-xl p-8 text-center transition-colors",
-                orderData.design_file
+                orderData.design_file_url
                   ? "border-success bg-success-light"
-                  : "border-border hover:border-primary/30"
+                  : uploadingDesign
+                    ? "border-primary/50 bg-primary/5"
+                    : "border-border hover:border-primary/30"
               )}
             >
               <input
@@ -1117,25 +1302,41 @@ export default function NewOrderPage() {
                 id="design-file"
                 className="hidden"
                 accept=".pdf,.ai,.psd,.eps,.svg,.png,.jpg,.jpeg"
-                onChange={(e) => {
+                disabled={uploadingDesign}
+                onChange={async (e) => {
                   const file = e.target.files?.[0];
-                  if (file) {
-                    setOrderData({ ...orderData, design_file: file });
+                  if (!file) return;
+                  setUploadingDesign(true);
+                  setOrderData((prev) => ({ ...prev, design_file: file, design_file_url: undefined, design_file_name: file.name }));
+                  try {
+                    const uploadRes = await filesApi.upload(file, "design");
+                    const fileUrl = uploadRes.data.file_url || uploadRes.data.url;
+                    setOrderData((prev) => ({ ...prev, design_file_url: fileUrl }));
+                    toast.success("فایل با موفقیت آپلود شد");
+                  } catch {
+                    toast.error("خطا در آپلود فایل. لطفاً دوباره تلاش کنید.");
+                    setOrderData((prev) => ({ ...prev, design_file: undefined, design_file_name: undefined }));
+                  } finally {
+                    setUploadingDesign(false);
                   }
                 }}
               />
-              <label htmlFor="design-file" className="cursor-pointer">
-                <Upload className={cn(
-                  "w-12 h-12 mx-auto mb-4",
-                  orderData.design_file ? "text-success" : "text-muted"
-                )} />
-                {orderData.design_file ? (
+              <label htmlFor="design-file" className={cn("cursor-pointer", uploadingDesign && "pointer-events-none")}>
+                {uploadingDesign ? (
                   <>
-                    <p className="font-medium text-foreground">{orderData.design_file.name}</p>
+                    <div className="w-12 h-12 mx-auto mb-4 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+                    <p className="font-medium text-foreground">در حال آپلود...</p>
+                    <p className="text-sm text-muted mt-1">{orderData.design_file_name}</p>
+                  </>
+                ) : orderData.design_file_url ? (
+                  <>
+                    <Check className="w-12 h-12 mx-auto mb-4 text-success" />
+                    <p className="font-medium text-foreground">{orderData.design_file_name || "فایل آپلود شده"}</p>
                     <p className="text-sm text-muted mt-1">برای تغییر کلیک کنید</p>
                   </>
                 ) : (
                   <>
+                    <Upload className="w-12 h-12 mx-auto mb-4 text-muted" />
                     <p className="font-medium text-foreground">فایل را انتخاب کنید یا اینجا رها کنید</p>
                     <p className="text-sm text-muted mt-1">
                       فرمت‌های مجاز: PDF, AI, PSD, EPS, SVG, PNG, JPG
@@ -1505,6 +1706,42 @@ export default function NewOrderPage() {
     }
   };
 
+  // Show loading state while checking for draft
+  if (isDraftLoading) {
+    return (
+      <div className="max-w-3xl mx-auto">
+        <PageLoading />
+      </div>
+    );
+  }
+
+  // Show draft resume prompt
+  if (showDraftPrompt && pendingDraft) {
+    return (
+      <div className="space-y-6 max-w-md mx-auto mt-12">
+        <Card>
+          <CardContent className="py-8 text-center space-y-4">
+            <div className="w-14 h-14 rounded-full bg-primary-50 flex items-center justify-center mx-auto">
+              <RotateCcw className="w-7 h-7 text-primary" />
+            </div>
+            <h2 className="text-lg font-bold text-foreground">سفارش ناتمام</h2>
+            <p className="text-sm text-muted">
+              شما یک سفارش ناتمام دارید. می‌خواهید ادامه دهید یا از اول شروع کنید؟
+            </p>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <Button variant="primary" onClick={restoreDraft}>
+                ادامه سفارش
+              </Button>
+              <Button variant="outline" onClick={discardDraft}>
+                شروع از اول
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       {/* Header */}
@@ -1588,10 +1825,11 @@ export default function NewOrderPage() {
               <Button
                 variant="primary"
                 onClick={handleNext}
-                disabled={!canProceed()}
+                disabled={!canProceed() || isSavingProfile}
+                isLoading={isSavingProfile}
                 rightIcon={<ArrowLeft className="w-4 h-4" />}
               >
-                مرحله بعد
+                {currentStep === "profile" ? "ذخیره و ادامه" : "مرحله بعد"}
               </Button>
             )}
           </div>
