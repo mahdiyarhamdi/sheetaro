@@ -1,7 +1,9 @@
 """Main bot entry point - Using unified flow manager."""
 
 import os
+import json
 import logging
+from pathlib import Path
 
 from dotenv import load_dotenv
 from telegram import Update
@@ -12,6 +14,7 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters,
 )
+from telegram.request import HTTPXRequest
 
 from handlers.start import start_command, make_admin_command
 from handlers.text_router import route_text_input
@@ -75,6 +78,28 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _get_proxy_url() -> str | None:
+    """Read proxy URL from shared config if enabled."""
+    status_path = Path("/app/proxy_config/status.json")
+    if status_path.exists():
+        try:
+            data = json.loads(status_path.read_text())
+            if data.get("enabled"):
+                proxy_url = f"socks5://xray:10808"
+                logger.info(f"Proxy enabled: {data.get('protocol', '?')} via {data.get('server', '?')}")
+                return proxy_url
+        except Exception as e:
+            logger.warning(f"Failed to read proxy config: {e}")
+
+    # Fallback to environment variable
+    env_proxy = os.getenv("TELEGRAM_PROXY_URL")
+    if env_proxy:
+        logger.info(f"Using proxy from env: {env_proxy}")
+        return env_proxy
+
+    return None
+
+
 def main() -> None:
     """Start the bot."""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -82,8 +107,19 @@ def main() -> None:
     if not token:
         raise ValueError("TELEGRAM_BOT_TOKEN environment variable is not set")
     
-    # Create application
-    application = Application.builder().token(token).build()
+    # Check for proxy configuration
+    proxy_url = _get_proxy_url()
+    builder = Application.builder().token(token)
+
+    if proxy_url:
+        logger.info(f"Configuring bot with SOCKS5 proxy: {proxy_url}")
+        request = HTTPXRequest(proxy=proxy_url, connect_timeout=30.0, read_timeout=30.0)
+        get_updates_request = HTTPXRequest(proxy=proxy_url, connect_timeout=30.0, read_timeout=60.0)
+        builder = builder.request(request).get_updates_request(get_updates_request)
+    else:
+        logger.info("No proxy configured, connecting directly to Telegram")
+
+    application = builder.build()
     
     # ============== Web Link Handler (must be before /start to catch /start linkweb) ==============
     application.add_handler(get_web_link_handler())
@@ -185,8 +221,23 @@ def main() -> None:
     
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     
-    # Start bot
+    # Start bot with restart signal watcher
     logger.info("Starting bot with unified flow manager...")
+    
+    # Register a job to check for restart signal every 15 seconds
+    restart_signal_path = Path("/app/proxy_config/restart_signal")
+    
+    async def check_restart_signal(context):
+        """Check if a restart signal has been written."""
+        if restart_signal_path.exists():
+            logger.info("Restart signal detected! Stopping bot...")
+            restart_signal_path.unlink(missing_ok=True)
+            # Stop the application gracefully - it will be restarted by Docker
+            application.stop_running()
+
+    if application.job_queue:
+        application.job_queue.run_repeating(check_restart_signal, interval=15, first=10)
+    
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 

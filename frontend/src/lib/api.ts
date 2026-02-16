@@ -157,6 +157,30 @@ export const draftsApi = {
   delete: () => api.delete("/orders/draft"),
 };
 
+// ============ Proxy API ============
+
+export interface ProxyStatus {
+  enabled: boolean;
+  link: string | null;
+  protocol: string | null;
+  server: string | null;
+  connected: boolean;
+}
+
+export interface ProxyTestResult {
+  success: boolean;
+  latency_ms: number;
+  message: string;
+}
+
+export const proxyApi = {
+  getStatus: () => api.get<ProxyStatus>("/admin/proxy"),
+  setLink: (link: string) => api.post<ProxyStatus>("/admin/proxy", { link }),
+  test: () => api.post<ProxyTestResult>("/admin/proxy/test"),
+  remove: () => api.delete("/admin/proxy"),
+  restart: () => api.post<{ message: string }>("/admin/proxy/restart"),
+};
+
 // ============ Orders API ============
 
 export interface EnrichedAttribute {
