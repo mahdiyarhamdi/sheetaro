@@ -23,7 +23,6 @@ BACKUP_INTERVAL = int(os.getenv("BACKUP_INTERVAL_HOURS", "6")) * 3600
 BACKUP_DIR = Path("/backups")
 UPLOADS_DIR = Path("/uploads")
 MAX_RETENTION = int(os.getenv("BACKUP_RETENTION_COUNT", "10"))
-MAX_TELEGRAM_FILE_SIZE = 49 * 1024 * 1024  # 49 MB (Telegram limit ~50 MB)
 
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres")
 POSTGRES_DB = os.getenv("POSTGRES_DB", "sheetaro")
@@ -31,6 +30,7 @@ POSTGRES_USER = os.getenv("POSTGRES_USER", "sheetaro_user")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "")
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "")  # e.g. http://193.228.90.237:3005
 
 logging.basicConfig(
     level=logging.INFO,
@@ -143,8 +143,14 @@ def create_backup() -> Path | None:
             return None
 
 
+def _get_download_url(filename: str) -> str:
+    """Build the public download URL for a backup file."""
+    base = PUBLIC_BASE_URL.rstrip("/") if PUBLIC_BASE_URL else "http://localhost:3005"
+    return f"{base}/api/v1/admin/backups/{filename}"
+
+
 async def send_to_admins(backup_path: Path) -> None:
-    """Send the backup file (or a notification) to every admin on Telegram."""
+    """Send a download link for the backup to every admin on Telegram."""
     admin_ids = _get_admin_telegram_ids()
     if not admin_ids:
         logger.warning("No admin Telegram IDs found — skipping notification")
@@ -154,8 +160,18 @@ async def send_to_admins(backup_path: Path) -> None:
     file_size = backup_path.stat().st_size
     size_mb = file_size / (1024 * 1024)
     ts = datetime.now().strftime("%Y/%m/%d  %H:%M")
+    download_url = _get_download_url(backup_path.name)
 
-    client_kwargs: dict = dict(timeout=httpx.Timeout(300.0), verify=False)
+    message = (
+        f"🗄 بکاپ خودکار شیتارو\n"
+        f"📅 {ts}\n"
+        f"💾 {size_mb:.1f} MB\n\n"
+        f"شامل: دیتابیس + تصاویر و فایل‌ها\n\n"
+        f"📥 لینک دانلود:\n{download_url}\n\n"
+        f"⚠️ برای دانلود باید با حساب ادمین لاگین باشید."
+    )
+
+    client_kwargs: dict = dict(timeout=httpx.Timeout(30.0), verify=False)
     if proxy_url:
         client_kwargs["proxy"] = proxy_url
 
@@ -164,47 +180,14 @@ async def send_to_admins(backup_path: Path) -> None:
     async with httpx.AsyncClient(**client_kwargs) as client:
         for aid in admin_ids:
             try:
-                if file_size <= MAX_TELEGRAM_FILE_SIZE:
-                    logger.info("Sending backup (%.1f MB) to admin %s", size_mb, aid)
-                    with open(backup_path, "rb") as f:
-                        resp = await client.post(
-                            f"{base}/sendDocument",
-                            data={
-                                "chat_id": aid,
-                                "caption": (
-                                    f"🗄 بکاپ خودکار شیتارو\n"
-                                    f"📅 {ts}\n"
-                                    f"💾 {size_mb:.1f} MB\n\n"
-                                    f"شامل: دیتابیس + تصاویر و فایل‌ها"
-                                ),
-                            },
-                            files={"document": (backup_path.name, f, "application/gzip")},
-                        )
-                    if resp.status_code == 200:
-                        logger.info("Backup sent to admin %s", aid)
-                    else:
-                        logger.error("Telegram error for %s: %s", aid, resp.text[:200])
+                resp = await client.post(
+                    f"{base}/sendMessage",
+                    json={"chat_id": aid, "text": message},
+                )
+                if resp.status_code == 200:
+                    logger.info("Backup link sent to admin %s", aid)
                 else:
-                    logger.info("Backup too large for Telegram (%.1f MB), sending notification only", size_mb)
-                    resp = await client.post(
-                        f"{base}/sendMessage",
-                        json={
-                            "chat_id": aid,
-                            "text": (
-                                f"🗄 بکاپ خودکار شیتارو\n"
-                                f"📅 {ts}\n"
-                                f"💾 {size_mb:.1f} MB\n\n"
-                                f"⚠️ فایل بزرگتر از حد مجاز تلگرام است.\n"
-                                f"بکاپ روی سرور ذخیره شد:\n"
-                                f"<code>{backup_path.name}</code>"
-                            ),
-                            "parse_mode": "HTML",
-                        },
-                    )
-                    if resp.status_code == 200:
-                        logger.info("Notification sent to admin %s", aid)
-                    else:
-                        logger.error("Telegram error for %s: %s", aid, resp.text[:200])
+                    logger.error("Telegram error for %s: %s", aid, resp.text[:200])
             except Exception as e:
                 logger.error("Failed to contact admin %s: %s", aid, e)
 

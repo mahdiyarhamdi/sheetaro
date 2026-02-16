@@ -3,10 +3,12 @@
 import json
 import logging
 import asyncio
+from datetime import datetime
 from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.api.deps import get_current_admin_user
@@ -279,3 +281,54 @@ async def restart_proxy_services(
             logger.error(f"Failed to restart {container_name}: {e}")
 
     return {"message": " | ".join(results)}
+
+
+# ── Backup download endpoints ──────────────────────────────────
+
+BACKUP_DIR = Path("/backups")
+
+
+@router.get(
+    "/admin/backups",
+    summary="List available backups",
+)
+async def list_backups(
+    _: dict = Depends(get_current_admin_user),
+) -> list[dict]:
+    """List all available backup files."""
+    if not BACKUP_DIR.exists():
+        return []
+
+    backups = sorted(BACKUP_DIR.glob("sheetaro_backup_*.tar.gz"), reverse=True)
+    result = []
+    for b in backups:
+        stat = b.stat()
+        result.append({
+            "filename": b.name,
+            "size_mb": round(stat.st_size / (1024 * 1024), 1),
+            "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+        })
+    return result
+
+
+@router.get(
+    "/admin/backups/{filename}",
+    summary="Download a backup file",
+)
+async def download_backup(
+    filename: str,
+    _: dict = Depends(get_current_admin_user),
+) -> FileResponse:
+    """Download a specific backup file (admin only)."""
+    if ".." in filename or "/" in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    file_path = BACKUP_DIR / filename
+    if not file_path.exists() or not file_path.name.startswith("sheetaro_backup_"):
+        raise HTTPException(status_code=404, detail="Backup not found")
+
+    return FileResponse(
+        path=str(file_path),
+        filename=filename,
+        media_type="application/gzip",
+    )
