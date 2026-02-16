@@ -193,9 +193,9 @@ async def send_to_admins(backup_path: Path) -> None:
 
 
 def cleanup_old_backups() -> None:
-    """Keep only the N most recent backup files."""
+    """Keep only the latest backup, remove all older ones."""
     backups = sorted(BACKUP_DIR.glob("sheetaro_backup_*.tar.gz"), reverse=True)
-    for old in backups[MAX_RETENTION:]:
+    for old in backups[1:]:
         try:
             old.unlink()
             logger.info("Removed old backup: %s", old.name)
