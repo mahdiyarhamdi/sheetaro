@@ -15,6 +15,7 @@ from telegram.ext import (
 
 from handlers.start import start_command, make_admin_command
 from handlers.text_router import route_text_input
+from handlers.web_link import get_web_link_handler, cancel_linkweb_handler
 
 # Import catalog flow handlers
 from handlers.flows.catalog_flow import (
@@ -84,6 +85,10 @@ def main() -> None:
     # Create application
     application = Application.builder().token(token).build()
     
+    # ============== Web Link Handler (must be before /start to catch /start linkweb) ==============
+    application.add_handler(get_web_link_handler())
+    application.add_handler(cancel_linkweb_handler)
+
     # ============== Command Handlers ==============
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("makeadmin912", make_admin_command))

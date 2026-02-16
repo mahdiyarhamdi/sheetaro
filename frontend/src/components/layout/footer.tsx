@@ -125,12 +125,12 @@ export function Footer() {
               <li className="flex items-center gap-2 text-sm text-muted">
                 <Send className="w-4 h-4 text-primary" />
                 <a
-                  href="https://t.me/sheetaro_bot"
+                  href="https://t.me/sheetarobot"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-primary transition-colors"
                 >
-                  @sheetaro_bot
+                  @sheetarobot
                 </a>
               </li>
             </ul>

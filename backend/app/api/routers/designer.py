@@ -29,6 +29,7 @@ from app.models.enums import OrderStatus, ValidationStatus
 from app.models.order import Order
 from app.models.user import User
 from app.models.processed_design import ProcessedDesign
+from app.utils.telegram_notify import notify_customer_designer_assigned as tg_notify_customer_assigned
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +141,13 @@ async def accept_order(
         order_id=str(order_id),
         designer_id=str(user.user_id),
     )
+
+    # Notify customer that a designer was assigned
+    try:
+        if order_obj.user and order_obj.user.telegram_id:
+            await tg_notify_customer_assigned(order_obj.user.telegram_id, str(order_id))
+    except Exception as e:
+        logger.error(f"Notification error after designer accept: {e}")
 
     result = await service.get_designer_order_detail(order_id, user.user_id)
     return result

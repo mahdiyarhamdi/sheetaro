@@ -105,7 +105,7 @@ export default function LoginPage() {
 
       {/* Telegram login */}
       <a
-        href="https://t.me/sheetaro_bot?start=login"
+        href="https://t.me/sheetarobot?start=login"
         target="_blank"
         rel="noopener noreferrer"
         className="w-full"

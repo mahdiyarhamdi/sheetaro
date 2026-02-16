@@ -294,6 +294,29 @@ async def get_preview_file(
     )
 
 
+@router.get(
+    "/files/designs/{filename}",
+    summary="Get designer-uploaded design file",
+    description="Download a design file uploaded by a designer (no user_id prefix)",
+)
+async def get_designer_file(
+    filename: str,
+) -> FileResponse:
+    """Get a design file uploaded by a designer."""
+    file_path = UPLOAD_DIR / "designs" / filename
+
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found"
+        )
+
+    return FileResponse(
+        path=str(file_path),
+        filename=filename,
+    )
+
+
 # ============== Thumbnail & Download Endpoints ==============
 
 

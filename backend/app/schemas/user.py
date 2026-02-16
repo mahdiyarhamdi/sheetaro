@@ -19,6 +19,7 @@ class UserBase(BaseModel):
     phone_number: str | None = Field(None, max_length=20, description="Phone number")
     city: str | None = Field(None, max_length=100, description="City")
     address: str | None = Field(None, description="User address")
+    postal_code: str | None = Field(None, max_length=20, description="Postal code")
     profile_photo_url: str | None = Field(None, max_length=500, description="Profile photo URL")
     
     @field_validator('phone_number')
@@ -36,11 +37,13 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     """Schema for updating a user."""
     username: str | None = Field(None, max_length=255, description="Telegram username")
+    full_name: str | None = Field(None, max_length=511, description="Full name")
     first_name: str | None = Field(None, max_length=255, description="First name")
     last_name: str | None = Field(None, max_length=255, description="Last name")
     phone_number: str | None = Field(None, max_length=20, description="Phone number")
     city: str | None = Field(None, max_length=100, description="City")
     address: str | None = Field(None, description="User address")
+    postal_code: str | None = Field(None, max_length=20, description="Postal code")
     bio: str | None = Field(None, description="User bio")
     profile_photo_url: str | None = Field(None, max_length=500, description="Profile photo URL")
     role: UserRole | None = Field(None, description="User role")
@@ -62,6 +65,15 @@ class UserOut(UserBase):
     updated_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
+
+
+class ProfileUpdate(BaseModel):
+    """Schema for authenticated user updating their own profile."""
+    full_name: str | None = Field(None, min_length=2, max_length=511, description="Full name")
+    city: str | None = Field(None, max_length=100, description="City")
+    address: str | None = Field(None, description="Address")
+    postal_code: str | None = Field(None, max_length=20, description="Postal code")
+    bio: str | None = Field(None, max_length=500, description="Bio")
 
 
 # ============ Designer Management Schemas ============

@@ -69,7 +69,7 @@ interface PlanFormData {
   name: string;
   name_fa: string;
   category_id: string;
-  type: "PUBLIC" | "SEMI_PRIVATE" | "PRIVATE";
+  type: "PUBLIC" | "SEMI_PRIVATE" | "PRIVATE" | "OWN_DESIGN";
   price: number;
   max_revisions: number;
   delivery_days: number;
@@ -847,7 +847,7 @@ export default function CatalogManagementPage() {
       name: plan.name || "",
       name_fa: plan.name_fa || plan.name || "",
       category_id: plan.category_id || selectedCategory || "",
-      type: plan.type || "PUBLIC",
+      type: plan.plan_type || plan.type || "PUBLIC",
       price: plan.price || 0,
       max_revisions: plan.max_revisions || 3,
       delivery_days: plan.delivery_days || 3,
@@ -883,6 +883,7 @@ export default function CatalogManagementPage() {
       slug,
       name: planForm.name || generateSlug(planForm.name_fa),
       category_id: selectedCategory || planForm.category_id,
+      plan_type: planForm.type, // Send plan type to backend as plan_type
     };
 
     if (editingPlan) {
@@ -2528,6 +2529,7 @@ export default function CatalogManagementPage() {
               <option value="PUBLIC">عمومی (PUBLIC)</option>
               <option value="SEMI_PRIVATE">نیمه خصوصی (SEMI_PRIVATE)</option>
               <option value="PRIVATE">خصوصی (PRIVATE)</option>
+              <option value="OWN_DESIGN">طرح خودم (OWN_DESIGN)</option>
             </select>
           </div>
 

@@ -3,10 +3,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 from pydantic import BaseModel, Field
 
-from app.api.deps import get_db
+from app.api.deps import get_db, get_current_user_from_token
 from app.core.rate_limit import limiter, RateLimits
-from app.schemas.user import UserCreate, UserUpdate, UserOut
+from app.schemas.user import UserCreate, UserUpdate, UserOut, ProfileUpdate
 from app.services.user_service import UserService
+from app.models.user import User
 
 router = APIRouter()
 
@@ -25,6 +26,33 @@ class AdminListResponse(BaseModel):
     """Response schema for admin list."""
     items: list[UserOut]
     total: int
+
+
+@router.patch(
+    "/users/me",
+    response_model=UserOut,
+    summary="Update own profile",
+    description="Update the authenticated user's profile (city, address, postal_code, bio, full_name).",
+)
+async def update_my_profile(
+    payload: ProfileUpdate,
+    current_user: User = Depends(get_current_user_from_token),
+    db: AsyncSession = Depends(get_db),
+) -> UserOut:
+    """Update current user's profile fields."""
+    from app.repositories.user_repository import UserRepository
+    repo = UserRepository(db)
+
+    update_data = payload.model_dump(exclude_unset=True)
+    if not update_data:
+        return UserOut.model_validate(current_user)
+
+    # Build a UserUpdate with only the allowed fields
+    user_update = UserUpdate(**update_data)
+    updated = await repo.update(current_user.id, user_update)
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return UserOut.model_validate(updated)
 
 
 @router.post(
@@ -126,6 +154,36 @@ async def get_admin_telegram_ids(
     """Get telegram IDs of all active admins."""
     service = UserService(db)
     return await service.get_admin_telegram_ids()
+
+
+@router.get(
+    "/users/designers/telegram-ids",
+    response_model=list[int],
+    summary="Get designer telegram IDs",
+    description="Get telegram IDs of all active designers (for notifications)",
+)
+async def get_designer_telegram_ids(
+    db: AsyncSession = Depends(get_db),
+) -> list[int]:
+    """Get telegram IDs of all active designers."""
+    from app.repositories.user_repository import UserRepository
+    repo = UserRepository(db)
+    return await repo.get_designer_telegram_ids()
+
+
+@router.get(
+    "/users/validators/telegram-ids",
+    response_model=list[int],
+    summary="Get validator telegram IDs",
+    description="Get telegram IDs of all active validators (for notifications)",
+)
+async def get_validator_telegram_ids(
+    db: AsyncSession = Depends(get_db),
+) -> list[int]:
+    """Get telegram IDs of all active validators."""
+    from app.repositories.user_repository import UserRepository
+    repo = UserRepository(db)
+    return await repo.get_validator_telegram_ids()
 
 
 # Note: Static routes (/users/admins/*) must be defined BEFORE dynamic routes (/users/{id})

@@ -13,24 +13,27 @@ from typing import List, Optional
 def get_main_menu_keyboard(is_admin: bool = False, is_printshop: bool = False) -> ReplyKeyboardMarkup:
     """Get the main menu keyboard.
     
-    Args:
-        is_admin: Whether to show admin panel button
-        is_printshop: Whether to show print shop panel button
-        
-    Returns:
-        ReplyKeyboardMarkup for main menu
+    For customers: notification-only menu (track + support + web link).
+    For admins/printshops: full menu preserved.
     """
-    keyboard = [
-        ["🛒 ثبت سفارش", "📦 سفارشات من"],
-        ["👤 پروفایل", "🔍 رهگیری سفارش"],
-        ["📞 پشتیبانی", "ℹ️ راهنما"]
-    ]
-    
-    if is_printshop:
-        keyboard.append(["🏭 پنل چاپخانه"])
-    
-    if is_admin:
-        keyboard.append(["🔧 پنل مدیریت"])
+    if is_admin or is_printshop:
+        # Admin / print-shop get all buttons
+        keyboard = [
+            ["🛒 ثبت سفارش", "📦 سفارشات من"],
+            ["👤 پروفایل", "🔍 رهگیری سفارش"],
+            ["📞 پشتیبانی", "ℹ️ راهنما"],
+        ]
+        if is_printshop:
+            keyboard.append(["🏭 پنل چاپخانه"])
+        if is_admin:
+            keyboard.append(["🔧 پنل مدیریت"])
+    else:
+        # Customer: minimal notification-only menu
+        keyboard = [
+            ["🔍 رهگیری سفارش"],
+            ["📞 پشتیبانی", "ℹ️ راهنما"],
+            ["🌐 ورود به وب‌اپ"],
+        ]
     
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 

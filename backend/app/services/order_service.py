@@ -21,6 +21,7 @@ from decimal import Decimal
 from app.repositories.order_repository import OrderRepository
 from app.repositories.category_repository import CategoryRepository
 from app.repositories.user_repository import UserRepository
+from app.repositories.order_draft_repository import OrderDraftRepository
 from app.schemas.order import (
     OrderCreate, OrderUpdate, OrderStatusUpdate, OrderAssign,
     OrderOut, OrderListResponse, PrintShopOrderOut, PrintShopOrderListResponse,
@@ -151,6 +152,32 @@ class OrderService:
             'max_revisions': max_revisions,
         }
     
+    # Mapping from plan slug to DesignPlan enum
+    SLUG_TO_DESIGN_PLAN: dict[str, DesignPlan] = {
+        "public": DesignPlan.PUBLIC,
+        "semi_private": DesignPlan.SEMI_PRIVATE,
+        "private": DesignPlan.PRIVATE,
+        "own_design": DesignPlan.OWN_DESIGN,
+    }
+
+    def _resolve_design_plan_from_slug(self, slug: str) -> Optional[DesignPlan]:
+        """Resolve DesignPlan enum from a plan slug (case-insensitive)."""
+        normalized = slug.strip().lower()
+        # Direct match
+        if normalized in self.SLUG_TO_DESIGN_PLAN:
+            return self.SLUG_TO_DESIGN_PLAN[normalized]
+        # Partial match: slug contains the key (e.g. "kart-private" → PRIVATE)
+        # Check "private" before "semi_private" won't work, so check semi first
+        if "semi_private" in normalized or "semi-private" in normalized:
+            return DesignPlan.SEMI_PRIVATE
+        if "private" in normalized:
+            return DesignPlan.PRIVATE
+        if "own_design" in normalized or "own-design" in normalized:
+            return DesignPlan.OWN_DESIGN
+        if "public" in normalized:
+            return DesignPlan.PUBLIC
+        return None
+
     async def create_order(self, user_id: UUID, order_data: OrderCreate) -> OrderOut:
         """Create a new order."""
         # Validate category exists
@@ -160,6 +187,35 @@ class OrderService:
         
         if not category.is_active:
             raise ValueError("Category is not available")
+        
+        # Resolve design_plan from the plan's plan_type/slug when plan_id is provided
+        # This is the authoritative source — overrides the frontend-sent value
+        resolved_design_plan = order_data.design_plan
+        if order_data.plan_id:
+            plan = await self.category_repo.get_plan_by_id(order_data.plan_id)
+            if plan:
+                # 1. Prefer explicit plan_type column
+                if plan.plan_type:
+                    resolved_design_plan = plan.plan_type
+                else:
+                    # 2. Fallback: try to resolve from slug
+                    slug_plan = self._resolve_design_plan_from_slug(plan.slug)
+                    if slug_plan:
+                        resolved_design_plan = slug_plan
+                    else:
+                        # 3. Fallback: derive from boolean flags
+                        if plan.has_file_upload:
+                            resolved_design_plan = DesignPlan.OWN_DESIGN
+                        elif plan.has_templates:
+                            resolved_design_plan = DesignPlan.PUBLIC
+                        elif plan.has_questionnaire:
+                            if plan.max_revisions is None:
+                                resolved_design_plan = DesignPlan.PRIVATE
+                            else:
+                                resolved_design_plan = DesignPlan.SEMI_PRIVATE
+        
+        # Override the design_plan on order_data so downstream code uses the correct value
+        order_data.design_plan = resolved_design_plan
         
         # Validate design file for OWN_DESIGN
         if order_data.design_plan == DesignPlan.OWN_DESIGN and not order_data.design_file_url:
@@ -188,6 +244,10 @@ class OrderService:
         
         # Create order
         order = await self.repository.create(user_id, order_data, prices)
+
+        # Clean up the user's draft now that the order is created
+        draft_repo = OrderDraftRepository(self.db)
+        await draft_repo.delete_by_user(user_id)
         
         log_event(
             event_type="order.create",
@@ -487,6 +547,7 @@ class OrderService:
         if order.user:
             order_out.customer_name = f"{order.user.first_name} {order.user.last_name or ''}".strip()
             order_out.customer_phone = order.user.phone_number
+            order_out.customer_telegram_id = order.user.telegram_id
 
         # Category info
         if order.category:
@@ -590,6 +651,7 @@ class OrderService:
             order_out.customer_phone = order.user.phone_number
             order_out.customer_city = order.user.city
             order_out.customer_address = order.user.address
+            order_out.customer_telegram_id = order.user.telegram_id
 
         # --- Category info ---
         if order.category:

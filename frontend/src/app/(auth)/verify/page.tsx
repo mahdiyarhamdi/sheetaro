@@ -168,12 +168,12 @@ export default function VerifyTelegramPage() {
             <p className="text-sm">
               ربات{" "}
               <a
-                href="https://t.me/sheetaro_bot"
+                href="https://t.me/sheetarobot"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary font-medium hover:underline"
               >
-                @sheetaro_bot
+                @sheetarobot
               </a>{" "}
               را در تلگرام باز کنید
             </p>
@@ -204,7 +204,7 @@ export default function VerifyTelegramPage() {
 
         {/* Open Telegram Button */}
         <a
-          href="https://t.me/sheetaro_bot?start=linkweb"
+          href="https://t.me/sheetarobot?start=linkweb"
           target="_blank"
           rel="noopener noreferrer"
           className="block"

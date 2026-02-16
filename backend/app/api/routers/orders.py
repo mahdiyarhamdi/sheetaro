@@ -16,6 +16,7 @@ from app.api.deps import (
 from app.schemas.order import (
     OrderCreate, OrderUpdate, OrderStatusUpdate,
     OrderOut, OrderListResponse, CustomerOrderDetailOut,
+    OrderDraftUpsert, OrderDraftOut,
 )
 from app.schemas.design_revision import (
     DesignRevisionOut, DesignRevisionListResponse, RejectDesignRequest,
@@ -28,7 +29,65 @@ from app.services.message_service import MessageService
 from app.services.review_service import ReviewService
 from app.models.enums import OrderStatus
 
+from app.repositories.order_draft_repository import OrderDraftRepository
+
 router = APIRouter()
+
+
+# ============== Order Draft Endpoints ==============
+
+
+@router.get(
+    "/orders/draft",
+    response_model=OrderDraftOut,
+    summary="Get active order draft",
+    description="Get the current user's in-progress order draft.",
+)
+async def get_draft(
+    user_id: UUID = Depends(get_user_id_from_token_or_query),
+    db: AsyncSession = Depends(get_db),
+) -> OrderDraftOut:
+    """Get the user's active draft or 404."""
+    repo = OrderDraftRepository(db)
+    draft = await repo.get_by_user(user_id)
+    if not draft:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active draft")
+    return OrderDraftOut.model_validate(draft)
+
+
+@router.put(
+    "/orders/draft",
+    response_model=OrderDraftOut,
+    summary="Save order draft",
+    description="Create or update the user's order draft (upsert).",
+)
+async def save_draft(
+    payload: OrderDraftUpsert,
+    user_id: UUID = Depends(get_user_id_from_token_or_query),
+    db: AsyncSession = Depends(get_db),
+) -> OrderDraftOut:
+    """Create or update the user's draft."""
+    repo = OrderDraftRepository(db)
+    draft = await repo.upsert(user_id, payload.current_step, payload.data)
+    return OrderDraftOut.model_validate(draft)
+
+
+@router.delete(
+    "/orders/draft",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete order draft",
+    description="Delete the user's order draft (after order is created).",
+)
+async def delete_draft(
+    user_id: UUID = Depends(get_user_id_from_token_or_query),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Delete the user's draft."""
+    repo = OrderDraftRepository(db)
+    await repo.delete_by_user(user_id)
+
+
+# ============== Order Endpoints ==============
 
 
 @router.post(

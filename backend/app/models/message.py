@@ -17,7 +17,7 @@ class Message(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     order_id = Column(UUID(as_uuid=True), ForeignKey('orders.id', ondelete='CASCADE'), nullable=False, index=True)
     sender_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False, index=True)
-    content = Column(Text, nullable=False)
+    content = Column(Text, nullable=False, default="")
     file_url = Column(String(500), nullable=True)
     is_read = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

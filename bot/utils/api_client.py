@@ -372,7 +372,29 @@ class APIClient:
         except httpx.HTTPError as e:
             logger.error(f"Error getting admin telegram IDs: {e}")
             return None
-    
+
+    async def get_designer_telegram_ids(self) -> Optional[List[int]]:
+        """Get telegram IDs of all active designers."""
+        client = await self._get_client()
+        try:
+            response = await client.get("/api/v1/users/designers/telegram-ids")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error getting designer telegram IDs: {e}")
+            return None
+
+    async def get_validator_telegram_ids(self) -> Optional[List[int]]:
+        """Get telegram IDs of all active validators."""
+        client = await self._get_client()
+        try:
+            response = await client.get("/api/v1/users/validators/telegram-ids")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error getting validator telegram IDs: {e}")
+            return None
+
     async def promote_to_admin(
         self,
         target_telegram_id: int,

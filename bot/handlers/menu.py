@@ -93,6 +93,15 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
             "پاسخگویی: شنبه تا چهارشنبه، ۹ صبح تا ۶ عصر"
         )
         return
+
+    # ============== Web App ==============
+    if "وب‌اپ" in text or "وب اپ" in text:
+        await update.message.reply_text(
+            "🌐 برای ثبت سفارش و مدیریت حساب کاربری به وب‌اپ مراجعه کنید:\n\n"
+            "🔗 https://sheetaro.com\n\n"
+            "همچنین برای اتصال حساب وب به تلگرام (دریافت نوتیفیکیشن) دستور /linkweb را بزنید."
+        )
+        return
     
     # ============== Print Shop Panel ==============
     if "پنل چاپخانه" in text:

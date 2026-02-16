@@ -25,6 +25,11 @@ from keyboards.printshop import (
     STATUS_LABELS,
 )
 from utils.api_client import api_client
+from utils.notifications import (
+    notify_customer_order_printing,
+    notify_customer_order_printed,
+    notify_customer_order_shipped,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -361,6 +366,11 @@ async def handle_tracking_code_input(update: Update, context: ContextTypes.DEFAU
             f"کد رهگیری: {tracking_code}",
             reply_markup=get_printshop_menu_keyboard(),
         )
+        # Notify customer
+        cached_order = get_flow_data_item(context, 'current_my_order')
+        cust_tg_id = (cached_order or {}).get('customer_telegram_id') or (result if isinstance(result, dict) else {}).get('customer_telegram_id')
+        if cust_tg_id:
+            await notify_customer_order_shipped(context.bot, cust_tg_id, order_id, tracking_code)
         set_step(context, 'printshop_menu')
     else:
         await update.message.reply_text(
@@ -425,6 +435,11 @@ async def handle_printshop_callback(update: Update, context: ContextTypes.DEFAUL
                 f"✅ سفارش #{order_id[:8]} با موفقیت قبول شد!\n\n"
                 "سفارش به لیست «سفارش‌های من» اضافه شد."
             )
+            # Notify customer
+            cached_order = get_flow_data_item(context, 'current_queue_order')
+            cust_tg_id = (cached_order or {}).get('customer_telegram_id') or (result if isinstance(result, dict) else {}).get('customer_telegram_id')
+            if cust_tg_id:
+                await notify_customer_order_printing(context.bot, cust_tg_id, order_id)
         else:
             await query.edit_message_text("❌ خطا در قبول سفارش. ممکن است قبلاً توسط چاپخانه دیگری قبول شده باشد.")
         return True
@@ -452,6 +467,11 @@ async def handle_printshop_callback(update: Update, context: ContextTypes.DEFAUL
                 f"✅ چاپ سفارش #{order_id[:8]} تکمیل شد!\n\n"
                 "اکنون می‌توانید سفارش را ارسال کنید."
             )
+            # Notify customer
+            cached_order = get_flow_data_item(context, 'current_my_order')
+            cust_tg_id = (cached_order or {}).get('customer_telegram_id') or (result if isinstance(result, dict) else {}).get('customer_telegram_id')
+            if cust_tg_id:
+                await notify_customer_order_printed(context.bot, cust_tg_id, order_id)
         else:
             await query.edit_message_text("❌ خطا در ثبت تکمیل چاپ.")
         return True

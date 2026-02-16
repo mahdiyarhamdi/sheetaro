@@ -133,6 +133,8 @@ class DesignerOrderOut(OrderOut):
     enriched_attributes: List[EnrichedAttributeItem] = Field(default_factory=list)
     design_preview_url: Optional[str] = None
     design_final_url: Optional[str] = None
+    payment_status: Optional[str] = None
+    payment_paid_at: Optional[datetime] = None
     customer_name: Optional[str] = None
     customer_phone: Optional[str] = None
 
@@ -169,6 +171,7 @@ class PrintShopOrderOut(OrderOut):
     customer_phone: Optional[str] = None
     customer_city: Optional[str] = None
     customer_address: Optional[str] = None
+    customer_telegram_id: Optional[int] = None
     # Design preview (from ProcessedDesign or design_file_url)
     design_preview_url: Optional[str] = None
     design_final_url: Optional[str] = None
@@ -236,6 +239,25 @@ class SettlementListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+# ============ Order Draft Schemas ============
+
+
+class OrderDraftUpsert(BaseModel):
+    """Schema for creating or updating an order draft."""
+    current_step: str = Field(..., max_length=50, description="Current wizard step identifier")
+    data: dict = Field(default_factory=dict, description="Full wizard state as JSON")
+
+
+class OrderDraftOut(BaseModel):
+    """Schema for order draft output."""
+    id: UUID
+    current_step: str
+    data: dict
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 

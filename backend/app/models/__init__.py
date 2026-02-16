@@ -34,6 +34,7 @@ from app.models.settlement import Settlement
 from app.models.review import Review
 from app.models.printshop_profile import PrintShopProfile
 from app.models.system_font import SystemFont
+from app.models.order_draft import OrderDraft
 
 __all__ = [
     "User",
@@ -78,5 +79,6 @@ __all__ = [
     "Review",
     "PrintShopProfile",
     "SystemFont",
+    "OrderDraft",
 ]
 

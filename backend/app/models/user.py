@@ -32,6 +32,7 @@ class User(Base):
     full_name = Column(String(511), nullable=True)  # Computed or set on update
     city = Column(String(100), nullable=True)
     address = Column(Text, nullable=True)
+    postal_code = Column(String(20), nullable=True)
     bio = Column(Text, nullable=True)
     profile_photo_url = Column(String(500), nullable=True)
     

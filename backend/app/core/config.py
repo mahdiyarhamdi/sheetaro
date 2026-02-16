@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     # OTP settings for web-telegram linking
     OTP_EXPIRE_MINUTES: int = 5
     OTP_LENGTH: int = 6
+
+    # Telegram Bot (for sending notifications from backend)
+    TELEGRAM_BOT_TOKEN: str = ""
     
     model_config = SettingsConfigDict(
         env_file=".env",

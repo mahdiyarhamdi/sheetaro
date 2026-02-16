@@ -13,6 +13,7 @@ from app.schemas.validation import (
 )
 from app.schemas.order import OrderStatusUpdate
 from app.models.enums import OrderStatus, ValidationStatus, UserRole
+from app.utils.telegram_notify import notify_printshops_new_order as tg_notify_printshops
 from app.utils.logger import log_event
 
 
@@ -115,7 +116,18 @@ class ValidationService:
             passed=report_data.passed,
             issues_count=len(report_data.issues),
         )
-        
+
+        # Notify printshops if order moved to READY_FOR_PRINT
+        if new_order_status == OrderStatus.READY_FOR_PRINT:
+            try:
+                user_repo = UserRepository(self.db)
+                ps_ids = await user_repo.get_printshop_telegram_ids()
+                city = order.user.city if order.user else ""
+                await tg_notify_printshops(ps_ids, str(order.id), order.quantity, city or "")
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Notification error after validation: {e}")
+
         return ValidationReportOut.model_validate(report)
     
     async def get_report_by_id(self, report_id: UUID) -> Optional[ValidationReportOut]:

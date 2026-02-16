@@ -34,6 +34,11 @@ from app.schemas.payment import (
 from app.schemas.order import OrderStatusUpdate
 from app.models.enums import PaymentStatus, PaymentType, OrderStatus, UserRole
 from app.utils.logger import log_event
+from app.utils.telegram_notify import (
+    notify_designers_new_order as tg_notify_designers_new_order,
+    notify_printshops_new_order as tg_notify_printshops_new_order,
+    notify_admins_new_validation as tg_notify_admins_new_validation,
+)
 
 
 # Mock PSP URL (replace with real PSP in production)
@@ -214,7 +219,27 @@ class PaymentService:
                     new_status=new_status.value,
                     reason="payment_complete",
                 )
-    
+
+                # Trigger Telegram notifications based on new status
+                try:
+                    user_repo = UserRepository(self.db)
+                    if new_status == OrderStatus.PENDING_DESIGNER:
+                        d_ids = await user_repo.get_designer_telegram_ids()
+                        cat_name = order.category.name_fa if order.category else "-"
+                        await tg_notify_designers_new_order(d_ids, str(order_id), cat_name)
+                    elif new_status == OrderStatus.READY_FOR_PRINT:
+                        ps_ids = await user_repo.get_printshop_telegram_ids()
+                        city = order.user.city if order.user else ""
+                        await tg_notify_printshops_new_order(ps_ids, str(order_id), order.quantity, city or "")
+                    elif new_status == OrderStatus.AWAITING_VALIDATION:
+                        a_ids = await user_repo.get_admin_telegram_ids()
+                        cat_name = order.category.name_fa if order.category else "-"
+                        cust_name = f"{order.user.first_name} {order.user.last_name or ''}".strip() if order.user else "-"
+                        await tg_notify_admins_new_validation(a_ids, str(order_id), cust_name, cat_name)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).error(f"Notification error after payment approval: {e}")
+
     async def get_payment_by_id(self, payment_id: UUID) -> Optional[PaymentOut]:
         """Get payment by ID."""
         payment = await self.repository.get_by_id(payment_id)

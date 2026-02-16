@@ -1,12 +1,13 @@
 """Design Plan model for category-specific design plans."""
 
-from sqlalchemy import Column, String, Boolean, DateTime, Integer, ForeignKey, Numeric, Text
+from sqlalchemy import Column, String, Boolean, DateTime, Integer, ForeignKey, Numeric, Text, Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
 
 from app.core.database import Base
+from app.models.enums import DesignPlan
 
 
 class CategoryDesignPlan(Base):
@@ -19,6 +20,7 @@ class CategoryDesignPlan(Base):
     slug = Column(String(50), nullable=False)  # e.g., "public", "semi_private", "private"
     name_fa = Column(String(100), nullable=False)  # Persian name
     description_fa = Column(Text, nullable=True)  # Persian description
+    plan_type = Column(SAEnum(DesignPlan, name="designplan", create_type=False), nullable=True)  # Explicit plan type
     price = Column(Numeric(12, 0), default=0, nullable=False)  # Design price in Tomans
     max_revisions = Column(Integer, nullable=True)  # NULL = unlimited
     revision_price = Column(Numeric(12, 0), default=0, nullable=False)  # Price for extra revisions

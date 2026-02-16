@@ -158,7 +158,7 @@ export default function RegisterPage() {
 
       {/* Telegram register */}
       <a
-        href="https://t.me/sheetaro_bot?start=register"
+        href="https://t.me/sheetarobot?start=register"
         target="_blank"
         rel="noopener noreferrer"
         className="w-full"

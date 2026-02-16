@@ -102,6 +102,39 @@ class UserRepository:
         await self.db.flush()
         return await self.get_by_id(user_id)
     
+    async def get_designer_telegram_ids(self) -> list[int]:
+        """Get telegram IDs of all active designers."""
+        result = await self.db.execute(
+            select(User.telegram_id).where(
+                User.role == UserRole.DESIGNER,
+                User.is_active == True,
+                User.telegram_id.isnot(None),
+            )
+        )
+        return list(result.scalars().all())
+
+    async def get_validator_telegram_ids(self) -> list[int]:
+        """Get telegram IDs of all active validators."""
+        result = await self.db.execute(
+            select(User.telegram_id).where(
+                User.role == UserRole.VALIDATOR,
+                User.is_active == True,
+                User.telegram_id.isnot(None),
+            )
+        )
+        return list(result.scalars().all())
+
+    async def get_printshop_telegram_ids(self) -> list[int]:
+        """Get telegram IDs of all active print shops."""
+        result = await self.db.execute(
+            select(User.telegram_id).where(
+                User.role == UserRole.PRINT_SHOP,
+                User.is_active == True,
+                User.telegram_id.isnot(None),
+            )
+        )
+        return list(result.scalars().all())
+
     async def count_admins(self) -> int:
         """Count total admins."""
         result = await self.db.execute(

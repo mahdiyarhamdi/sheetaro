@@ -361,3 +361,152 @@ async def notify_printshop_sla_warning(
 
     return success
 
+
+# ==================== Designer Notifications ====================
+
+async def get_designer_telegram_ids() -> List[int]:
+    """Get designer telegram IDs from database via API."""
+    result = await api_client.get_designer_telegram_ids()
+    if result:
+        return result
+    return []
+
+
+async def notify_designers_new_order_in_queue(
+    bot,
+    order_id: str,
+    category_name: str,
+) -> bool:
+    """Notify all designers when a new order enters PENDING_DESIGNER status."""
+    designer_ids = await get_designer_telegram_ids()
+
+    if not designer_ids:
+        logger.warning("No designer telegram IDs found for notifications")
+        return False
+
+    message = (
+        "🎨 سفارش جدید در صف طراحی!\n\n"
+        f"شماره سفارش: #{order_id[:8]}\n"
+        f"دسته‌بندی: {category_name}\n\n"
+        "برای مشاهده جزئیات به پنل طراح مراجعه کنید."
+    )
+
+    success = False
+    for d_id in designer_ids:
+        try:
+            await bot.send_message(chat_id=d_id, text=message)
+            success = True
+            logger.info(f"Notified designer {d_id} about new order {order_id}")
+        except Exception as e:
+            logger.error(f"Error notifying designer {d_id}: {e}")
+
+    return success
+
+
+async def notify_designer_assigned(
+    bot,
+    designer_telegram_id: int,
+    order_id: str,
+) -> bool:
+    """Notify designer when they are assigned to an order."""
+    message = (
+        "📋 سفارش جدید به شما اختصاص داده شد!\n\n"
+        f"شماره سفارش: #{order_id[:8]}\n\n"
+        "لطفاً برای مشاهده جزئیات و شروع طراحی به پنل خود مراجعه کنید."
+    )
+
+    try:
+        await bot.send_message(chat_id=designer_telegram_id, text=message)
+        logger.info(f"Notified designer {designer_telegram_id} about assigned order {order_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error notifying designer {designer_telegram_id}: {e}")
+        return False
+
+
+async def notify_customer_designer_assigned(
+    bot,
+    customer_telegram_id: int,
+    order_id: str,
+) -> bool:
+    """Notify customer that a designer has been assigned to their order."""
+    message = (
+        "👨‍🎨 طراح برای سفارش شما اختصاص داده شد!\n\n"
+        f"شماره سفارش: #{order_id[:8]}\n\n"
+        "طراح در حال بررسی و شروع طراحی سفارش شماست."
+    )
+
+    try:
+        await bot.send_message(chat_id=customer_telegram_id, text=message)
+        logger.info(f"Notified customer {customer_telegram_id} designer assigned for {order_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error notifying customer {customer_telegram_id}: {e}")
+        return False
+
+
+async def notify_customer_new_design_revision(
+    bot,
+    customer_telegram_id: int,
+    order_id: str,
+) -> bool:
+    """Notify customer when a new design revision is uploaded."""
+    message = (
+        "🖼 ویرایش جدید طراحی آماده بررسی است!\n\n"
+        f"شماره سفارش: #{order_id[:8]}\n\n"
+        "لطفاً طرح را بررسی و تأیید یا رد کنید.\n"
+        "🔗 sheetaro.com"
+    )
+
+    try:
+        await bot.send_message(chat_id=customer_telegram_id, text=message)
+        logger.info(f"Notified customer {customer_telegram_id} new design revision for {order_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error notifying customer {customer_telegram_id}: {e}")
+        return False
+
+
+async def notify_designer_design_approved(
+    bot,
+    designer_telegram_id: int,
+    order_id: str,
+) -> bool:
+    """Notify designer that the customer approved their design."""
+    message = (
+        "✅ طرح شما تأیید شد!\n\n"
+        f"شماره سفارش: #{order_id[:8]}\n\n"
+        "مشتری طرح شما را تأیید کرد. سفارش به مرحله بعد منتقل می‌شود."
+    )
+
+    try:
+        await bot.send_message(chat_id=designer_telegram_id, text=message)
+        logger.info(f"Notified designer {designer_telegram_id} design approved for {order_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error notifying designer {designer_telegram_id}: {e}")
+        return False
+
+
+async def notify_designer_design_rejected(
+    bot,
+    designer_telegram_id: int,
+    order_id: str,
+    feedback: str,
+) -> bool:
+    """Notify designer that the customer rejected their design with feedback."""
+    message = (
+        "🔄 طرح شما نیاز به بازنگری دارد\n\n"
+        f"شماره سفارش: #{order_id[:8]}\n\n"
+        f"📝 بازخورد مشتری:\n{feedback}\n\n"
+        "لطفاً طرح را اصلاح و مجدداً ارسال کنید."
+    )
+
+    try:
+        await bot.send_message(chat_id=designer_telegram_id, text=message)
+        logger.info(f"Notified designer {designer_telegram_id} design rejected for {order_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error notifying designer {designer_telegram_id}: {e}")
+        return False
+

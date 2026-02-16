@@ -12,7 +12,18 @@ from app.models.order import Order
 from app.models.enums import RevisionStatus, OrderStatus
 from app.schemas.design_revision import DesignRevisionOut, DesignRevisionListResponse
 from app.repositories.order_repository import OrderRepository
+from app.repositories.user_repository import UserRepository
 from app.utils.logger import log_event
+from app.utils.telegram_notify import (
+    notify_customer_new_design_revision as tg_notify_customer_revision,
+    notify_designer_design_approved as tg_notify_designer_approved,
+    notify_designer_design_rejected as tg_notify_designer_rejected,
+    notify_printshops_new_order as tg_notify_printshops,
+    notify_admins_new_validation as tg_notify_admins_validation,
+)
+
+import logging as _logging
+_logger = _logging.getLogger(__name__)
 
 
 class DesignRevisionService:
@@ -62,6 +73,13 @@ class DesignRevisionService:
             version=next_version,
         )
 
+        # Notify customer about the new revision
+        try:
+            if order.user and order.user.telegram_id:
+                await tg_notify_customer_revision(order.user.telegram_id, str(order_id))
+        except Exception as e:
+            _logger.error(f"Notification error after revision submit: {e}")
+
         return DesignRevisionOut.model_validate(revision)
 
     async def approve_design(self, order_id: UUID, customer_id: UUID) -> DesignRevisionOut:
@@ -95,6 +113,12 @@ class DesignRevisionService:
             customer_id=str(customer_id),
             version=latest.version,
         )
+
+        # Notify designer and downstream roles
+        try:
+            await self._notify_after_approval(order)
+        except Exception as e:
+            _logger.error(f"Notification error after design approval: {e}")
 
         return DesignRevisionOut.model_validate(latest)
 
@@ -146,6 +170,16 @@ class DesignRevisionService:
                 revision_count=order.revision_count,
             )
 
+            # Notify designer about rejection
+            try:
+                from app.models.user import User
+                if order.assigned_designer_id:
+                    designer = await self.db.get(User, order.assigned_designer_id)
+                    if designer and designer.telegram_id:
+                        await tg_notify_designer_rejected(designer.telegram_id, str(order_id), feedback)
+            except Exception as e:
+                _logger.error(f"Notification error after design rejection: {e}")
+
         await self.db.flush()
         return DesignRevisionOut.model_validate(latest)
 
@@ -180,6 +214,28 @@ class DesignRevisionService:
             .limit(1)
         )
         return result.scalar_one_or_none()
+
+    async def _notify_after_approval(self, order: Order) -> None:
+        """Send notifications after a design is approved."""
+        from app.models.user import User
+
+        # Notify the designer
+        if order.assigned_designer_id:
+            designer = await self.db.get(User, order.assigned_designer_id)
+            if designer and designer.telegram_id:
+                await tg_notify_designer_approved(designer.telegram_id, str(order.id))
+
+        # Notify based on where the order went
+        user_repo = UserRepository(self.db)
+        if order.status == OrderStatus.READY_FOR_PRINT:
+            ps_ids = await user_repo.get_printshop_telegram_ids()
+            city = order.user.city if order.user else ""
+            await tg_notify_printshops(ps_ids, str(order.id), order.quantity, city or "")
+        elif order.status == OrderStatus.AWAITING_VALIDATION:
+            a_ids = await user_repo.get_admin_telegram_ids()
+            cat_name = order.category.name_fa if order.category else "-"
+            cust_name = f"{order.user.first_name} {order.user.last_name or ''}".strip() if order.user else "-"
+            await tg_notify_admins_validation(a_ids, str(order.id), cust_name, cat_name)
 
     async def _transition_after_approval(self, order: Order) -> None:
         """Move order to next status after design approval."""

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { adminApi, ordersApi, getErrorMessage, DesignRevision, ChatMessage } from "@/lib/api";
+import { adminApi, ordersApi, plansApi, filesApi, getErrorMessage, DesignRevision, ChatMessage, Question, QuestionnaireSection } from "@/lib/api";
 import { ImagePreview } from "@/components/ui/image-preview";
 import {
   Card,
@@ -32,6 +32,8 @@ import {
   Palette,
   Loader2,
   Image as ImageIcon,
+  Paperclip,
+  X,
 } from "lucide-react";
 import {
   formatPrice,
@@ -42,6 +44,7 @@ import {
 } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { getUser } from "@/lib/auth";
+import { getImageUrl } from "@/lib/image-utils";
 import Link from "next/link";
 
 export default function DesignerOrderDetailPage() {
@@ -56,8 +59,12 @@ export default function DesignerOrderDetailPage() {
   const [designPreview, setDesignPreview] = useState<string | null>(null);
   const [showRevisionHistory, setShowRevisionHistory] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
+  const [chatFile, setChatFile] = useState<File | null>(null);
+  const [chatFilePreview, setChatFilePreview] = useState<string | null>(null);
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatFileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch order detail
   const { data: order, isLoading, error } = useQuery({
@@ -76,6 +83,26 @@ export default function DesignerOrderDetailPage() {
       return response.data;
     },
     enabled: !!order,
+  });
+
+  // Fetch questionnaire answers
+  const { data: answersData } = useQuery({
+    queryKey: ["orderAnswers", orderId],
+    queryFn: async () => {
+      const response = await ordersApi.getAnswers(orderId);
+      return response.data;
+    },
+    enabled: !!order && (order.design_plan === "SEMI_PRIVATE" || order.design_plan === "PRIVATE"),
+  });
+
+  // Fetch questionnaire structure (question texts) from the plan
+  const { data: questionnaireData } = useQuery({
+    queryKey: ["planQuestionnaire", order?.design_plan_id],
+    queryFn: async () => {
+      const response = await plansApi.getPlanQuestionnaire(order!.design_plan_id!);
+      return response.data;
+    },
+    enabled: !!order?.design_plan_id && !!answersData && answersData.length > 0,
   });
 
   // Fetch messages (PRIVATE only)
@@ -125,20 +152,60 @@ export default function DesignerOrderDetailPage() {
     onError: (error) => toast.error(getErrorMessage(error)),
   });
 
-  // Send message mutation
+  // Send message mutation (with optional file)
   const sendMessageMutation = useMutation({
     mutationFn: async () => {
-      if (!chatMessage.trim()) throw new Error("پیام خالی");
-      return ordersApi.sendMessage(orderId, { content: chatMessage.trim() });
+      const hasText = chatMessage.trim().length > 0;
+      const hasFile = !!chatFile;
+      if (!hasText && !hasFile) throw new Error("پیام یا فایل الزامی است");
+
+      let fileUrl: string | undefined;
+      if (hasFile) {
+        setIsUploadingFile(true);
+        try {
+          const uploadRes = await filesApi.uploadPlaceholderImage(chatFile!);
+          fileUrl = uploadRes.data.file_url;
+        } finally {
+          setIsUploadingFile(false);
+        }
+      }
+
+      return ordersApi.sendMessage(orderId, {
+        content: chatMessage.trim(),
+        file_url: fileUrl,
+      });
     },
     onSuccess: () => {
       setChatMessage("");
+      setChatFile(null);
+      setChatFilePreview(null);
       refetchMessages();
     },
     onError: (error) => toast.error(getErrorMessage(error)),
   });
 
-  // File handlers
+  // Chat file selection handler
+  const handleChatFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setChatFile(file);
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onloadend = () => setChatFilePreview(reader.result as string);
+        reader.readAsDataURL(file);
+      } else {
+        setChatFilePreview(null);
+      }
+    }
+    e.target.value = "";
+  };
+
+  const removeChatFile = () => {
+    setChatFile(null);
+    setChatFilePreview(null);
+  };
+
+  // Design file handlers
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -284,6 +351,114 @@ export default function DesignerOrderDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Questionnaire Answers Section */}
+      {answersData && answersData.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-primary" />
+              پاسخ‌های پرسشنامه مشتری
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {(() => {
+              // Build a question map from questionnaire data
+              const questionMap: Record<string, { text: string; type: string; options: Array<{ value: string; label_fa: string }> }> = {};
+              if (questionnaireData?.sections) {
+                for (const section of questionnaireData.sections) {
+                  for (const q of section.questions) {
+                    questionMap[q.id] = {
+                      text: q.question_fa,
+                      type: q.input_type,
+                      options: q.options || [],
+                    };
+                  }
+                }
+              }
+
+              return answersData.map((answer: any, idx: number) => {
+                const question = questionMap[answer.question_id];
+                const questionText = question?.text || `سوال ${toPersianNumber(idx + 1)}`;
+                const inputType = question?.type || "TEXT";
+
+                return (
+                  <div
+                    key={answer.id}
+                    className="border border-border rounded-lg p-4"
+                  >
+                    <p className="text-sm font-medium text-foreground mb-2">
+                      {questionText}
+                      {inputType === "IMAGE_UPLOAD" || inputType === "FILE_UPLOAD" ? (
+                        <Badge variant="outline" size="sm" className="mr-2">فایل</Badge>
+                      ) : null}
+                    </p>
+
+                    {/* Text answers */}
+                    {answer.answer_text && !answer.answer_file_url && (
+                      <div className="bg-accent/50 rounded-lg p-3">
+                        {inputType === "SINGLE_CHOICE" && question?.options ? (
+                          <p className="text-sm text-foreground">
+                            {question.options.find(o => o.value === answer.answer_text)?.label_fa || answer.answer_text}
+                          </p>
+                        ) : (
+                          <p className="text-sm text-foreground whitespace-pre-wrap">
+                            {answer.answer_text}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Multi-choice answers */}
+                    {answer.answer_values && answer.answer_values.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {answer.answer_values.map((val: string, vIdx: number) => {
+                          const optionLabel = question?.options?.find(o => o.value === val)?.label_fa || val;
+                          return (
+                            <Badge key={vIdx} variant="primary" size="sm">
+                              {optionLabel}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* File/Image answers */}
+                    {answer.answer_file_url && (
+                      <div className="mt-1">
+                        {(inputType === "IMAGE_UPLOAD" || answer.answer_file_url.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)) ? (
+                          <a
+                            href={getImageUrl(answer.answer_file_url) || "#"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block"
+                          >
+                            <img
+                              src={getImageUrl(answer.answer_file_url) || ""}
+                              alt={questionText}
+                              className="max-h-48 rounded-lg border border-border object-contain hover:opacity-80 transition-opacity"
+                            />
+                          </a>
+                        ) : (
+                          <a
+                            href={getImageUrl(answer.answer_file_url) || "#"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-primary hover:underline flex items-center gap-1"
+                          >
+                            <FileText className="w-4 h-4" />
+                            دانلود فایل
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              });
+            })()}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Upload Design Section */}
       {order.status === "DESIGNING" && (
@@ -443,6 +618,7 @@ export default function DesignerOrderDetailPage() {
               )}
               {messagesData?.items?.map((msg: ChatMessage) => {
                 const isMe = msg.sender_id === currentUser?.id;
+                const isImageFile = msg.file_url?.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
                 return (
                   <div
                     key={msg.id}
@@ -457,28 +633,50 @@ export default function DesignerOrderDetailPage() {
                       )}
                     >
                       {!isMe && msg.sender_name && (
-                        <p className="text-xs font-medium mb-1 opacity-70">
+                        <p className={cn("text-xs font-medium mb-1", isMe ? "text-white/70" : "text-foreground/70")}>
                           {msg.sender_name}
                         </p>
                       )}
-                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                      {/* File attachment */}
                       {msg.file_url && (
-                        <a
-                          href={msg.file_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={cn(
-                            "text-xs underline mt-1 inline-block",
-                            isMe ? "text-white/80" : "text-primary"
-                          )}
-                        >
-                          فایل پیوست
-                        </a>
+                        isImageFile ? (
+                          <a
+                            href={getImageUrl(msg.file_url) || "#"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block mb-2"
+                          >
+                            <img
+                              src={getImageUrl(msg.file_url) || ""}
+                              alt="تصویر پیوست"
+                              className="max-w-full max-h-48 rounded-lg object-contain hover:opacity-80 transition-opacity"
+                            />
+                          </a>
+                        ) : (
+                          <a
+                            href={getImageUrl(msg.file_url) || "#"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={cn(
+                              "flex items-center gap-2 mb-2 p-2 rounded-lg text-sm",
+                              isMe ? "bg-white/10 text-white" : "bg-white text-foreground"
+                            )}
+                          >
+                            <FileText className="w-4 h-4 shrink-0" />
+                            <span className="truncate">فایل پیوست</span>
+                          </a>
+                        )
+                      )}
+                      {/* Text content */}
+                      {msg.content && (
+                        <p className={cn("text-sm whitespace-pre-wrap", isMe ? "text-white" : "text-foreground")}>
+                          {msg.content}
+                        </p>
                       )}
                       <p
                         className={cn(
                           "text-[10px] mt-1",
-                          isMe ? "text-white/60 text-left" : "text-muted text-left"
+                          isMe ? "text-white/60 text-left" : "text-foreground/40 text-left"
                         )}
                         dir="ltr"
                       >
@@ -494,8 +692,46 @@ export default function DesignerOrderDetailPage() {
               <div ref={chatEndRef} />
             </div>
 
+            {/* File preview (when file is selected) */}
+            {chatFile && (
+              <div className="flex items-center gap-3 p-3 bg-accent/50 rounded-lg border border-border">
+                {chatFilePreview ? (
+                  <img src={chatFilePreview} alt="پیش‌نمایش" className="w-14 h-14 rounded-lg object-cover" />
+                ) : (
+                  <div className="w-14 h-14 rounded-lg bg-accent flex items-center justify-center">
+                    <FileText className="w-6 h-6 text-muted" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{chatFile.name}</p>
+                  <p className="text-xs text-muted">{(chatFile.size / 1024).toFixed(0)} KB</p>
+                </div>
+                <button
+                  onClick={removeChatFile}
+                  className="text-muted hover:text-danger transition-colors p-1"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
             {/* Input */}
-            <div className="flex gap-2">
+            <div className="flex items-end gap-2">
+              <input
+                type="file"
+                ref={chatFileInputRef}
+                className="hidden"
+                accept="image/*,.pdf,.doc,.docx,.ai,.psd,.svg"
+                onChange={handleChatFileSelect}
+              />
+              <button
+                type="button"
+                onClick={() => chatFileInputRef.current?.click()}
+                className="p-3 text-muted hover:text-primary transition-colors rounded-lg hover:bg-accent"
+                title="پیوست فایل"
+              >
+                <Paperclip className="w-5 h-5" />
+              </button>
               <textarea
                 value={chatMessage}
                 onChange={(e) => setChatMessage(e.target.value)}
@@ -505,15 +741,15 @@ export default function DesignerOrderDetailPage() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    if (chatMessage.trim()) sendMessageMutation.mutate();
+                    if (chatMessage.trim() || chatFile) sendMessageMutation.mutate();
                   }
                 }}
               />
               <Button
                 variant="primary"
                 onClick={() => sendMessageMutation.mutate()}
-                isLoading={sendMessageMutation.isPending}
-                disabled={!chatMessage.trim()}
+                isLoading={sendMessageMutation.isPending || isUploadingFile}
+                disabled={!chatMessage.trim() && !chatFile}
                 className="self-end"
               >
                 <Send className="w-4 h-4" />

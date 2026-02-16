@@ -93,6 +93,10 @@ class UserResponse(BaseModel):
     role: str | None = None
     phone_verified: bool
     web_linked: bool
+    city: str | None = None
+    address: str | None = None
+    postal_code: str | None = None
+    bio: str | None = None
     created_at: datetime
     
     model_config = {"from_attributes": True}

@@ -15,7 +15,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     if not user:
         return
-    
+
+    # Deep link /start linkweb is handled by the web_link ConversationHandler
+    # (registered before this handler in bot.py)
+
     # Prepare user data
     user_data = {
         "telegram_id": user.id,
@@ -61,18 +64,22 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     else:
         logger.warning(f"Failed to get user data from API for telegram_id={user.id}")
     
-    # Send welcome message with main menu
-    welcome_message = f"""سلام {user.first_name} عزیز! 👋
+    # Send welcome message -- different for customers vs staff
+    if is_admin or is_printshop:
+        welcome_message = (
+            f"سلام {user.first_name} عزیز! 👋\n\n"
+            "به ربات چاپ شیتارو خوش آمدید ✨\n\n"
+            "برای شروع، یکی از گزینه‌های زیر را انتخاب کنید:"
+        )
+    else:
+        welcome_message = (
+            f"سلام {user.first_name} عزیز! 👋\n\n"
+            "این ربات نوتیفیکیشن‌های سفارشات شما را ارسال می‌کند.\n"
+            "برای ثبت سفارش و مدیریت حساب از وب‌اپ استفاده کنید:\n"
+            "🔗 sheetaro.com\n\n"
+            "برای اتصال حساب وب به تلگرام، دستور /linkweb را بزنید."
+        )
 
-به ربات چاپ شیتارو خوش آمدید ✨
-
-با این ربات می‌توانید:
-🏷️ لیبل‌های حرفه‌ای سفارش دهید
-💼 کارت ویزیت طراحی کنید
-📦 سفارشات خود را پیگیری کنید
-
-برای شروع، یکی از گزینه‌های زیر را انتخاب کنید:"""
-    
     await update.message.reply_text(
         welcome_message,
         reply_markup=get_main_menu_keyboard(is_admin=is_admin, is_printshop=is_printshop)

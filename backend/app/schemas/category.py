@@ -148,6 +148,7 @@ class DesignPlanBase(BaseModel):
     slug: str = Field(..., max_length=50)
     name_fa: str = Field(..., max_length=100)
     description_fa: Optional[str] = None
+    plan_type: Optional[str] = Field(None, description="Explicit plan type: PUBLIC, SEMI_PRIVATE, PRIVATE, OWN_DESIGN")
     price: int = 0
     max_revisions: Optional[int] = None
     revision_price: int = 0
@@ -168,6 +169,7 @@ class DesignPlanUpdate(BaseModel):
     slug: Optional[str] = Field(None, max_length=50)
     name_fa: Optional[str] = Field(None, max_length=100)
     description_fa: Optional[str] = None
+    plan_type: Optional[str] = Field(None, description="Explicit plan type: PUBLIC, SEMI_PRIVATE, PRIVATE, OWN_DESIGN")
     price: Optional[int] = None
     max_revisions: Optional[int] = None
     revision_price: Optional[int] = None
