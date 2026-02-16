@@ -137,6 +137,7 @@ class DesignerOrderOut(OrderOut):
     payment_paid_at: Optional[datetime] = None
     customer_name: Optional[str] = None
     customer_phone: Optional[str] = None
+    customer_telegram_id: Optional[int] = None
 
 
 class DesignerOrderListResponse(BaseModel):
