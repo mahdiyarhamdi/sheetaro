@@ -15,7 +15,7 @@ export function Footer() {
           <div className="md:col-span-1">
             <Link href="/" className="flex items-center gap-2 mb-4">
               <Image
-                src="/images/logo.png"
+                src="/images/logo.svg"
                 alt="Sheetaro"
                 width={40}
                 height={40}

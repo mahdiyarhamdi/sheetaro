@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui";
 import { Header, Footer } from "@/components/layout";
@@ -15,7 +15,6 @@ import {
   Send,
   Layers,
   Printer,
-  Users,
   Clock,
   Award,
   Sparkles,
@@ -27,7 +26,6 @@ import {
   MessageCircle,
   Crown,
   BarChart3,
-  Heart,
   Quote,
 } from "lucide-react";
 import { cn, toPersianNumber } from "@/lib/utils";
@@ -41,47 +39,8 @@ function useIsLoggedIn() {
   return isLoggedIn;
 }
 
-/* ───── animated counter hook ───── */
-function useCountUp(target: number, duration = 2000) {
-  const [count, setCount] = useState(0);
-  const ref = useRef<HTMLDivElement>(null);
-  const started = useRef(false);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !started.current) {
-          started.current = true;
-          const start = Date.now();
-          const tick = () => {
-            const elapsed = Date.now() - start;
-            const progress = Math.min(elapsed / duration, 1);
-            const eased = 1 - Math.pow(1 - progress, 3);
-            setCount(Math.floor(eased * target));
-            if (progress < 1) requestAnimationFrame(tick);
-          };
-          requestAnimationFrame(tick);
-        }
-      },
-      { threshold: 0.3 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [target, duration]);
-
-  return { count, ref };
-}
-
 export default function HomePage() {
   const isLoggedIn = useIsLoggedIn();
-
-  /* counters */
-  const customers = useCountUp(1200);
-  const orders = useCountUp(5800);
-  const designers = useCountUp(15);
-  const satisfaction = useCountUp(98);
 
   /* pricing plans */
   const plans = [
@@ -304,28 +263,6 @@ export default function HomePage() {
           {/* scroll hint */}
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 animate-bounce hidden lg:block">
             <ChevronDown className="w-6 h-6 text-muted/40" />
-          </div>
-        </section>
-
-        {/* ═══════════ STATS BAR ═══════════ */}
-        <section className="relative -mt-8 z-10 pb-8">
-          <div className="container mx-auto px-4">
-            <div className="bg-white rounded-2xl shadow-medium border border-border/50 grid grid-cols-2 lg:grid-cols-4 divide-x divide-x-reverse divide-border/50">
-              {[
-                { ref: customers.ref, count: customers.count, suffix: "+", label: "مشتری فعال", icon: Users, color: "text-primary" },
-                { ref: orders.ref, count: orders.count, suffix: "+", label: "سفارش تکمیل‌شده", icon: Package, color: "text-emerald-500" },
-                { ref: designers.ref, count: designers.count, suffix: "", label: "طراح حرفه‌ای", icon: PenTool, color: "text-blue-500" },
-                { ref: satisfaction.ref, count: satisfaction.count, suffix: "٪", label: "رضایت مشتریان", icon: Heart, color: "text-rose-500" },
-              ].map((stat, i) => (
-                <div key={i} ref={stat.ref} className="flex flex-col items-center gap-2 py-6 lg:py-8">
-                  <stat.icon className={cn("w-6 h-6", stat.color)} />
-                  <p className={cn("text-2xl lg:text-3xl font-black", stat.color)}>
-                    {toPersianNumber(stat.count)}{stat.suffix}
-                  </p>
-                  <p className="text-xs lg:text-sm text-muted">{stat.label}</p>
-                </div>
-              ))}
-            </div>
           </div>
         </section>
 
