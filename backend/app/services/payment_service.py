@@ -38,6 +38,7 @@ from app.utils.telegram_notify import (
     notify_designers_new_order as tg_notify_designers_new_order,
     notify_printshops_new_order as tg_notify_printshops_new_order,
     notify_admins_new_validation as tg_notify_admins_new_validation,
+    notify_admins_new_receipt as tg_notify_admins_new_receipt,
 )
 
 
@@ -326,6 +327,23 @@ class PaymentService:
                 new_status=OrderStatus.PAYMENT_UPLOADED.value,
                 reason="receipt_uploaded",
             )
+        
+        # Notify admins about new receipt via Telegram
+        try:
+            user_repo = UserRepository(self.db)
+            admin_ids = await user_repo.get_admin_telegram_ids()
+            customer = await user_repo.get_by_id(user_id)
+            customer_name = customer.full_name if customer else "نامشخص"
+            amount = int(payment.amount) if payment.amount else 0
+            await tg_notify_admins_new_receipt(
+                admin_telegram_ids=admin_ids,
+                payment_id=str(payment_id),
+                amount=amount,
+                customer_name=customer_name,
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to notify admins about receipt: {e}")
         
         return PaymentOut.model_validate(updated_payment)
     

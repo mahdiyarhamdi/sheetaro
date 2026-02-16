@@ -1,10 +1,13 @@
 """Lightweight Telegram notification utility for backend-triggered events.
 
 Sends messages via Telegram Bot API using httpx.
+Uses V2Ray/Xray SOCKS5 proxy when configured (required for Iran servers).
 Falls back silently when TELEGRAM_BOT_TOKEN is not configured.
 """
 
+import json
 import logging
+from pathlib import Path
 from typing import Optional
 
 import httpx
@@ -14,6 +17,19 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 TELEGRAM_API = "https://api.telegram.org"
+PROXY_STATUS_PATH = Path("/app/proxy_config/status.json")
+
+
+def _get_proxy_url() -> str | None:
+    """Read SOCKS5 proxy URL from shared xray config if enabled."""
+    if PROXY_STATUS_PATH.exists():
+        try:
+            data = json.loads(PROXY_STATUS_PATH.read_text())
+            if data.get("enabled"):
+                return "socks5://xray:10808"
+        except Exception:
+            pass
+    return None
 
 
 async def send_telegram_message(chat_id: int, text: str) -> bool:
@@ -26,8 +42,13 @@ async def send_telegram_message(chat_id: int, text: str) -> bool:
     url = f"{TELEGRAM_API}/bot{token}/sendMessage"
     payload = {"chat_id": chat_id, "text": text}
 
+    client_kwargs: dict = dict(timeout=15, verify=False)
+    proxy_url = _get_proxy_url()
+    if proxy_url:
+        client_kwargs["proxy"] = proxy_url
+
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(**client_kwargs) as client:
             resp = await client.post(url, json=payload)
             resp.raise_for_status()
             logger.info(f"Telegram notification sent to {chat_id}")
@@ -47,6 +68,23 @@ async def notify_telegram_ids(telegram_ids: list[int], text: str) -> bool:
         if await send_telegram_message(tid, text):
             success = True
     return success
+
+
+async def notify_admins_new_receipt(
+    admin_telegram_ids: list[int],
+    payment_id: str,
+    amount: int,
+    customer_name: str,
+) -> bool:
+    """Notify admins about a new payment receipt upload."""
+    text = (
+        "🔔 رسید پرداخت جدید!\n\n"
+        f"شماره پرداخت: #{payment_id[:8]}\n"
+        f"مبلغ: {amount:,} تومان\n"
+        f"مشتری: {customer_name}\n\n"
+        "برای بررسی به بخش «پرداخت‌های در انتظار تأیید» مراجعه کنید."
+    )
+    return await notify_telegram_ids(admin_telegram_ids, text)
 
 
 async def notify_admins_new_validation(
